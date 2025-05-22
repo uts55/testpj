@@ -17,9 +17,12 @@ GEMINI_MODEL_NAME = "gemini-2.5-pro-exp-03-25" # 사용자가 명시적으로 �
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2' # 가볍고 성능 좋은 범용 모델
 VECTOR_DB_PATH = "./chroma_db" # 로컬 디스크에 벡터 데이터를 저장할 경로
 COLLECTION_NAME = "dnd_settings" # ChromaDB 컬렉션 이름
+RAG_DOCUMENT_SOURCES = ['./data'] # RAG 문서 소스 경로 리스트
+RAG_DOCUMENT_FILTERS = {} # RAG 문서 필터 (예: {"type": "npc"})
+RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name'] # RAG 텍스트 추출 필드
 
 # File Paths
-SETTINGS_FILEPATH = "my_personal_settings.txt" # 개인 설정 파일 경로
+# SETTINGS_FILEPATH has been removed as document loading is now handled by RAG_DOCUMENT_SOURCES
 
 # Text Splitting Configuration
 CHUNK_SIZE = 1000
@@ -102,34 +105,184 @@ except Exception as e:
      logger.critical(f"      모델 이름('{GEMINI_MODEL_NAME}')이 유효하지 않거나, 해당 모델에 대한 접근 권한이 없거나, API 키에 문제가 있을 수 있습니다.")
      exit()
 
-# --- SRD 텍스트 로드 및 분할 ---
-# SETTINGS_FILEPATH는 Configuration Constants 섹션에서 정의됨
-text_chunks = [] # 분할된 청크를 저장할 리스트
+# --- RAG Document Loading and Processing ---
+logger.info("--- RAG 문서 로딩 및 처리 시작 ---")
+text_chunks = []
+document_ids = []
+document_metadatas = []
 
 try:
-    # 파일 형식에 따라 읽는 방식 변경 필요할 수 있음 (예: PDF, DOCX 라이브러리 사용)
-    # 여기서는 일반 텍스트 파일(.txt) 또는 마크다운(.md)으로 가정
-    with open(SETTINGS_FILEPATH, 'r', encoding='utf-8') as f:
-        settings_text = f.read()
-    logger.info(f"성공적으로 '{SETTINGS_FILEPATH}' 파일을 읽었습니다.")
+    all_documents = load_documents(RAG_DOCUMENT_SOURCES)
+    logger.info(f"총 {len(all_documents)}개의 문서를 {RAG_DOCUMENT_SOURCES}에서 로드했습니다.")
 
-    # CHUNK_SIZE와 CHUNK_OVERLAP는 Configuration Constants에서 가져오거나 함수의 기본값을 사용
-    text_chunks = split_text_into_chunks(settings_text) # CHUNK_SIZE, CHUNK_OVERLAP 기본값 사용
-
-    if not text_chunks:
-        logger.warning("[경고] 텍스트 분할 결과, 생성된 청크가 없습니다.")
-        # 청크가 없으면 RAG 진행 불가
-        exit() # 또는 다른 처리 로직
+    if RAG_DOCUMENT_FILTERS:
+        logger.info(f"다음 필터를 사용하여 문서 필터링: {RAG_DOCUMENT_FILTERS}")
+        processed_documents = filter_documents(all_documents, RAG_DOCUMENT_FILTERS)
+        logger.info(f"필터링 후 {len(processed_documents)}개의 문서가 남았습니다.")
     else:
-        logger.info(f"\n--- 총 {len(text_chunks)}개의 텍스트 청크 생성 완료 ---")
-        # logger.debug(text_chunks[0][:300] + "...") # 첫 청크 확인 (선택적, 디버그 레벨)
+        processed_documents = all_documents
+        logger.info("문서 필터가 설정되지 않았습니다. 모든 로드된 문서를 처리합니다.")
 
-except FileNotFoundError:
-    logger.critical(f"[오류] 개인 설정 파일 '{SETTINGS_FILEPATH}'을 찾을 수 없습니다.")
-    exit()
+    for i, doc in enumerate(processed_documents):
+        extracted_text = extract_text_for_rag(doc, RAG_TEXT_FIELDS)
+        if extracted_text:
+            # 여기서 extracted_text를 바로 text_chunks에 추가하지 않고,
+            # 기존의 split_text_into_chunks를 활용하여 분할합니다.
+            # 이렇게 함으로써 CHUNK_SIZE, CHUNK_OVERLAP 설정을 계속 존중할 수 있습니다.
+            chunks_from_doc = split_text_into_chunks(extracted_text) # CHUNK_SIZE, CHUNK_OVERLAP 기본값 사용
+            
+            doc_id_base = doc.get('id', f'doc_{i}')
+            
+            for chunk_idx, chunk in enumerate(chunks_from_doc):
+                text_chunks.append(chunk)
+                document_ids.append(f"{doc_id_base}_chunk_{chunk_idx}")
+                document_metadatas.append({
+                    'source_id': doc.get('id', 'unknown'), 
+                    'name': doc.get('name', 'Unnamed Document'),
+                    'original_doc_idx': i, # 원본 문서 인덱스
+                    'chunk_idx_in_doc': chunk_idx # 문서 내 청크 인덱스
+                })
+            if chunks_from_doc:
+                 logger.debug(f"문서 ID '{doc_id_base}'에서 {len(chunks_from_doc)}개의 텍스트 조각 추출 및 분할 완료.")
+        else:
+            logger.warning(f"문서 ID '{doc.get('id', f'doc_{i}')}'에서 추출된 텍스트가 없습니다 (필드: {RAG_TEXT_FIELDS}).")
+
+    if text_chunks:
+        logger.info(f"--- 총 {len(text_chunks)}개의 텍스트 조각을 RAG 시스템에 추가할 준비가 되었습니다 ---")
+    else:
+        logger.warning("[경고] 처리 후 RAG 시스템에 추가할 텍스트 조각이 없습니다.")
+        # 필요하다면 여기서 exit() 또는 다른 로직을 수행할 수 있습니다.
+
 except Exception as e:
-    logger.critical(f"[오류] 개인 설정 파일을 읽거나 분할하는 중 오류 발생:", exc_info=True)
+    logger.critical(f"[오류] RAG 문서 로딩 또는 처리 중 오류 발생:", exc_info=True)
     exit()
+# --- End of RAG Document Loading and Processing ---
+
+# --- Functions copied from rag_system_simulation.py ---
+
+def load_documents(source_paths: list[str]) -> list[dict]:
+    """
+    Loads JSON objects from a list of specified source paths.
+    Each path in source_paths can be a direct path to a JSON file or a directory.
+    If a path is a directory, it recursively finds all .json files within that directory.
+    Reads each JSON file, which can contain a single JSON object or a list of JSON objects.
+    Consolidates all loaded JSON objects into a single list of dictionaries.
+    Handles errors like file not found or invalid JSON format gracefully by logging
+    a message and skipping the problematic file or path.
+    Non-JSON files are skipped with a warning.
+    """
+    documents = []
+    for path in source_paths:
+        if os.path.isfile(path):
+            if path.endswith(".json"):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            documents.extend(data)
+                        elif isinstance(data, dict):
+                            documents.append(data)
+                        else:
+                            logger.warning(f"Unexpected JSON structure in {path}. Expected list or dict at root.")
+                except FileNotFoundError:
+                    logger.error(f"File not found - {path}")
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON format in - {path}")
+                except Exception as e:
+                    logger.error(f"An unexpected error occurred while processing {path}: {e}")
+            else:
+                logger.warning(f"Skipping non-JSON file: {path}")
+        elif os.path.isdir(path):
+            for filename in os.listdir(path):
+                filepath = os.path.join(path, filename)
+                if os.path.isfile(filepath) and filename.endswith(".json"):
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            if isinstance(data, list):
+                                documents.extend(data)
+                            elif isinstance(data, dict):
+                                documents.append(data)
+                            else:
+                                logger.warning(f"Unexpected JSON structure in {filepath}. Expected list or dict at root.")
+                    except FileNotFoundError: 
+                        logger.error(f"File not found - {filepath}")
+                    except json.JSONDecodeError:
+                        logger.error(f"Invalid JSON format in - {filepath}")
+                    except Exception as e:
+                        logger.error(f"An unexpected error occurred while processing {filepath}: {e}")
+                elif os.path.isfile(filepath): 
+                    logger.warning(f"Skipping non-JSON file: {filepath}")
+        else:
+            logger.warning(f"Source path not found or invalid, skipping: {path}")
+    return documents
+
+def _get_nested_value(doc: dict, key_path: str):
+    """Helper function to get a value from a nested dictionary using a dot-separated path."""
+    keys = key_path.split('.')
+    value = doc
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        elif isinstance(value, list): 
+            try:
+                idx = int(key)
+                if 0 <= idx < len(value):
+                    value = value[idx]
+                else:
+                    return None 
+            except ValueError:
+                return None 
+        else:
+            return None 
+    return value
+
+def filter_documents(documents: list[dict], filters: dict) -> list[dict]:
+    """
+    Filters a list of document dictionaries based on criteria in the filters dictionary.
+    Keys in filters can be dot-separated paths for nested fields.
+    """
+    filtered_docs = []
+    for doc in documents:
+        match = True
+        for key_path, expected_value in filters.items():
+            actual_value = _get_nested_value(doc, key_path)
+            if actual_value != expected_value:
+                match = False
+                break
+        if match:
+            filtered_docs.append(doc)
+    return filtered_docs
+
+def _extract_text_from_value(value) -> list[str]:
+    """Helper function to recursively extract string values from various data structures."""
+    texts = []
+    if isinstance(value, str):
+        texts.append(value)
+    elif isinstance(value, list):
+        for item in value:
+            texts.extend(_extract_text_from_value(item))
+    elif isinstance(value, dict):
+        for sub_value in value.values():
+            texts.extend(_extract_text_from_value(sub_value))
+    return texts
+
+def extract_text_for_rag(document: dict, text_fields: list[str]) -> str:
+    """
+    Extracts text content from specified fields in a document.
+    Handles dot-separated paths for nested fields.
+    Joins lists of strings and concatenates strings from complex objects.
+    """
+    extracted_texts = []
+    for field_path in text_fields:
+        value = _get_nested_value(document, field_path)
+        if value is not None:
+            texts_from_field = _extract_text_from_value(value)
+            extracted_texts.extend(texts_from_field)
+    
+    return " ".join(extracted_texts)
+
+# --- End of functions copied from rag_system_simulation.py ---
 
 
 # --- RAG: 임베딩 모델 및 벡터 DB 설정 ---
@@ -184,21 +337,21 @@ except Exception as e:
 
 # 4. 데이터 임베딩 및 저장 (컬렉션이 비어 있을 경우에만 실행)
 try:
-    if collection.count() == 0 and text_chunks:
+    if collection.count() == 0 and text_chunks: # text_chunks는 위에서 새로 정의되고 채워짐
         logger.info(f"컬렉션 '{COLLECTION_NAME}'이 비어있습니다. 데이터 임베딩 및 저장을 시작합니다...")
-        logger.info(f"총 {len(text_chunks)}개의 청크를 처리합니다. (시간이 걸릴 수 있습니다)")
+        logger.info(f"총 {len(text_chunks)}개의 텍스트 조각을 처리합니다. (시간이 걸릴 수 있습니다)")
 
-        ids = [f"chunk_{i}" for i in range(len(text_chunks))]
+        # ids와 metadatas는 위에서 새로 정의된 document_ids와 document_metadatas를 사용
         collection.add(
-            documents=text_chunks,
-            ids=ids
-            # metadatas=[{'source': SETTINGS_FILEPATH}] * len(text_chunks) # 메타데이터 추가 가능
+            documents=text_chunks, # 분할된 최종 텍스트 조각들
+            ids=document_ids,      # 각 텍스트 조각에 대한 고유 ID
+            metadatas=document_metadatas # 각 텍스트 조각에 대한 메타데이터
         )
         logger.info(f"데이터 임베딩 및 저장 완료! 총 {collection.count()}개의 벡터가 저장되었습니다.")
-    elif text_chunks:
+    elif text_chunks: # text_chunks가 있지만 컬렉션이 비어있지 않은 경우
         logger.info(f"컬렉션 '{COLLECTION_NAME}'에 이미 데이터({collection.count()}개)가 존재합니다. 임베딩 과정을 건너<0xEB><0x9B><0x81>니다.")
-    else:
-         logger.info("저장할 텍스트 청크가 없습니다.")
+    else: # text_chunks가 비어있는 경우 (처리할 데이터가 없는 경우)
+         logger.info("RAG를 위해 저장할 텍스트 조각이 없습니다.")
 except Exception as e:
     logger.error("[오류] 데이터 임베딩 또는 저장 중 오류 발생:", exc_info=True)
     # 오류 발생 시 부분적으로 데이터가 저장되었을 수 있음
@@ -327,9 +480,9 @@ if conversation_history:
         # 3a. 검색된 컨텍스트를 프롬프트에 추가할 형태로 가공
         context_prompt_part = ""
         if retrieved_context:
-            context_prompt_part += "\n\n[참고 자료 (개인 설정)]\n"
+            context_prompt_part += "\n\n[참고 자료 (RAG 시스템 제공)]\n" # "개인 설정"에서 "RAG 시스템 제공"으로 변경
             for i, doc in enumerate(retrieved_context):
-                context_prompt_part += f"- 문서 {i+1}: {doc}\n"
+                context_prompt_part += f"- 정보 {i+1}: {doc}\n" # "문서"에서 "정보"로 변경 (더 일반적)
             context_prompt_part += "\n위 참고 자료를 바탕으로 답변해주세요.\n" # AI에게 활용하도록 지시
 
         # 3b. 현재 사용자 입력을 포함한 최종 프롬프트 리스트 구성
