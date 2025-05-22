@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ancient_tablet_001",
+    "name": "고대의 석판",
+    "type": "object",
+    "description": "알 수 없는 문자가 새겨진 오래된 석판. 중요한 단서를 담고 있는 듯하다.",
+    "location": "잊혀진 숲",
+    "properties": {
+      "readable_by": "mage_class_or_scholar",
+      "requires_translation_spell": true
+    },
+    "lore_text_embedded": "세 개의 달이 정렬될 때, 숨겨진 길이 열리리라...",
+    "related_quests": [
+      "quest_001",
+      "quest_003"
+    ]
+  }
+]
