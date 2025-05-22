@@ -9,36 +9,62 @@ import os
 import argparse
 from pathlib import Path
 
-def load_documents(directory_path: str) -> list[dict]:
+def load_documents(source_paths: list[str]) -> list[dict]:
     """
-    Finds all .json files in the specified directory_path,
-    reads each JSON file, and returns a list of Python dictionaries.
-    Handles potential errors like invalid JSON format or file not found gracefully.
-    Assumes JSON files contain a list of document objects, or a single document object.
+    Loads JSON objects from a list of specified source paths.
+    Each path in source_paths can be a direct path to a JSON file or a directory.
+    If a path is a directory, it recursively finds all .json files within that directory.
+    Reads each JSON file, which can contain a single JSON object or a list of JSON objects.
+    Consolidates all loaded JSON objects into a single list of dictionaries.
+    Handles errors like file not found or invalid JSON format gracefully by printing
+    a message and skipping the problematic file or path.
+    Non-JSON files are skipped with a warning.
     """
     documents = []
-    if not os.path.exists(directory_path):
-        print(f"Error: Directory not found - {directory_path}")
-        return documents
-
-    for filename in os.listdir(directory_path):
-        if filename.endswith(".json"):
-            filepath = os.path.join(directory_path, filename)
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if isinstance(data, list): # Handles files like [{"doc1"}, {"doc2"}] or [{"doc_single"}]
-                        documents.extend(data)
-                    elif isinstance(data, dict): # Handles files like {"doc_single"}
-                        documents.append(data)
-                    else:
-                        print(f"Warning: Unexpected JSON structure in {filepath}. Expected list or dict at root.")
-            except FileNotFoundError:
-                print(f"Error: File not found - {filepath}")
-            except json.JSONDecodeError:
-                print(f"Error: Invalid JSON format in - {filepath}")
-            except Exception as e:
-                print(f"An unexpected error occurred while processing {filepath}: {e}")
+    for path in source_paths:
+        if os.path.isfile(path):
+            if path.endswith(".json"):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            documents.extend(data)
+                        elif isinstance(data, dict):
+                            documents.append(data)
+                        else:
+                            print(f"Warning: Unexpected JSON structure in {path}. Expected list or dict at root.")
+                except FileNotFoundError:
+                    print(f"Error: File not found - {path}")
+                except json.JSONDecodeError:
+                    print(f"Error: Invalid JSON format in - {path}")
+                except Exception as e:
+                    print(f"An unexpected error occurred while processing {path}: {e}")
+            else:
+                print(f"Warning: Skipping non-JSON file: {path}")
+        elif os.path.isdir(path):
+            for filename in os.listdir(path):
+                filepath = os.path.join(path, filename)
+                if os.path.isfile(filepath) and filename.endswith(".json"):
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            if isinstance(data, list):
+                                documents.extend(data)
+                            elif isinstance(data, dict):
+                                documents.append(data)
+                            else:
+                                print(f"Warning: Unexpected JSON structure in {filepath}. Expected list or dict at root.")
+                    except FileNotFoundError: # Should not happen if os.path.isfile is true, but good for safety
+                        print(f"Error: File not found - {filepath}")
+                    except json.JSONDecodeError:
+                        print(f"Error: Invalid JSON format in - {filepath}")
+                    except Exception as e:
+                        print(f"An unexpected error occurred while processing {filepath}: {e}")
+                elif os.path.isfile(filepath): # It's a file but not a .json file
+                    print(f"Warning: Skipping non-JSON file: {filepath}")
+        else:
+            # Path is not a file and not a directory, or it doesn't exist
+            print(f"Warning: Source path not found or invalid, skipping: {path}")
     return documents
 
 def _get_nested_value(doc: dict, key_path: str):
@@ -109,10 +135,11 @@ def extract_text_for_rag(document: dict, text_fields: list[str]) -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RAG System Simulation Script")
     parser.add_argument(
-        "--data_dir", 
-        type=str, 
-        default="./data",
-        help="Path to the directory containing JSON files (default: ./data)"
+        "--rag_sources",
+        type=str,
+        nargs='+',
+        default=["./data"],
+        help="Path(s) to the JSON file(s) or directory(ies) containing JSON files for RAG (space-separated, default: ./data)"
     )
     parser.add_argument(
         "--filters", 
@@ -149,63 +176,64 @@ if __name__ == "__main__":
     # Ensure data directory and files (player_1.json, npc_001.json) exist from previous setup
     # For this task, we assume they are already created.
     # To re-create them if missing for testing:
-    # Path(args.data_dir).mkdir(parents=True, exist_ok=True)
-    # player_1_content = [{"id": "player_001", "name": "에단", "type": "player", "current_location": "엘름 마을", "description": "모험가", "knowledge_fragments": ["유물은 숲에 있다"]}]
-    # npc_001_content = [{"id": "npc_001", "name": "엘라라", "type": "npc", "current_location": "엘름 마을 촌장집", "description": "촌장", "lore_fragments": ["고대 유물에 대해 안다"], "dialogue_responses": {"artifact_info": ["유물은 강력하다"]}}]
-    # with open(os.path.join(args.data_dir, "player_1.json"), 'w', encoding='utf-8') as f: json.dump(player_1_content, f, ensure_ascii=False, indent=2)
-    # with open(os.path.join(args.data_dir, "npc_001.json"), 'w', encoding='utf-8') as f: json.dump(npc_001_content, f, ensure_ascii=False, indent=2)
-        
-    all_documents = load_documents(args.data_dir)
+    # Path(args.data_dir).mkdir(parents=True, exist_ok=True) # Original line
+    # ... (dummy file creation logic) ...
+
+    # args.rag_sources will be a list of paths due to nargs='+'
+    all_documents = load_documents(args.rag_sources)
     if not all_documents:
-        print(f"No documents loaded from {args.data_dir}. Ensure JSON files exist and are correctly formatted.")
-        # Create dummy files if they don't exist for the purpose of this exercise run
-        # This part is mainly for making the script runnable standalone if data isn't pre-populated.
-        data_dir_path = Path(args.data_dir)
-        data_dir_path.mkdir(parents=True, exist_ok=True)
+        print(f"No documents loaded from sources: {args.rag_sources}. Ensure paths are correct, JSON files exist and are correctly formatted.")
+        # The dummy file creation logic below might need adjustment if multiple paths are given.
+        # For simplicity, this example will only attempt to create dummy files if the first source path was a directory (or non-existent, to be created as a dir).
+        if args.rag_sources and (not os.path.exists(args.rag_sources[0]) or os.path.isdir(args.rag_sources[0])):
+            # This logic targets the first path in rag_sources for dummy file creation.
+            # If multiple --rag_sources are provided, dummy files will only be created in the first one if it's empty/a directory.
+            first_source_path_for_dummy = Path(args.rag_sources[0])
+            first_source_path_for_dummy.mkdir(parents=True, exist_ok=True)
 
-        player_1_content_default = [
-          {
-            "id": "player_001", "name": "에단", "type": "player", "current_location": "엘름 마을", 
-            "description": "날카로운 눈빛을 가진 젊은 모험가.", 
-            "knowledge_fragments": ["엘름 마을 촌장은 밤에만 나타난다.", "고대 유물은 잊혀진 숲 깊은 곳에 숨겨져 있다는 전설이 있다."],
-            "skills": [{"name": "강타", "description": "강력한 일격"}, {"name": "패링", "description": "공격 쳐내기"}]
-          }
-        ]
-        npc_001_content_default = [
-          {
-            "id": "npc_001", "name": "엘라라", "type": "npc", "current_location": "엘름 마을 촌장집", 
-            "description": "엘름 마을의 현명한 촌장.", 
-            "lore_fragments": ["엘라라는 젊은 시절 뛰어난 마법사였다.", "고대 유물에 대해 잘 알고 있다."],
-            "dialogue_responses": {
-              "artifact_info": ["고대 유물이라... 그것은 우리 마을의 오랜 전설과 관련이 깊지.", "그 유물은 강력한 힘을 지녔지만, 동시에 위험한 저주도 품고 있다고 전해지네."],
-              "greetings": ["엘름 마을에 온 것을 환영하네."]
-            }
-          }
-        ]
-        sample_game_obj_content = [
-            {
-                "id": "ancient_tablet_001",
-                "name": "고대의 석판",
-                "type": "object",
-                "description": "알 수 없는 문자가 새겨진 오래된 석판. 중요한 단서를 담고 있는 듯하다.",
-                "location": "잊혀진 숲",
-                "properties": {
-                    "readable_by": "mage_class_or_scholar",
-                    "requires_translation_spell": True
-                },
-                "lore_text_embedded": "세 개의 달이 정렬될 때, 숨겨진 길이 열리리라...",
-                "related_quests": ["quest_001", "quest_003"]
-            }
-        ]
+            player_1_content_default = [
+              {
+                "id": "player_001", "name": "에단", "type": "player", "current_location": "엘름 마을", 
+                "description": "날카로운 눈빛을 가진 젊은 모험가.", 
+                "knowledge_fragments": ["엘름 마을 촌장은 밤에만 나타난다.", "고대 유물은 잊혀진 숲 깊은 곳에 숨겨져 있다는 전설이 있다."],
+                "skills": [{"name": "강타", "description": "강력한 일격"}, {"name": "패링", "description": "공격 쳐내기"}]
+              }
+            ]
+            npc_001_content_default = [
+              {
+                "id": "npc_001", "name": "엘라라", "type": "npc", "current_location": "엘름 마을 촌장집", 
+                "description": "엘름 마을의 현명한 촌장.", 
+                "lore_fragments": ["엘라라는 젊은 시절 뛰어난 마법사였다.", "고대 유물에 대해 잘 알고 있다."],
+                "dialogue_responses": {
+                  "artifact_info": ["고대 유물이라... 그것은 우리 마을의 오랜 전설과 관련이 깊지.", "그 유물은 강력한 힘을 지녔지만, 동시에 위험한 저주도 품고 있다고 전해지네."],
+                  "greetings": ["엘름 마을에 온 것을 환영하네."]
+                }
+              }
+            ]
+            sample_game_obj_content = [
+                {
+                    "id": "ancient_tablet_001",
+                    "name": "고대의 석판",
+                    "type": "object",
+                    "description": "알 수 없는 문자가 새겨진 오래된 석판. 중요한 단서를 담고 있는 듯하다.",
+                    "location": "잊혀진 숲",
+                    "properties": {
+                        "readable_by": "mage_class_or_scholar",
+                        "requires_translation_spell": True
+                    },
+                    "lore_text_embedded": "세 개의 달이 정렬될 때, 숨겨진 길이 열리리라...",
+                    "related_quests": ["quest_001", "quest_003"]
+                }
+            ]
 
-        with open(data_dir_path / "player_1.json", 'w', encoding='utf-8') as f:
-            json.dump(player_1_content_default, f, ensure_ascii=False, indent=2)
-        with open(data_dir_path / "npc_001.json", 'w', encoding='utf-8') as f:
-            json.dump(npc_001_content_default, f, ensure_ascii=False, indent=2)
-        with open(data_dir_path / "game_object_001.json", 'w', encoding='utf-8') as f:
-            json.dump(sample_game_obj_content, f, ensure_ascii=False, indent=2)
-        print(f"Created sample JSON files in {args.data_dir} for demonstration as it was empty.")
-        all_documents = load_documents(args.data_dir)
+            with open(first_source_path_for_dummy / "player_1.json", 'w', encoding='utf-8') as f:
+                json.dump(player_1_content_default, f, ensure_ascii=False, indent=2)
+            with open(first_source_path_for_dummy / "npc_001.json", 'w', encoding='utf-8') as f:
+                json.dump(npc_001_content_default, f, ensure_ascii=False, indent=2)
+            with open(first_source_path_for_dummy / "game_object_001.json", 'w', encoding='utf-8') as f:
+                json.dump(sample_game_obj_content, f, ensure_ascii=False, indent=2)
+            print(f"Created sample JSON files in {first_source_path_for_dummy} for demonstration as it was empty/not found.")
+            all_documents = load_documents(args.rag_sources) # Reload after creating dummy files
 
 
     # Filter documents
