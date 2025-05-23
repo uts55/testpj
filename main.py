@@ -4,29 +4,27 @@ import google.generativeai as genai
 from google.generativeai import types
 import os
 from dotenv import load_dotenv
-import traceback
+# traceback removed
 import re # 정규 표현식 사용 (문장 분할 등)
 import logging
+import json # For load_documents and other functions
 
 # --- Configuration Constants ---
 # API and Model Configuration
 GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
-GEMINI_MODEL_NAME = "gemini-2.5-pro-exp-03-25" # 사용자가 명시적으로 요구한 모델 사용
+GEMINI_MODEL_NAME = "gemini-2.5-pro-exp-03-25"
 
 # RAG Configuration
-EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2' # 가볍고 성능 좋은 범용 모델
-VECTOR_DB_PATH = "./chroma_db" # 로컬 디스크에 벡터 데이터를 저장할 경로
-COLLECTION_NAME = "dnd_settings" # ChromaDB 컬렉션 이름
-RAG_DOCUMENT_SOURCES = ['./data'] # RAG 문서 소스 경로 리스트
-RAG_DOCUMENT_FILTERS = {} # RAG 문서 필터 (예: {"type": "npc"})
-RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name'] # RAG 텍스트 추출 필드
-
-# File Paths
-# SETTINGS_FILEPATH has been removed as document loading is now handled by RAG_DOCUMENT_SOURCES
+EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
+VECTOR_DB_PATH = "./chroma_db"
+COLLECTION_NAME = "dnd_settings"
+RAG_DOCUMENT_SOURCES = ['./data']
+RAG_DOCUMENT_FILTERS = {}
+RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name']
 
 # Text Splitting Configuration
 CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 100 # 청크 간 겹치는 글자 수 (split_text_into_chunks 호출 시 사용)
+CHUNK_OVERLAP = 100
 
 # Other
 INITIAL_PROMPT_TEXT = "당신은 Dungeons & Dragons 5판 게임의 숙련된 던전 마스터입니다. 플레이어의 첫 행동을 기다리는 상황을 가정하고, 모험의 시작을 알리는 흥미로운 도입부를 묘사해주세요."
@@ -36,141 +34,21 @@ USER_EXIT_COMMANDS = ["그만", "종료", "exit"]
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- API 키 로딩 (.env 파일 사용) ---
-load_dotenv()
-api_key = os.getenv(GOOGLE_API_KEY_ENV)
-
-if not api_key:
-    logger.critical(f"오류: {GOOGLE_API_KEY_ENV} 환경 변수를 찾을 수 없습니다.")
-    logger.critical(f"프로젝트 루트 디렉토리에 `.env` 파일이 있고, 그 안에 {GOOGLE_API_KEY_ENV}='YOUR_API_KEY' 형식으로 키가 저장되어 있는지 확인해주세요.")
-    exit()
-
-try:
-    genai.configure(api_key=api_key)
-    logger.info("API 키 설정 완료 (configure 방식).")
-except Exception as e:
-     logger.critical(f"오류: API 키 설정 중 문제가 발생했습니다: {e}", exc_info=True)
-     exit()
-
-# --- 텍스트 분할 함수 정의 ---
+# --- Function Definitions ---
 def split_text_into_chunks(text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP):
-    """
-    텍스트를 지정된 크기와 겹침으로 나누는 함수 (간단 버전)
-    Args:
-        text (str): 분할할 전체 텍스트
-        chunk_size (int): 각 청크의 최대 글자 수
-        chunk_overlap (int): 청크 간 겹치는 글자 수
-    Returns:
-        list[str]: 분할된 텍스트 청크 리스트
-    """
     if chunk_overlap >= chunk_size:
         raise ValueError("Chunk overlap must be smaller than chunk size.")
-
     chunks = []
     start_index = 0
     while start_index < len(text):
         end_index = start_index + chunk_size
-        # 실제 end_index는 텍스트 길이를 넘지 않도록 조정
         actual_end_index = min(end_index, len(text))
         chunks.append(text[start_index:actual_end_index])
-
-        # 다음 시작 위치는 겹침(overlap)을 고려하여 이동
         start_index += chunk_size - chunk_overlap
-
-        # The main while loop condition 'while start_index < len(text):'
-        # and the check 'chunk_overlap < chunk_size' (implicitly, due to ValueError)
-        # are sufficient to prevent infinite loops and ensure termination.
-        # The previous additional break conditions were redundant or could lead to premature termination.
-
-    # 간단한 구현이므로, 마지막 청크가 너무 짧거나 하는 예외 처리는 생략됨
-    # 좀 더 정교하게 하려면 문장 경계 등을 고려해야 함
-    logger.info(f"Original text length: {len(text)}")
-    logger.info(f"Number of chunks created: {len(chunks)}")
-    if chunks:
-         logger.info(f"Average chunk length: {sum(len(c) for c in chunks) / len(chunks):.2f}")
+    # Removed logging from here to keep function focused on its core task
     return chunks
 
-# --- 모델 이름 정의 ---
-# GEMINI_MODEL_NAME은 Configuration Constants 섹션에서 정의됨
-logger.info(f"사용할 Gemini 모델: {GEMINI_MODEL_NAME}")
-# 주의: 'exp' 모델은 실험적이며 예고 없이 변경되거나 사용이 중단될 수 있습니다.
-# Google AI Studio 또는 공식 문서에서 사용 가능한 모델인지, API 키에 접근 권한이 있는지 확인하는 것이 좋습니다.
-
-# --- 모델 객체 생성 ---
-try:
-    model = genai.GenerativeModel(GEMINI_MODEL_NAME)
-    logger.info("GenerativeModel 객체 생성 완료.")
-except Exception as e:
-     logger.critical(f"오류: GenerativeModel 생성 중 문제가 발생했습니다.", exc_info=True)
-     logger.critical(f"      모델 이름('{GEMINI_MODEL_NAME}')이 유효하지 않거나, 해당 모델에 대한 접근 권한이 없거나, API 키에 문제가 있을 수 있습니다.")
-     exit()
-
-# --- RAG Document Loading and Processing ---
-logger.info("--- RAG 문서 로딩 및 처리 시작 ---")
-text_chunks = []
-document_ids = []
-document_metadatas = []
-
-try:
-    all_documents = load_documents(RAG_DOCUMENT_SOURCES)
-    logger.info(f"총 {len(all_documents)}개의 문서를 {RAG_DOCUMENT_SOURCES}에서 로드했습니다.")
-
-    if RAG_DOCUMENT_FILTERS:
-        logger.info(f"다음 필터를 사용하여 문서 필터링: {RAG_DOCUMENT_FILTERS}")
-        processed_documents = filter_documents(all_documents, RAG_DOCUMENT_FILTERS)
-        logger.info(f"필터링 후 {len(processed_documents)}개의 문서가 남았습니다.")
-    else:
-        processed_documents = all_documents
-        logger.info("문서 필터가 설정되지 않았습니다. 모든 로드된 문서를 처리합니다.")
-
-    for i, doc in enumerate(processed_documents):
-        extracted_text = extract_text_for_rag(doc, RAG_TEXT_FIELDS)
-        if extracted_text:
-            # 여기서 extracted_text를 바로 text_chunks에 추가하지 않고,
-            # 기존의 split_text_into_chunks를 활용하여 분할합니다.
-            # 이렇게 함으로써 CHUNK_SIZE, CHUNK_OVERLAP 설정을 계속 존중할 수 있습니다.
-            chunks_from_doc = split_text_into_chunks(extracted_text) # CHUNK_SIZE, CHUNK_OVERLAP 기본값 사용
-            
-            doc_id_base = doc.get('id', f'doc_{i}')
-            
-            for chunk_idx, chunk in enumerate(chunks_from_doc):
-                text_chunks.append(chunk)
-                document_ids.append(f"{doc_id_base}_chunk_{chunk_idx}")
-                document_metadatas.append({
-                    'source_id': doc.get('id', 'unknown'), 
-                    'name': doc.get('name', 'Unnamed Document'),
-                    'original_doc_idx': i, # 원본 문서 인덱스
-                    'chunk_idx_in_doc': chunk_idx # 문서 내 청크 인덱스
-                })
-            if chunks_from_doc:
-                 logger.debug(f"문서 ID '{doc_id_base}'에서 {len(chunks_from_doc)}개의 텍스트 조각 추출 및 분할 완료.")
-        else:
-            logger.warning(f"문서 ID '{doc.get('id', f'doc_{i}')}'에서 추출된 텍스트가 없습니다 (필드: {RAG_TEXT_FIELDS}).")
-
-    if text_chunks:
-        logger.info(f"--- 총 {len(text_chunks)}개의 텍스트 조각을 RAG 시스템에 추가할 준비가 되었습니다 ---")
-    else:
-        logger.warning("[경고] 처리 후 RAG 시스템에 추가할 텍스트 조각이 없습니다.")
-        # 필요하다면 여기서 exit() 또는 다른 로직을 수행할 수 있습니다.
-
-except Exception as e:
-    logger.critical(f"[오류] RAG 문서 로딩 또는 처리 중 오류 발생:", exc_info=True)
-    exit()
-# --- End of RAG Document Loading and Processing ---
-
-# --- Functions copied from rag_system_simulation.py ---
-
 def load_documents(source_paths: list[str]) -> list[dict]:
-    """
-    Loads JSON objects from a list of specified source paths.
-    Each path in source_paths can be a direct path to a JSON file or a directory.
-    If a path is a directory, it recursively finds all .json files within that directory.
-    Reads each JSON file, which can contain a single JSON object or a list of JSON objects.
-    Consolidates all loaded JSON objects into a single list of dictionaries.
-    Handles errors like file not found or invalid JSON format gracefully by logging
-    a message and skipping the problematic file or path.
-    Non-JSON files are skipped with a warning.
-    """
     documents = []
     for path in source_paths:
         if os.path.isfile(path):
@@ -185,7 +63,7 @@ def load_documents(source_paths: list[str]) -> list[dict]:
                         else:
                             logger.warning(f"Unexpected JSON structure in {path}. Expected list or dict at root.")
                 except FileNotFoundError:
-                    logger.error(f"File not found - {path}")
+                    logger.error(f"File not found - {path}") # Keep logger for errors
                 except json.JSONDecodeError:
                     logger.error(f"Invalid JSON format in - {path}")
                 except Exception as e:
@@ -212,13 +90,12 @@ def load_documents(source_paths: list[str]) -> list[dict]:
                     except Exception as e:
                         logger.error(f"An unexpected error occurred while processing {filepath}: {e}")
                 elif os.path.isfile(filepath): 
-                    logger.warning(f"Skipping non-JSON file: {filepath}")
+                    logger.warning(f"Skipping non-JSON file: {filepath}") # Log skipping non-JSONs in directory
         else:
             logger.warning(f"Source path not found or invalid, skipping: {path}")
     return documents
 
 def _get_nested_value(doc: dict, key_path: str):
-    """Helper function to get a value from a nested dictionary using a dot-separated path."""
     keys = key_path.split('.')
     value = doc
     for key in keys:
@@ -231,17 +108,13 @@ def _get_nested_value(doc: dict, key_path: str):
                     value = value[idx]
                 else:
                     return None 
-            except ValueError:
+            except ValueError: # Not an integer index
                 return None 
-        else:
+        else: # Key not found or value is not a collection
             return None 
     return value
 
 def filter_documents(documents: list[dict], filters: dict) -> list[dict]:
-    """
-    Filters a list of document dictionaries based on criteria in the filters dictionary.
-    Keys in filters can be dot-separated paths for nested fields.
-    """
     filtered_docs = []
     for doc in documents:
         match = True
@@ -255,7 +128,6 @@ def filter_documents(documents: list[dict], filters: dict) -> list[dict]:
     return filtered_docs
 
 def _extract_text_from_value(value) -> list[str]:
-    """Helper function to recursively extract string values from various data structures."""
     texts = []
     if isinstance(value, str):
         texts.append(value)
@@ -268,299 +140,301 @@ def _extract_text_from_value(value) -> list[str]:
     return texts
 
 def extract_text_for_rag(document: dict, text_fields: list[str]) -> str:
-    """
-    Extracts text content from specified fields in a document.
-    Handles dot-separated paths for nested fields.
-    Joins lists of strings and concatenates strings from complex objects.
-    """
     extracted_texts = []
     for field_path in text_fields:
         value = _get_nested_value(document, field_path)
         if value is not None:
             texts_from_field = _extract_text_from_value(value)
             extracted_texts.extend(texts_from_field)
-    
     return " ".join(extracted_texts)
 
-# --- End of functions copied from rag_system_simulation.py ---
+# Comment removed
 
+if __name__ == "__main__":
+    # --- API 키 로딩 (.env 파일 사용) ---
+    load_dotenv() # Loads environment variables from .env
+    api_key = os.getenv(GOOGLE_API_KEY_ENV)
 
-# --- RAG: 임베딩 모델 및 벡터 DB 설정 ---
-# RAG 기능을 사용하지 않으려면 이 섹션 전체를 주석 처리하거나 건너뛸 수 있음
+    if not api_key:
+        logger.critical(f"오류: {GOOGLE_API_KEY_ENV} 환경 변수를 찾을 수 없습니다.")
+        logger.critical(f"프로젝트 루트 디렉토리에 `.env` 파일이 있고, 그 안에 {GOOGLE_API_KEY_ENV}='YOUR_API_KEY' 형식으로 키가 저장되어 있는지 확인해주세요.")
+        exit()
 
-logger.info("\n--- RAG 설정 시작 ---")
-try:
-    from sentence_transformers import SentenceTransformer
-    import chromadb
-    from chromadb.utils import embedding_functions # 최신 ChromaDB는 이렇게 임포트할 수 있음
-except ImportError as e:
-    logger.critical("[오류] RAG 관련 라이브러리(sentence-transformers, chromadb)가 설치되지 않았습니다.", exc_info=True)
-    logger.critical("      pip install sentence-transformers chromadb 명령어로 설치해주세요.")
-    exit()
-
-# 1. 임베딩 모델 로드
-#    EMBEDDING_MODEL_NAME은 Configuration Constants 섹션에서 정의됨
-try:
-    logger.info(f"임베딩 모델 로딩 중 ('{EMBEDDING_MODEL_NAME}')... (시간이 좀 걸릴 수 있습니다)")
-    # embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME) # SentenceTransformer 직접 사용 방식
-    
-    # ChromaDB 내장 함수 사용 방식 (더 간편할 수 있음)
-    chroma_embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=EMBEDDING_MODEL_NAME
-    )
-    logger.info(f"임베딩 모델 '{EMBEDDING_MODEL_NAME}' 로드 완료.")
-except Exception as e:
-    logger.critical(f"[오류] 임베딩 모델 '{EMBEDDING_MODEL_NAME}' 로딩 실패:", exc_info=True)
-    exit()
-
-# 2. ChromaDB 클라이언트 설정
-#    VECTOR_DB_PATH는 Configuration Constants 섹션에서 정의됨
-try:
-    client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
-    logger.info(f"ChromaDB 클라이언트 생성 완료 (저장 경로: {VECTOR_DB_PATH})")
-except Exception as e:
-    logger.critical("[오류] ChromaDB 클라이언트 생성 실패:", exc_info=True)
-    exit()
-
-# 3. 컬렉션 생성 또는 가져오기
-#    COLLECTION_NAME은 Configuration Constants 섹션에서 정의됨
-try:
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        embedding_function=chroma_embedding_function # 여기서 임베딩 함수 지정!
-        # metadata={"hnsw:space": "cosine"} # 유사도 측정 방식 지정 (선택적)
-    )
-    logger.info(f"ChromaDB 컬렉션 '{COLLECTION_NAME}' 준비 완료.")
-except Exception as e:
-    logger.critical(f"[오류] ChromaDB 컬렉션 '{COLLECTION_NAME}' 생성 또는 가져오기 실패:", exc_info=True)
-    exit()
-
-# 4. 데이터 임베딩 및 저장 (컬렉션이 비어 있을 경우에만 실행)
-try:
-    if collection.count() == 0 and text_chunks: # text_chunks는 위에서 새로 정의되고 채워짐
-        logger.info(f"컬렉션 '{COLLECTION_NAME}'이 비어있습니다. 데이터 임베딩 및 저장을 시작합니다...")
-        logger.info(f"총 {len(text_chunks)}개의 텍스트 조각을 처리합니다. (시간이 걸릴 수 있습니다)")
-
-        # ids와 metadatas는 위에서 새로 정의된 document_ids와 document_metadatas를 사용
-        collection.add(
-            documents=text_chunks, # 분할된 최종 텍스트 조각들
-            ids=document_ids,      # 각 텍스트 조각에 대한 고유 ID
-            metadatas=document_metadatas # 각 텍스트 조각에 대한 메타데이터
-        )
-        logger.info(f"데이터 임베딩 및 저장 완료! 총 {collection.count()}개의 벡터가 저장되었습니다.")
-    elif text_chunks: # text_chunks가 있지만 컬렉션이 비어있지 않은 경우
-        logger.info(f"컬렉션 '{COLLECTION_NAME}'에 이미 데이터({collection.count()}개)가 존재합니다. 임베딩 과정을 건너<0xEB><0x9B><0x81>니다.")
-    else: # text_chunks가 비어있는 경우 (처리할 데이터가 없는 경우)
-         logger.info("RAG를 위해 저장할 텍스트 조각이 없습니다.")
-except Exception as e:
-    logger.error("[오류] 데이터 임베딩 또는 저장 중 오류 발생:", exc_info=True)
-    # 오류 발생 시 부분적으로 데이터가 저장되었을 수 있음
-
-logger.info("--- RAG 설정 완료 ---")
-
-
-# --- RAG: 정보 검색 함수 정의 ---
-def search_vector_db(query_text, collection, n_results=3):
-    """
-    벡터 데이터베이스에서 주어진 쿼리와 가장 유사한 텍스트 청크를 검색합니다.
-    Args:
-        query_text (str): 검색할 사용자 질문 또는 키워드.
-        collection (chromadb.Collection): 검색을 수행할 ChromaDB 컬렉션 객체.
-        n_results (int): 검색 결과로 반환할 청크의 수.
-    Returns:
-        list[str]: 검색된 텍스트 청크 리스트 (유사도 순). 없을 경우 빈 리스트.
-    """
     try:
-        results = collection.query(
-            query_texts=[query_text],
-            n_results=n_results,
-            include=['documents']
-        )
-        if results and results.get('documents') and results['documents']:
-             retrieved_docs = results['documents'][0]
-             # logger.debug(f"검색된 문서: {retrieved_docs}") # 디버깅용
-             return retrieved_docs
-        else:
-             # logger.debug(f"검색 결과 없음 또는 documents 키 없음: {results}") # 디버깅용
-             return []
+        genai.configure(api_key=api_key)
+        logger.info("API 키 설정 완료 (configure 방식).")
     except Exception as e:
-        logger.error(f"벡터 DB 검색 중 오류 발생:", exc_info=True)
-        return []
+         logger.critical(f"오류: API 키 설정 중 문제가 발생했습니다: {e}", exc_info=True)
+         exit()
+    
+    # --- 모델 객체 생성 ---
+    logger.info(f"사용할 Gemini 모델: {GEMINI_MODEL_NAME}")
+    try:
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        logger.info("GenerativeModel 객체 생성 완료.")
+    except Exception as e:
+         logger.critical(f"오류: GenerativeModel 생성 중 문제가 발생했습니다.", exc_info=True)
+         logger.critical(f"      모델 이름('{GEMINI_MODEL_NAME}')이 유효하지 않거나, 해당 모델에 대한 접근 권한이 없거나, API 키에 문제가 있을 수 있습니다.")
+         exit()
 
+    # --- RAG Document Loading and Processing ---
+    logger.info("--- RAG 문서 로딩 및 처리 시작 ---")
+    # These variables are defined here as they are primarily used in the main execution flow
+    text_chunks = []
+    document_ids = []
+    document_metadatas = []
 
-# --- Tool 설정 (이전에 성공했던 방식) ---
-tools = None
-try:
-    search_retrieval_config = types.GoogleSearchRetrieval()
-    search_tool = types.Tool(google_search_retrieval=search_retrieval_config)
-    tools = [search_tool]
-    logger.info("Google Search Tool 설정 완료 (GoogleSearchRetrieval 방식).")
-except AttributeError as e:
-    logger.warning(f"Google Search Tool ({type(e).__name__}: {e}) 설정 중 오류 발생. 라이브러리 버전 문제일 수 있습니다.")
-    logger.warning("Tool 기능 없이 진행합니다.")
-    tools = None
-except Exception as tool_error:
-    logger.warning(f"Tool 설정 중 예기치 않은 오류 발생 ({type(tool_error).__name__}). Tool 기능 없이 진행합니다.", exc_info=True)
-    tools = None
+    try:
+        all_documents = load_documents(RAG_DOCUMENT_SOURCES) # Uses the global load_documents
+        logger.info(f"총 {len(all_documents)}개의 문서를 {RAG_DOCUMENT_SOURCES}에서 로드했습니다.")
 
+        if RAG_DOCUMENT_FILTERS:
+            logger.info(f"다음 필터를 사용하여 문서 필터링: {RAG_DOCUMENT_FILTERS}")
+            processed_documents = filter_documents(all_documents, RAG_DOCUMENT_FILTERS) # Uses global filter_documents
+            logger.info(f"필터링 후 {len(processed_documents)}개의 문서가 남았습니다.")
+        else:
+            processed_documents = all_documents
+            logger.info("문서 필터가 설정되지 않았습니다. 모든 로드된 문서를 처리합니다.")
 
-# --- (변수 초기화) ---
-full_response = ""
-conversation_history = []
+        for i, doc in enumerate(processed_documents):
+            extracted_text = extract_text_for_rag(doc, RAG_TEXT_FIELDS) # Uses global extract_text_for_rag
+            if extracted_text:
+                chunks_from_doc = split_text_into_chunks(extracted_text) # Uses global split_text_into_chunks
+                doc_id_base = doc.get('id', f'doc_{i}')
+                for chunk_idx, chunk_content in enumerate(chunks_from_doc):
+                    text_chunks.append(chunk_content)
+                    document_ids.append(f"{doc_id_base}_chunk_{chunk_idx}")
+                    document_metadatas.append({
+                        'source_id': doc.get('id', 'unknown'), 
+                        'name': doc.get('name', 'Unnamed Document'),
+                        'original_doc_idx': i,
+                        'chunk_idx_in_doc': chunk_idx
+                    })
+                if chunks_from_doc: # Log only if chunks were actually created
+                     logger.debug(f"문서 ID '{doc_id_base}'에서 {len(chunks_from_doc)}개의 텍스트 조각 추출 및 분할 완료.")
+            else:
+                logger.warning(f"문서 ID '{doc.get('id', f'doc_{i}')}'에서 추출된 텍스트가 없습니다 (필드: {RAG_TEXT_FIELDS}).")
 
-# --- 첫 번째 API 호출 ---
-try:
-    # INITIAL_PROMPT_TEXT는 Configuration Constants 섹션에서 정의됨
-    contents_for_request = [
-        {"role": "user", "parts": [{"text": INITIAL_PROMPT_TEXT}]}
-    ]
+        if text_chunks:
+            logger.info(f"--- 총 {len(text_chunks)}개의 텍스트 조각을 RAG 시스템에 추가할 준비가 되었습니다 ---")
+        else:
+            logger.warning("[경고] 처리 후 RAG 시스템에 추가할 텍스트 조각이 없습니다.")
+            # Consider if an exit() is needed if no text chunks are available for RAG
+    except Exception as e: # Catch any exception during document processing
+        logger.critical(f"[오류] RAG 문서 로딩 또는 처리 중 오류 발생:", exc_info=True)
+        exit()
+    # --- End of RAG Document Loading and Processing ---
 
-    logger.info(f"\nGemini에게 보낼 첫 메시지:\n{INITIAL_PROMPT_TEXT}\n")
-    # Use logger for messages that aren't part of the direct DM output stream
-    logger.info("Gemini의 응답 (스트리밍 시작):")
+    # --- RAG: 임베딩 모델 및 벡터 DB 설정 ---
+    # This section includes imports specific to RAG setup.
+    logger.info("\n--- RAG 설정 시작 ---")
+    try:
+        from sentence_transformers import SentenceTransformer
+        import chromadb
+        from chromadb.utils import embedding_functions # For SentenceTransformerEmbeddingFunction
+    except ImportError as e:
+        logger.critical("[오류] RAG 관련 라이브러리(sentence-transformers, chromadb)가 설치되지 않았습니다.", exc_info=True)
+        logger.critical("      pip install sentence-transformers chromadb 명령어로 설치해주세요.")
+        exit()
 
-    stream = model.generate_content(
-        contents_for_request,
-        stream=True,
-        tools=tools
-    )
+    try:
+        logger.info(f"임베딩 모델 로딩 중 ('{EMBEDDING_MODEL_NAME}')... (시간이 좀 걸릴 수 있습니다)")
+        chroma_embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=EMBEDDING_MODEL_NAME
+        )
+        logger.info(f"임베딩 모델 '{EMBEDDING_MODEL_NAME}' 로드 완료.")
+    except Exception as e:
+        logger.critical(f"[오류] 임베딩 모델 '{EMBEDDING_MODEL_NAME}' 로딩 실패:", exc_info=True)
+        exit()
 
-    for chunk in stream:
-        try:
-            if chunk.parts:
-                 chunk_text = ''.join(part.text for part in chunk.parts if hasattr(part, 'text'))
-                 print(chunk_text, end="", flush=True) # Direct print for streaming output
-                 full_response += chunk_text
-        except Exception as chunk_e:
-             logger.error(f"\n스트리밍 중 청크 처리 오류: {chunk_e}", exc_info=True)
-             pass # Continue processing other chunks
+    try:
+        client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
+        logger.info(f"ChromaDB 클라이언트 생성 완료 (저장 경로: {VECTOR_DB_PATH})")
+    except Exception as e:
+        logger.critical("[오류] ChromaDB 클라이언트 생성 실패:", exc_info=True)
+        exit()
 
-    print("\n") # Ensure newline after streaming output
-    logger.info("스트리밍 완료.")
+    try:
+        collection = client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            embedding_function=chroma_embedding_function
+        )
+        logger.info(f"ChromaDB 컬렉션 '{COLLECTION_NAME}' 준비 완료.")
+    except Exception as e:
+        logger.critical(f"[오류] ChromaDB 컬렉션 '{COLLECTION_NAME}' 생성 또는 가져오기 실패:", exc_info=True)
+        exit()
 
-    conversation_history.append({"role": "user", "parts": [{"text": INITIAL_PROMPT_TEXT}]})
-    conversation_history.append({"role": "model", "parts": [{"text": full_response}]})
-
-except Exception as e:
-    logger.critical(f"초기 Gemini API 호출 또는 처리 중 문제가 발생했습니다.", exc_info=True)
-    logger.critical("초기 호출 실패로 프로그램을 종료합니다.")
-    exit()
-
-
-# --- 상호작용 루프 시작 (RAG 통합) ---
-if conversation_history:
-    logger.info("\n--- 이제 모험을 시작합니다! ---")
-
-    while True:
-        try:
-            player_input = input("플레이어: ")
-        except EOFError:
-             logger.info("\n입력 종료 (EOF). 모험을 종료합니다.")
-             break
-
-        if player_input.lower() in USER_EXIT_COMMANDS:
-            logger.info("모험을 종료합니다.")
-            break
-
-        logger.info("\n[RAG] 관련 정보 검색 중...")
-        try:
-             retrieved_context = search_vector_db(player_input, collection, n_results=3)
-             if retrieved_context:
-                  logger.info(f"[RAG] {len(retrieved_context)}개의 관련 정보를 찾았습니다.")
-                  # logger.debug(f"검색된 컨텍스트: {retrieved_context}")
-             else:
-                  logger.info("[RAG] 관련된 추가 정보를 찾지 못했습니다.")
-        except NameError:
-             logger.warning("[경고] RAG 컬렉션('collection')이 정의되지 않아 검색을 건너<0xEB><0x9B><0x81>니다.")
-             retrieved_context = []
-        except Exception as search_e:
-             logger.error(f"[오류] RAG 검색 중 오류 발생: {search_e}", exc_info=True)
-             retrieved_context = []
-
-        # 3a. 검색된 컨텍스트를 프롬프트에 추가할 형태로 가공
-        context_prompt_part = ""
-        if retrieved_context:
-            context_prompt_part += "\n\n[참고 자료 (RAG 시스템 제공)]\n" # "개인 설정"에서 "RAG 시스템 제공"으로 변경
-            for i, doc in enumerate(retrieved_context):
-                context_prompt_part += f"- 정보 {i+1}: {doc}\n" # "문서"에서 "정보"로 변경 (더 일반적)
-            context_prompt_part += "\n위 참고 자료를 바탕으로 답변해주세요.\n" # AI에게 활용하도록 지시
-
-        # 3b. 현재 사용자 입력을 포함한 최종 프롬프트 리스트 구성
-        #    주의: conversation_history는 이미 user/model 턴을 포함하고 있음
-        #    따라서, 마지막 사용자 입력 전에 참고 자료를 넣는 것이 자연스러울 수 있음
-        #    또는, 시스템 메시지처럼 맨 앞에 넣는 방법도 고려 가능
-        
-        # 방법 1: 마지막 사용자 입력 *전에* 컨텍스트 추가 (컨텍스트 + 최신 질문)
-        prompt_for_gemini = conversation_history.copy() # 원본 유지 위해 복사
-        # 마지막 사용자 입력(방금 받은 입력)을 임시로 추가하기 전에 컨텍스트 추가
-        if context_prompt_part:
-             # 컨텍스트 정보를 'user' 역할의 일부로 추가 (다른 역할도 가능)
-             prompt_for_gemini.append({"role": "user", "parts": [{"text": context_prompt_part}]})
-        # 마지막 사용자 입력을 최종적으로 추가
-        prompt_for_gemini.append({"role": "user", "parts": [{"text": player_input}]})
-        
-        # (디버깅용) 최종 프롬프트 확인
-        # logger.debug("\n--- 최종 프롬프트 (Gemini에게 전달) ---")
-        # for item in prompt_for_gemini:
-        #    logger.debug(f"[{item['role']}]: {item['parts'][0]['text'][:100]}...") # 일부만 출력
-        # logger.debug("--------------------------------------")
-
-        # === RAG 통합 끝 ===
-
-        # Use logger for messages that aren't part of the direct DM output stream
-        logger.info("\nDM 응답 (스트리밍 시작):")
-
-        try:
-            stream = model.generate_content(
-                prompt_for_gemini,
-                stream=True,
-                tools=tools
+    try:
+        if collection.count() == 0 and text_chunks: # Only add if collection is empty AND there are chunks
+            logger.info(f"컬렉션 '{COLLECTION_NAME}'이 비어있습니다. 데이터 임베딩 및 저장을 시작합니다...")
+            logger.info(f"총 {len(text_chunks)}개의 텍스트 조각을 처리합니다. (시간이 걸릴 수 있습니다)")
+            collection.add(
+                documents=text_chunks,
+                ids=document_ids, # Ensure these are correctly populated
+                metadatas=document_metadatas # Ensure these are correctly populated
             )
+            logger.info(f"데이터 임베딩 및 저장 완료! 총 {collection.count()}개의 벡터가 저장되었습니다.")
+        elif text_chunks: # If text_chunks exist but collection is not empty
+            logger.info(f"컬렉션 '{COLLECTION_NAME}'에 이미 데이터({collection.count()}개)가 존재합니다. 임베딩 과정을 건너<0xEB><0x9B><0x81>니다.")
+        else: # No text_chunks to add
+             logger.info("RAG를 위해 저장할 텍스트 조각이 없습니다.")
+    except Exception as e: # Catch any exception during embedding/saving
+        logger.error("[오류] 데이터 임베딩 또는 저장 중 오류 발생:", exc_info=True)
+        # Depending on severity, might consider an exit() here
+    logger.info("--- RAG 설정 완료 ---")
 
-            current_dm_response = ""
-            for chunk in stream:
-                try:
-                    if chunk.parts:
-                        chunk_text = ''.join(part.text for part in chunk.parts if hasattr(part, 'text'))
-                        print(chunk_text, end="", flush=True) # Direct print for streaming output
-                        current_dm_response += chunk_text
-                except Exception as chunk_e:
-                    logger.error(f"\n스트리밍 중 청크 처리 오류: {chunk_e}", exc_info=True)
-                    pass # Continue processing other chunks
-
-            print("\n") # Ensure newline after streaming output
-
-            # 6. 대화 기록 업데이트 (사용자 입력과 AI 응답 모두 추가)
-            #    주의: RAG 컨텍스트는 임시로 프롬프트에만 사용하고,
-            #          실제 대화 기록에는 사용자 입력과 모델 응답만 저장하는 것이 일반적임
-            #          (컨텍스트까지 저장하면 기록이 너무 길어지고 중복될 수 있음)
-            # 대화 기록 업데이트 로직 수정:
-            # 1. 사용자 입력을 먼저 기록에 추가한다.
-            # 2. API 호출 성공하고 응답이 있으면 모델 응답을 기록에 추가한다.
-            # 3. API 호출 실패 또는 빈 응답 시, 이전에는 사용자 입력을 제거했으나,
-            #    이제는 사용자 입력을 유지하고, 모델 응답이 없는 상태로 기록하거나
-            #    또는 특정 메시지를 모델 응답으로 기록하는 것을 고려할 수 있다.
-            #    여기서는 사용자 입력을 유지하고, 빈 모델 응답 시 알림을 로깅하고
-            #    모델 응답은 기록에 추가하지 않는 현재 방식을 유지하되, 명시적으로 표현한다.
-
-            conversation_history.append({"role": "user", "parts": [{"text": player_input}]})
-
-            if current_dm_response:
-                 conversation_history.append({"role": "model", "parts": [{"text": current_dm_response}]})
+    # --- RAG: 정보 검색 함수 정의 (specific to main execution as it uses 'collection') ---
+    def search_vector_db_main(query_text, n_results=3): # Renamed to avoid conflict if global one exists
+        """
+        벡터 데이터베이스에서 주어진 쿼리와 가장 유사한 텍스트 청크를 검색합니다.
+        Uses 'collection' defined within this __main__ block.
+        """
+        # Ensure 'collection' is available in this scope
+        if 'collection' not in locals() and 'collection' not in globals():
+            logger.error("RAG 컬렉션('collection')이 search_vector_db_main 내에서 접근 불가능합니다.")
+            return []
+        try:
+            results = collection.query( # Uses the 'collection' from the main block
+                query_texts=[query_text],
+                n_results=n_results,
+                include=['documents']
+            )
+            if results and results.get('documents') and results['documents'][0]:
+                 retrieved_docs = results['documents'][0]
+                 return retrieved_docs
             else:
-                 logger.info("[알림] DM으로부터 빈 응답을 받았습니다. (사용자 입력은 기록에 유지됩니다)")
-                 # conversation_history.append({"role": "model", "parts": [{"text": "<빈 응답>"}]}) # 이렇게 명시적으로 기록도 가능
-
+                 return []
         except Exception as e:
-            logger.error(f"상호작용 중 Gemini API 호출 또는 처리 중 문제가 발생했습니다.", exc_info=True)
-            if conversation_history and conversation_history[-1]["role"] == "user" and \
-               conversation_history[-1]["parts"][0]["text"] == player_input:
-                 conversation_history.pop()
-                 logger.info("[알림] 오류 발생으로 마지막 사용자 입력은 처리되지 않았고, 기록에서 제거되었습니다. 다시 시도해주세요.")
-            else:
-                 logger.warning("[알림] 오류 발생으로 마지막 사용자 입력 처리에 문제가 있었을 수 있습니다. 대화 기록을 확인해주세요.")
+            logger.error(f"벡터 DB 검색 중 오류 발생 (search_vector_db_main):", exc_info=True)
+            return []
 
-else:
-     logger.warning("대화 기록이 초기화되지 않아 상호작용 루프를 시작할 수 없습니다.")
-     
+    # --- Tool 설정 ---
+    tools = None
+    try:
+        # Ensure 'types' is available if not imported globally or re-import if necessary
+        # from google.generativeai import types # Could be here if only for main
+        search_retrieval_config = types.GoogleSearchRetrieval()
+        search_tool = types.Tool(google_search_retrieval=search_retrieval_config)
+        tools = [search_tool]
+        logger.info("Google Search Tool 설정 완료 (GoogleSearchRetrieval 방식).")
+    except AttributeError as e:
+        logger.warning(f"Google Search Tool ({type(e).__name__}: {e}) 설정 중 오류 발생. 라이브러리 버전 문제일 수 있습니다.")
+        logger.warning("Tool 기능 없이 진행합니다.")
+        tools = None
+    except Exception as tool_error:
+        logger.warning(f"Tool 설정 중 예기치 않은 오류 발생 ({type(tool_error).__name__}). Tool 기능 없이 진행합니다.", exc_info=True)
+        tools = None
+    
+    # --- (변수 초기화) ---
+    full_response = ""
+    conversation_history = []
+
+    # --- 첫 번째 API 호출 ---
+    try:
+        contents_for_request = [
+            {"role": "user", "parts": [{"text": INITIAL_PROMPT_TEXT}]}
+        ]
+        logger.info(f"\nGemini에게 보낼 첫 메시지:\n{INITIAL_PROMPT_TEXT}\n")
+        logger.info("Gemini의 응답 (스트리밍 시작):") # Log before print
+        stream = model.generate_content( # Uses 'model' from the main block
+            contents_for_request,
+            stream=True,
+            tools=tools # Uses 'tools' from the main block
+        )
+        for stream_chunk in stream:
+            try:
+                if stream_chunk.parts:
+                     # Ensure part.text exists before joining
+                     chunk_text = ''.join(part.text for part in stream_chunk.parts if hasattr(part, 'text'))
+                     print(chunk_text, end="", flush=True)
+                     full_response += chunk_text
+            except Exception as chunk_processing_error: # More specific variable name
+                 logger.error(f"\n스트리밍 중 청크 처리 오류: {chunk_processing_error}", exc_info=True)
+                 pass # Attempt to continue with other chunks
+        print("\n") # Newline after streaming is complete
+        logger.info("스트리밍 완료.") # Log after streaming
+        conversation_history.append({"role": "user", "parts": [{"text": INITIAL_PROMPT_TEXT}]})
+        conversation_history.append({"role": "model", "parts": [{"text": full_response}]})
+    except Exception as e: # Catch any exception during initial API call
+        logger.critical(f"초기 Gemini API 호출 또는 처리 중 문제가 발생했습니다.", exc_info=True)
+        logger.critical("초기 호출 실패로 프로그램을 종료합니다.")
+        exit()
+
+    # --- 상호작용 루프 시작 (RAG 통합) ---
+    if conversation_history: # Check if initial call was successful
+        logger.info("\n--- 이제 모험을 시작합니다! ---")
+        while True:
+            try:
+                player_input = input("플레이어: ")
+            except EOFError: # Handle Ctrl+D
+                 logger.info("\n입력 종료 (EOF). 모험을 종료합니다.")
+                 break # Exit loop
+            if player_input.lower() in USER_EXIT_COMMANDS:
+                logger.info("모험을 종료합니다.")
+                break # Exit loop
+
+            logger.info("\n[RAG] 관련 정보 검색 중...")
+            try:
+                 # Uses 'search_vector_db_main' which uses 'collection' from this block
+                 retrieved_context = search_vector_db_main(player_input, n_results=3) 
+                 if retrieved_context:
+                      logger.info(f"[RAG] {len(retrieved_context)}개의 관련 정보를 찾았습니다.")
+                 else:
+                      logger.info("[RAG] 관련된 추가 정보를 찾지 못했습니다.")
+            # Removed NameError catch as search_vector_db_main checks for 'collection'
+            except Exception as search_e:
+                 logger.error(f"[오류] RAG 검색 중 오류 발생: {search_e}", exc_info=True)
+                 retrieved_context = [] # Ensure it's an empty list on error
+
+            context_prompt_part = ""
+            if retrieved_context: # Check if context was actually retrieved
+                context_prompt_part += "\n\n[참고 자료 (RAG 시스템 제공)]\n"
+                for i, doc_text in enumerate(retrieved_context): # Iterate over list of strings
+                    context_prompt_part += f"- 정보 {i+1}: {doc_text}\n"
+                context_prompt_part += "\n위 참고 자료를 바탕으로 답변해주세요.\n"
+            
+            prompt_for_gemini = conversation_history.copy() # Start with existing history
+            if context_prompt_part: # Add context if available
+                 prompt_for_gemini.append({"role": "user", "parts": [{"text": context_prompt_part}]})
+            prompt_for_gemini.append({"role": "user", "parts": [{"text": player_input}]}) # Add current player input
+            
+            logger.info("\nDM 응답 (스트리밍 시작):") # Log before print
+            try:
+                stream = model.generate_content( # Uses 'model' from this block
+                    prompt_for_gemini,
+                    stream=True,
+                    tools=tools # Uses 'tools' from this block
+                )
+                current_dm_response = ""
+                for stream_chunk_interaction in stream:
+                    try:
+                        if stream_chunk_interaction.parts:
+                            # Ensure part.text exists
+                            chunk_text = ''.join(part.text for part in stream_chunk_interaction.parts if hasattr(part, 'text'))
+                            print(chunk_text, end="", flush=True)
+                            current_dm_response += chunk_text
+                    except Exception as chunk_interaction_processing_error: # More specific variable name
+                        logger.error(f"\n스트리밍 중 청크 처리 오류: {chunk_interaction_processing_error}", exc_info=True)
+                        pass # Attempt to continue
+                print("\n") # Newline after streaming
+                
+                # Update conversation history
+                conversation_history.append({"role": "user", "parts": [{"text": player_input}]})
+                if current_dm_response: # Check if there was a response
+                     conversation_history.append({"role": "model", "parts": [{"text": current_dm_response}]})
+                else:
+                     logger.info("[알림] DM으로부터 빈 응답을 받았습니다. (사용자 입력은 기록에 유지됩니다)")
+
+            except Exception as e: # Catch any exception during interaction API call
+                logger.error(f"상호작용 중 Gemini API 호출 또는 처리 중 문제가 발생했습니다.", exc_info=True)
+                # Rollback last user input if error occurred during model's response generation for that input
+                if conversation_history and conversation_history[-1]["role"] == "user" and \
+                   conversation_history[-1]["parts"][0]["text"] == player_input:
+                     # This implies the immediately preceding user input might not have gotten a model response
+                     # However, we already added the user input. If the goal is to remove it on error,
+                     # it should be done carefully. For now, logging is good.
+                     logger.warning("[알림] 오류 발생으로 마지막 사용자 입력에 대한 모델 응답 처리에 문제가 있었을 수 있습니다.")
+    else: # If conversation_history is empty (initial call failed)
+         logger.warning("대화 기록이 초기화되지 않아 상호작용 루프를 시작할 수 없습니다.")
+
 # --- END OF FILE main.py ---
