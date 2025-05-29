@@ -1,23 +1,24 @@
 import os
 import json
 import logging
+from langchain_text_splitters import RecursiveCharacterTextSplitter # Added
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 
 # --- Logging Configuration ---
 logger = logging.getLogger(__name__)
 
 # --- Function Definitions ---
-def split_text_into_chunks(text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP):
-    if chunk_overlap >= chunk_size:
-        raise ValueError("Chunk overlap must be smaller than chunk size.")
-    chunks = []
-    start_index = 0
-    while start_index < len(text):
-        end_index = start_index + chunk_size
-        actual_end_index = min(end_index, len(text))
-        chunks.append(text[start_index:actual_end_index])
-        start_index += chunk_size - chunk_overlap
-    return chunks
+def split_text_into_chunks(text: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP) -> list[str]: # Modified
+    """Splits text into chunks using RecursiveCharacterTextSplitter.""" # Added
+    if chunk_overlap >= chunk_size: # Added
+        raise ValueError("Chunk overlap must be smaller than chunk size.") # Added
+    text_splitter = RecursiveCharacterTextSplitter( # Added
+        chunk_size=chunk_size, # Added
+        chunk_overlap=chunk_overlap, # Added
+        length_function=len, # Added
+        is_separator_regex=False, # Added
+    ) # Added
+    return text_splitter.split_text(text) # Added
 
 def load_documents(source_paths: list[str]) -> list[dict]:
     documents = []
@@ -27,9 +28,14 @@ def load_documents(source_paths: list[str]) -> list[dict]:
                 try:
                     with open(path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                        metadata = {"source": path, "document_type": "json"}
                         if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    item["_metadata"] = metadata
                             documents.extend(data)
                         elif isinstance(data, dict):
+                            data["_metadata"] = metadata
                             documents.append(data)
                         else:
                             logger.warning(f"Unexpected JSON structure in {path}. Expected list or dict at root.")
@@ -39,8 +45,18 @@ def load_documents(source_paths: list[str]) -> list[dict]:
                     logger.error(f"Invalid JSON format in - {path}")
                 except Exception as e:
                     logger.error(f"An unexpected error occurred while processing {path}: {e}")
+            elif path.endswith(".txt"): # Added .txt file handling
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        metadata = {"source": path, "document_type": "txt"}
+                        documents.append({"text_content": content, "_metadata": metadata})
+                except FileNotFoundError:
+                    logger.error(f"File not found - {path}")
+                except Exception as e:
+                    logger.error(f"An unexpected error occurred while processing {path}: {e}")
             else:
-                logger.warning(f"Skipping non-JSON file: {path}")
+                logger.warning(f"Skipping non-JSON or non-TXT file: {path}") # Modified log message
         elif os.path.isdir(path):
             for filename in os.listdir(path):
                 filepath = os.path.join(path, filename)
@@ -48,9 +64,14 @@ def load_documents(source_paths: list[str]) -> list[dict]:
                     try:
                         with open(filepath, 'r', encoding='utf-8') as f:
                             data = json.load(f)
+                            metadata = {"source": filepath, "document_type": "json"} # Added metadata
                             if isinstance(data, list):
+                                for item in data: # Added loop for metadata
+                                    if isinstance(item, dict): # Added check for metadata
+                                        item["_metadata"] = metadata # Added metadata
                                 documents.extend(data)
                             elif isinstance(data, dict):
+                                data["_metadata"] = metadata # Added metadata
                                 documents.append(data)
                             else:
                                 logger.warning(f"Unexpected JSON structure in {filepath}. Expected list or dict at root.")
@@ -60,8 +81,18 @@ def load_documents(source_paths: list[str]) -> list[dict]:
                         logger.error(f"Invalid JSON format in - {filepath}")
                     except Exception as e:
                         logger.error(f"An unexpected error occurred while processing {filepath}: {e}")
+                elif os.path.isfile(filepath) and filename.endswith(".txt"): # Added .txt file handling for directories
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            metadata = {"source": filepath, "document_type": "txt"}
+                            documents.append({"text_content": content, "_metadata": metadata})
+                    except FileNotFoundError:
+                        logger.error(f"File not found - {filepath}")
+                    except Exception as e:
+                        logger.error(f"An unexpected error occurred while processing {filepath}: {e}")
                 elif os.path.isfile(filepath): 
-                    logger.warning(f"Skipping non-JSON file: {filepath}")
+                    logger.warning(f"Skipping non-JSON or non-TXT file: {filepath}") # Modified log message
         else:
             logger.warning(f"Source path not found or invalid, skipping: {path}")
     return documents

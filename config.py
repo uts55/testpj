@@ -10,7 +10,7 @@ VECTOR_DB_PATH = "./chroma_db"
 COLLECTION_NAME = "dnd_settings"
 RAG_DOCUMENT_SOURCES = ['./data']
 RAG_DOCUMENT_FILTERS = {}
-RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name']
+RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name', 'text_content']
 
 # Text Splitting Configuration
 CHUNK_SIZE = 1000
