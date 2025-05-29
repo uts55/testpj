@@ -1,0 +1,2 @@
+Sample text from a file in a directory.
+Another line for testing.
