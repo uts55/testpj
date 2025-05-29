@@ -2,7 +2,7 @@
 
 # API and Model Configuration
 GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
-GEMINI_MODEL_NAME = "gemini-2.5-pro-exp-03-25"
+GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 
 # RAG Configuration
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
