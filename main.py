@@ -9,6 +9,9 @@ import re # 정규 표현식 사용 (문장 분할 등)
 import logging
 import os # Added for checking file existence
 # import json # No longer needed directly here, handled by data_loader
+import tkinter as tk
+import threading # Added for threading
+from ui import Application
 
 # Import project modules
 import config # Global configuration constants
@@ -26,315 +29,365 @@ SAVE_GAME_FILENAME = "save_game.json"
 MAIN_PLAYER_ID = "player_001"
 DEFAULT_START_LOCATION_ID = "default_start_location"
 
+# Global variable for the UI application instance
+app_ui = None
+game_state_manager = None # To hold the GameState instance
+dialogue_manager = None # To hold the GeminiDialogueManager instance
+rag_system_manager = None # To hold the RAGManager instance
+root_tk_window = None # To hold the main Tkinter window instance
+
+
+def handle_save_game():
+    global game_state_manager, app_ui, SAVE_GAME_FILENAME
+    if not game_state_manager:
+        logger.warning("Save game called but game_state_manager is not initialized.")
+        if app_ui:
+            app_ui.add_narration("Error: Could not save game (GameState not ready).\n")
+        return
+    try:
+        game_state_manager.save_game(SAVE_GAME_FILENAME)
+        logger.info("Game saved via UI button.")
+        if app_ui:
+            app_ui.add_narration("Game Saved.\n")
+    except Exception as e:
+        logger.error(f"Error saving game: {e}", exc_info=True)
+        if app_ui:
+            app_ui.add_narration(f"Error: Could not save game. {type(e).__name__}\n")
+
+def handle_load_game():
+    global game_state_manager, app_ui, SAVE_GAME_FILENAME
+    if not game_state_manager:
+        logger.warning("Load game called but game_state_manager is not initialized.")
+        if app_ui:
+            app_ui.add_narration("Error: Could not load game (GameState not ready).\n")
+        return
+    try:
+        game_state_manager.load_game(SAVE_GAME_FILENAME) # This method logs its own status
+        update_ui_game_state() # Refresh UI based on loaded state
+        logger.info("Game loaded via UI button.")
+        if app_ui:
+            app_ui.add_narration("Game Loaded. Narrative might be out of sync; continue your adventure!\n")
+    except Exception as e:
+        logger.error(f"Error loading game: {e}", exc_info=True)
+        if app_ui:
+            app_ui.add_narration(f"Error: Could not load game. {type(e).__name__}\n")
+
+def handle_exit_game():
+    global game_state_manager, app_ui, root_tk_window, SAVE_GAME_FILENAME
+    logger.info("Exit game called via UI button.")
+    if game_state_manager:
+        game_state_manager.save_game(SAVE_GAME_FILENAME)
+        logger.info("Game saved on exit.")
+    if app_ui:
+        app_ui.add_narration("Exiting game...\n")
+    if root_tk_window:
+        root_tk_window.destroy() # Close the Tkinter window
+    else:
+        logger.warning("Root Tkinter window not found for destruction.")
+
+
+def update_ui_game_state():
+    """Fetches current game state and updates all UI labels."""
+    global app_ui, game_state_manager, MAIN_PLAYER_ID
+    if not app_ui or not game_state_manager:
+        logger.warning("Cannot update UI: app_ui or game_state_manager not initialized.")
+        return
+
+    player = game_state_manager.get_player(MAIN_PLAYER_ID)
+    if player:
+        # HP
+        app_ui.update_hp(player.stats.get('hp', 'N/A'))
+
+        # Location
+        loc_name = "Unknown"
+        location_obj = game_state_manager.locations.get(player.current_location)
+        if location_obj:
+            loc_name = location_obj.name
+        app_ui.update_location(loc_name)
+
+        # Inventory
+        inventory_item_names = []
+        if player.inventory:
+            for item_id in player.inventory:
+                item_obj = game_state_manager.items.get(item_id)
+                inventory_item_names.append(item_obj.name if item_obj else item_id)
+        inventory_str = ", ".join(inventory_item_names) if inventory_item_names else "Empty"
+        app_ui.update_inventory(inventory_str)
+        
+        # NPCs
+        npcs_in_loc_objs = game_state_manager.get_npcs_in_location(player.current_location)
+        npc_names_list = [npc.name for npc in npcs_in_loc_objs] if npcs_in_loc_objs else []
+        npcs_str = ", ".join(npc_names_list) if npc_names_list else "None"
+        app_ui.update_npcs(npcs_str)
+    else:
+        logger.warning(f"Player {MAIN_PLAYER_ID} not found for UI update.")
+        app_ui.update_hp("N/A")
+        app_ui.update_location("Unknown")
+        app_ui.update_inventory("N/A")
+        app_ui.update_npcs("N/A")
+
+
+def threaded_api_call_and_ui_updates(player_input_text):
+    """
+    This function runs in a separate thread to handle blocking API calls 
+    and then schedules UI updates back in the main thread.
+    """
+    global app_ui, game_state_manager, dialogue_manager, rag_system_manager, root_tk_window, MAIN_PLAYER_ID
+
+    player_for_action = game_state_manager.get_player(MAIN_PLAYER_ID) if game_state_manager else None
+    # dm_response_text variable is not needed here as it's fully handled within the try-except for API call
+
+    try:
+        # --- Generate Current State Summary for Gemini ---
+        # This part remains as it's prep for the API call.
+        current_state_summary_for_dm = ""
+        if player_for_action:
+            player_hp = player_for_action.stats.get('hp', 'N/A')
+            location_obj = game_state_manager.locations.get(player_for_action.current_location)
+            location_name = location_obj.name if location_obj else player_for_action.current_location
+            inventory_item_names = [game_state_manager.items.get(item_id).name if game_state_manager.items.get(item_id) else item_id for item_id in player_for_action.inventory]
+            inventory_str = ", ".join(inventory_item_names) if inventory_item_names else 'Empty'
+            npcs_in_loc_objs = game_state_manager.get_npcs_in_location(player_for_action.current_location)
+            npc_names = [npc.name for npc in npcs_in_loc_objs] if npcs_in_loc_objs else ["None"]
+            current_state_summary_for_dm = (
+                f"[Current Game State for DM Context]\n"
+                f"Player: {player_for_action.name} (HP: {player_hp})\n"
+                f"Location: {location_name}\n"
+                f"NPCs here: {', '.join(npc_names)}\n"
+                f"Inventory: {inventory_str}\n"
+            )
+        prompt_for_gemini = f"{current_state_summary_for_dm}\nPlayer's Action: {player_input_text}"
+
+        # --- RAG Context Retrieval ---
+        rag_context_for_gemini = None
+        if rag_system_manager and rag_system_manager.collection and rag_system_manager.collection.count() > 0:
+            logger.info("\n[RAG] Searching for relevant context based on input...")
+            # RAG search itself could also fail
+            retrieved_context_docs = rag_system_manager.search(player_input_text, n_results=3)
+            if retrieved_context_docs:
+                logger.info(f"[RAG] Found {len(retrieved_context_docs)} context snippets.")
+                rag_context_for_gemini = "\n".join([f"- {doc}" for doc in retrieved_context_docs])
+            else:
+                logger.info("[RAG] No additional relevant context found.")
+        
+        # --- Send to Gemini (DM) ---
+        dm_response_text = "Error: DM is not connected or failed to respond." # Default if DM not available
+        if dialogue_manager:
+            logger.info("\nDM's Turn (Sending to Gemini in thread):")
+            dm_response_text = dialogue_manager.send_message(
+                user_prompt_text=prompt_for_gemini,
+                rag_context=rag_context_for_gemini
+            ) # This call is blocking and might raise exceptions.
+        else:
+            logger.warning("Dialogue Manager not available to process input.")
+            # dm_response_text is already set to an error message.
+
+        # --- Schedule DM response narration in main thread ---
+        if app_ui and root_tk_window: # Ensure root_tk_window is available
+            root_tk_window.after(0, lambda: app_ui.add_narration(f"{dm_response_text}\n"))
+
+        # --- Basic Gemini Response Parsing and State Update (Scheduled) ---
+        if player_for_action and dm_response_text: # Check dm_response_text is not None or empty
+            if "you take 5 damage" in dm_response_text.lower(): # Example parsing
+                logger.info("DM response indicates player takes 5 damage. Updating state.")
+                player_for_action.take_damage(5) 
+                game_state_manager.apply_event({'type': 'damage', 'target': MAIN_PLAYER_ID, 'amount': 5, 'source': 'gemini_response'})
+                if app_ui and root_tk_window:
+                    root_tk_window.after(0, lambda: app_ui.add_narration("You feel weaker as you take damage.\n"))
+        
+        # This specific check might be redundant if send_message itself raises an error handled by the outer try-except
+        if "Error:" in dm_response_text and dialogue_manager and dialogue_manager.model is None:
+             logger.error(f"DM response indicates model error. Response: {dm_response_text}")
+
+    except Exception as e: # Catch exceptions from RAG, Gemini call, or other logic within the try.
+        logger.error(f"Error in threaded_api_call_and_ui_updates: {e}", exc_info=True)
+        ui_error_message = f"An error occurred: {type(e).__name__}. Please check logs or try again."
+        if app_ui and root_tk_window:
+            root_tk_window.after(0, lambda: app_ui.add_narration(ui_error_message + "\n"))
+    finally:
+        # --- Schedule UI updates and re-enable input in main thread ---
+        if app_ui and root_tk_window:
+            root_tk_window.after(0, update_ui_game_state) # Update all game state labels
+            root_tk_window.after(0, lambda: app_ui.input_entry.config(state='normal'))
+            root_tk_window.after(0, lambda: app_ui.send_button.config(state='normal'))
+            logger.info("Input field and send button re-enabled.")
+
+
+def process_player_input(player_input_text):
+    """
+    Processes the player's input text from the UI.
+    Disables input, starts a thread for blocking calls, and re-enables input via the thread.
+    """
+    global app_ui, game_state_manager # Removed dialogue_manager, rag_system_manager as they are used in thread
+    logger.info(f"UI Input Received for processing: {player_input_text}")
+
+    # --- Handle truly local commands first (synchronously) ---
+    # Example: if player_input_text.lower() == "/help":
+    # if app_ui: app_ui.add_narration("Help: Type your actions...\n")
+    # return 
+    # Note: "save" and "exit" are handled by buttons now. USER_EXIT_COMMANDS might still be typed.
+    if player_input_text.lower() in config.USER_EXIT_COMMANDS:
+        handle_exit_game() # Use the existing exit handler
+        return
+
+    # --- Disable UI elements and start thread for Gemini call and other processing ---
+    if app_ui:
+        app_ui.input_entry.config(state='disabled')
+        app_ui.send_button.config(state='disabled')
+        logger.info("Input field and send button disabled.")
+
+    # --- Local Action Processing (e.g., 'go', 'take') ---
+    # These can modify game_state_manager directly before the thread starts or can be moved into the thread.
+    # If moved into the thread, then current_state_summary_for_dm will reflect the state *before* these local actions.
+    # If processed here, the summary reflects the state *after* these local actions.
+    # Let's keep them here for now, as they modify state that the DM should be aware of immediately.
+    player_for_action = game_state_manager.get_player(MAIN_PLAYER_ID) if game_state_manager else None
+    if player_for_action:
+        if player_input_text.lower().startswith("go "):
+            direction = player_input_text.lower().split(" ", 1)[1]
+            if player_for_action.current_location:
+                current_loc_obj = game_state_manager.locations.get(player_for_action.current_location)
+                if current_loc_obj and direction in current_loc_obj.exits:
+                    new_location_id = current_loc_obj.exits[direction]
+                    player_for_action.change_location(new_location_id) # State changed here
+                    if app_ui:
+                        new_loc_obj_name = game_state_manager.locations.get(new_location_id).name if game_state_manager.locations.get(new_location_id) else "an unknown place"
+                        app_ui.add_narration(f"You move {direction} to {new_loc_obj_name}.\n") # Immediate feedback
+                else:
+                    if app_ui: app_ui.add_narration(f"You cannot go {direction} from here.\n")
+        
+        elif "take sword" in player_input_text.lower(): # Example command
+            SWORD_ID = "sword_001" 
+            if SWORD_ID not in game_state_manager.items:
+                game_state_manager.items[SWORD_ID] = Item(id=SWORD_ID, name="Basic Sword", description="A simple steel sword.")
+            if SWORD_ID not in player_for_action.inventory:
+                player_for_action.add_item_to_inventory(SWORD_ID) # State changed here
+                if app_ui: app_ui.add_narration(f"You take the {game_state_manager.items[SWORD_ID].name}.\n") # Immediate feedback
+            else:
+                if app_ui: app_ui.add_narration(f"You already have the {game_state_manager.items[SWORD_ID].name}.\n")
+        
+        # Since local actions might have changed the state, update UI labels here synchronously for these changes.
+        # The subsequent DM call will then provide further narrative and potential further state changes.
+        update_ui_game_state() 
+
+
+    thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(player_input_text,))
+    thread.start()
+
+
 if __name__ == "__main__":
+    global app_ui, game_state_manager, dialogue_manager, rag_system_manager, root_tk_window
     # --- Environment and API Key Setup ---
     load_dotenv()
     api_key = os.getenv(config.GOOGLE_API_KEY_ENV)
     if not api_key:
         logger.critical(f"Error: {config.GOOGLE_API_KEY_ENV} environment variable not found.")
-        logger.critical(f"Ensure a `.env` file exists in the project root with {config.GOOGLE_API_KEY_ENV}='YOUR_API_KEY'.")
+        # No UI yet to display this, so console critical and exit is appropriate
         exit()
     logger.info("API key loaded successfully.")
 
-    # --- RAG Setup and Document Processing ---
-    logger.info("--- Initializing RAG Manager ---")
+    # --- Initialize Managers (RAG, Gemini, GameState) ---
+    # These are now assigned to global variables after initialization
     try:
-        rag_mgr = RAGManager(
+        rag_system_manager = RAGManager(
             embedding_model_name=config.EMBEDDING_MODEL_NAME,
             vector_db_path=config.VECTOR_DB_PATH,
             collection_name=config.COLLECTION_NAME
         )
-        if not rag_mgr.collection: # Check if RAG manager failed to initialize its collection
-             logger.critical("RAG Manager's collection is not initialized. Exiting.")
+        if not rag_system_manager.collection:
+             logger.critical("RAG Manager's collection not initialized. Exiting.")
              exit()
-    except Exception as e:
-        logger.critical(f"Failed to initialize RAGManager: {e}", exc_info=True)
-        exit()
-    
-    logger.info("--- RAG Document Loading and Processing ---")
-    text_chunks = []
-    document_ids = []
-    document_metadatas = []
+        logger.info("RAG Manager initialized.")
 
-    try:
+        # Document Loading for RAG (same as before, but uses rag_system_manager)
         all_documents = load_documents(config.RAG_DOCUMENT_SOURCES)
-        logger.info(f"Loaded {len(all_documents)} documents from {config.RAG_DOCUMENT_SOURCES}.")
-
-        if config.RAG_DOCUMENT_FILTERS:
-            logger.info(f"Filtering documents with: {config.RAG_DOCUMENT_FILTERS}")
-            processed_documents = filter_documents(all_documents, config.RAG_DOCUMENT_FILTERS)
-            logger.info(f"{len(processed_documents)} documents remaining after filtering.")
-        else:
-            processed_documents = all_documents
-            logger.info("No document filters set. Processing all loaded documents.")
-
+        processed_documents = filter_documents(all_documents, config.RAG_DOCUMENT_FILTERS) if config.RAG_DOCUMENT_FILTERS else all_documents
+        text_chunks, document_ids, document_metadatas = [], [], []
         for i, doc in enumerate(processed_documents):
             extracted_text = extract_text_for_rag(doc, config.RAG_TEXT_FIELDS)
             if extracted_text:
-                chunks_from_doc = split_text_into_chunks(extracted_text) # Uses CHUNK_SIZE, CHUNK_OVERLAP from config via data_loader
+                chunks_from_doc = split_text_into_chunks(extracted_text)
                 doc_id_base = doc.get('id', f'doc_{i}')
                 for chunk_idx, chunk_content in enumerate(chunks_from_doc):
                     text_chunks.append(chunk_content)
                     document_ids.append(f"{doc_id_base}_chunk_{chunk_idx}")
-                    document_metadatas.append({
-                        'source_id': doc.get('id', 'unknown'),
-                        'name': doc.get('name', 'Unnamed Document'),
-                        'original_doc_idx': i,
-                        'chunk_idx_in_doc': chunk_idx
-                    })
-                if chunks_from_doc:
-                    logger.debug(f"Processed document ID '{doc_id_base}', created {len(chunks_from_doc)} chunks.")
-            else:
-                logger.warning(f"No text extracted for document ID '{doc.get('id', f'doc_{i}')}' (fields: {config.RAG_TEXT_FIELDS}).")
-        
+                    document_metadatas.append({'source_id': doc.get('id', 'unknown'), 'name': doc.get('name', 'Unnamed Document')})
         if text_chunks:
-            logger.info(f"Total {len(text_chunks)} text chunks prepared for RAG system.")
-            rag_mgr.add_documents_to_collection(text_chunks, document_ids, document_metadatas)
+            rag_system_manager.add_documents_to_collection(text_chunks, document_ids, document_metadatas)
+            logger.info(f"Total {len(text_chunks)} text chunks added to RAG system.")
         else:
             logger.warning("No text chunks available to add to RAG system.")
+        logger.info("RAG Document Loading and Processing Finished.")
 
     except Exception as e:
-        logger.critical(f"Error during RAG document loading or processing: {e}", exc_info=True)
+        logger.critical(f"Failed to initialize or populate RAGManager: {e}", exc_info=True)
         exit()
-    logger.info("--- RAG Document Loading and Processing Finished ---")
-
-    logger.info("--- Initializing Gemini Dialogue Manager ---")
-    tools_list_for_gemini = None
-    try:
-        # Configure Google Search tool (optional)
-        search_retrieval_config = types.GoogleSearchRetrieval()
-        search_tool = types.Tool(google_search_retrieval=search_retrieval_config)
-        tools_list_for_gemini = [search_tool]
-        logger.info("Google Search Tool configured.")
-    except AttributeError as e: # Specific error if types.GoogleSearchRetrieval is not found (e.g. older library)
-        logger.warning(f"Could not configure Google Search Tool (AttributeError: {e}). This might be due to an outdated library version. Proceeding without tools.")
-    except Exception as e:
-        logger.warning(f"An unexpected error occurred during Google Search Tool setup: {e}. Proceeding without tools.", exc_info=True)
 
     try:
-        dm_system_instruction = (
-            "You are a Dungeon Master for a Dungeons & Dragons 5th Edition game. "
-            "Your primary role is to describe the world, narrate events, roleplay non-player characters (NPCs), "
-            "and adjudicate the rules of the game. Be descriptive, engaging, and fair. "
-            "Use the information provided by the RAG system to answer rule questions or provide context. "
-            "If asked to perform an action that requires a tool (like a Google Search), "
-            "initiate the tool use and incorporate its results into your response."
-        )
-        logger.info("System instruction for Dialogue Manager defined.")
-
-        gemini_dm = GeminiDialogueManager(
+        tools_list_for_gemini = [types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())] if 'GoogleSearchRetrieval' in dir(types) else None
+        dm_system_instruction = "You are a Dungeon Master for a D&D 5e game..." # Keep it concise for this example
+        dialogue_manager = GeminiDialogueManager(
             api_key=api_key,
             gemini_model_name=config.GEMINI_MODEL_NAME,
             tools=tools_list_for_gemini,
             system_instruction_text=dm_system_instruction,
-            max_history_items=config.MAX_HISTORY_ITEMS,
-            max_retries=config.MAX_API_RETRIES,
-            initial_backoff_seconds=config.INITIAL_BACKOFF_SECONDS
+            max_history_items=config.MAX_HISTORY_ITEMS
         )
-        if not gemini_dm.model: # Check if Gemini DM failed to initialize its model
-            logger.critical("Gemini Dialogue Manager's model is not initialized. Exiting.")
+        if not dialogue_manager.model:
+            logger.critical("Gemini Dialogue Manager's model not initialized. Exiting.")
             exit()
+        logger.info("Gemini Dialogue Manager initialized.")
     except Exception as e:
         logger.critical(f"Failed to initialize GeminiDialogueManager: {e}", exc_info=True)
         exit()
-    logger.info("Gemini Dialogue Manager initialized.")
 
-    # --- Game State Initialization and Loading ---
-    logger.info("--- Initializing Game State ---")
-    game_state = GameState()
-    
-    save_file_exists = os.path.exists(SAVE_GAME_FILENAME)
-    
-    game_state.load_game(SAVE_GAME_FILENAME) # This method prints its own detailed status
-    
-    if save_file_exists:
-        # game_state.load_game would have printed success or specific error.
-        # If it was a critical error, we might not reach here.
-        # This log indicates that a save file was present and processed.
-        logger.info(f"Attempted to load saved game from '{SAVE_GAME_FILENAME}'. Check console for details from GameState.")
-    else:
-        # game_state.load_game would have printed "file not found".
-        logger.info(f"No saved game file found at '{SAVE_GAME_FILENAME}'. Starting a new game.")
-    
-    # General message that initialization is done, regardless of loading a save or starting fresh.
-    # logger.info("Game state manager initialized.") # Moved this log message
+    game_state_manager = GameState()
+    game_state_manager.load_game(SAVE_GAME_FILENAME) # Logs its own status
+    if not game_state_manager.get_player(MAIN_PLAYER_ID):
+        logger.info("No valid saved game for main player. Starting new game setup...")
+        game_state_manager.initialize_new_game(MAIN_PLAYER_ID, "Adventurer", DEFAULT_START_LOCATION_ID)
+    logger.info("Game state manager ready.")
 
-    # --- Check Load Status and Initialize New Game if Necessary ---
-    game_loaded_successfully_and_player_exists = False
-    if save_file_exists:
-        if game_state.get_player(MAIN_PLAYER_ID) is not None:
-            logger.info(f"Successfully loaded saved game including main player {MAIN_PLAYER_ID} from '{SAVE_GAME_FILENAME}'.")
-            game_loaded_successfully_and_player_exists = True
-        else:
-            # Save file existed but was perhaps empty, corrupt, or didn't have our player.
-            # game_state.load_game() would have logged specific file errors.
-            logger.warning(f"Save file '{SAVE_GAME_FILENAME}' found, but main player {MAIN_PLAYER_ID} is missing or data is incomplete.")
-    else:
-        # This message is already logged by game_state.load_game(), but good for main.py context too.
-        logger.info(f"No saved game file found at '{SAVE_GAME_FILENAME}'.")
-
-    if not game_loaded_successfully_and_player_exists:
-        logger.info("No valid saved game for the main player found. Starting new game setup...")
-        # DEFAULT_START_LOCATION_ID is "default_start_location" as defined at the top of main.py
-        # The initialize_new_game method will use this ID to create the starting location.
-        game_state.initialize_new_game(MAIN_PLAYER_ID, "Adventurer", DEFAULT_START_LOCATION_ID)
-        # game_state.initialize_new_game() logs its own completion message.
+    # --- Tkinter UI Setup ---
+    root_tk_window = tk.Tk() # Assign to global
+    app_ui = Application(
+        master=root_tk_window, 
+        process_input_callback=process_player_input,
+        save_game_callback=handle_save_game,
+        load_game_callback=handle_load_game,
+        exit_callback=handle_exit_game
+    )
+    app_ui.pack(fill=tk.BOTH, expand=True) # Ensure Application frame itself fills the root window.
     
-    logger.info("Game state manager ready.") # Final status
-
-    # --- Initial API Call ---
-    logger.info("\n--- Starting conversation with Initial Prompt ---")
+    # --- Initial DM Greeting and UI Update ---
+    logger.info("\n--- Sending Initial Prompt to DM ---")
+    initial_dm_response = "Welcome to your adventure!" # Default if API call fails
     try:
-        initial_response = gemini_dm.send_message(config.INITIAL_PROMPT_TEXT)
-        if "Error:" in initial_response and gemini_dm.model is None : # Check if model initialization failed within send_message
-             logger.critical(f"Initial message failed because Gemini model is not available in DM. Response: {initial_response}")
-             exit()
-        elif not initial_response and not gemini_dm.history: # If initial response is empty and history is not even populated
-            logger.critical("Initial response was empty and conversation history was not initiated. This could indicate a problem with the API or model. Exiting.")
-            exit()
-        # send_message already prints the stream and updates history
+        # The send_message in dialogue_manager has been updated to return the full text
+        # and it no longer prints directly to console by default.
+        initial_dm_response = dialogue_manager.send_message(config.INITIAL_PROMPT_TEXT)
+        if "Error:" in initial_dm_response and dialogue_manager.model is None:
+             logger.critical(f"Initial message failed: Gemini model not available. Response: {initial_dm_response}")
+             # Potentially update UI with error here
+        elif not initial_dm_response and not dialogue_manager.history:
+            logger.critical("Initial response empty & history not initiated. API/model issue.")
+            # Potentially update UI with error here
     except Exception as e:
         logger.critical(f"Critical error during initial message to Gemini: {e}", exc_info=True)
-        exit()
-    
-    if not gemini_dm.history or len(gemini_dm.history) < 2:
-        logger.critical("Conversation history not properly initialized after initial prompt. Exiting.")
-        exit()
+        initial_dm_response = f"Error connecting to the DM: {e}" # Show error in UI
 
-    # --- Interaction Loop ---
-    logger.info("\n--- Adventure Begins! Type '그만', '종료', or 'exit' to end. ---")
-    while True:
-        # --- Generate Current State Summary ---
-        player = game_state.get_player(MAIN_PLAYER_ID)
-        current_state_summary = ""
-        if player:
-            player_name = player.name
-            player_hp = player.stats.get('hp', 'N/A')
-            location_id = player.current_location
-            location_obj = game_state.locations.get(location_id)
-            location_name = location_obj.name if location_obj else location_id
-            
-            npcs_in_loc_objs = game_state.get_npcs_in_location(location_id)
-            npc_names = [npc.name for npc in npcs_in_loc_objs] if npcs_in_loc_objs else ["None"]
-            
-            current_state_summary = (
-                f"\n[현재 상태]\n"
-                f"플레이어: {player_name}\n"
-                f"위치: {location_name}\n"
-                f"HP: {player_hp}\n"
-                f"주변 NPC: {', '.join(npc_names)}\n"
-                f"인벤토리: {', '.join(player.inventory) if player.inventory else 'Empty'}\n"
-            )
-            logger.info(f"Current State Summary generated for player {MAIN_PLAYER_ID}:\n{current_state_summary}")
-        else:
-            current_state_summary = "[현재 상태]\nPlayer data not available.\n"
-            logger.warning(f"Player {MAIN_PLAYER_ID} not found for state summary generation.")
+    app_ui.add_narration(initial_dm_response + "\n")
 
-        try:
-            player_input_original = input(f"{current_state_summary}\nPlayer: ")
-        except EOFError:
-            logger.info("\nEOF detected. Ending adventure.")
-            game_state.save_game(SAVE_GAME_FILENAME) # Save on EOF
-            break
-        
-        if player_input_original.lower() in config.USER_EXIT_COMMANDS:
-            logger.info("Exit command received. Saving game before ending adventure...")
-            game_state.save_game(SAVE_GAME_FILENAME) 
-            logger.info("Game saved. Ending adventure.")
-            break
-        
-        elif player_input_original.lower() == "save":
-            logger.info("Save command received. Saving game state...")
-            game_state.save_game(SAVE_GAME_FILENAME)
-            logger.info("Game saved.") 
-            continue
+    # Update UI with initial game state using the new helper function
+    update_ui_game_state()
 
-        # --- Basic Player Input Parsing and State Update ---
-        player_command_processed = False
-        player_for_action = game_state.get_player(MAIN_PLAYER_ID)
+    logger.info("\n--- Adventure Begins! Interact with the UI. ---")
+    root_tk_window.mainloop() # Use the global variable
 
-        if player_for_action:
-            if player_input_original.lower().startswith("go "):
-                direction = player_input_original.lower().split(" ", 1)[1]
-                if player_for_action.current_location:
-                    current_loc_obj = game_state.locations.get(player_for_action.current_location)
-                    if current_loc_obj and direction in current_loc_obj.exits:
-                        new_location_id = current_loc_obj.exits[direction]
-                        player_for_action.change_location(new_location_id)
-                        # GameState's update_npc_location might be relevant if NPCs also move between locations due to player actions.
-                        # For now, only player moves.
-                        logger.info(f"Player {player_for_action.name} moved from {current_loc_obj.id} to {new_location_id} via command.")
-                    else:
-                        logger.info(f"Cannot go {direction} from {player_for_action.current_location}.")
-                player_command_processed = True # Command was 'go', even if failed.
-            
-            elif "take sword" in player_input_original.lower():
-                # This is a placeholder. A real system would check if "sword_001" is in the current location.
-                # And if GameState.items has "sword_001" defined.
-                SWORD_ID = "sword_001" 
-                if SWORD_ID not in game_state.items: # Create dummy item if not in master list
-                    game_state.items[SWORD_ID] = Item(id=SWORD_ID, name="Basic Sword", description="A simple steel sword.")
-                    logger.info(f"Dummy item {SWORD_ID} created in GameState.items for 'take sword' command.")
-
-                player_for_action.add_item_to_inventory(SWORD_ID)
-                # Potentially remove item from Location.items list if that's modeled.
-                # current_loc_obj = game_state.locations.get(player_for_action.current_location)
-                # if current_loc_obj and SWORD_ID in current_loc_obj.items:
-                #    current_loc_obj.items.remove(SWORD_ID)
-                logger.info(f"Player {player_for_action.name} picked up a sword (assumed {SWORD_ID}).")
-                player_command_processed = True
-
-        # Prepare prompt for Gemini
-        # If a command was processed locally, we might not need to send it to Gemini,
-        # or we might send a confirmation/result. For now, always send.
-        prompt_for_gemini = player_input_original
-        if current_state_summary: # Prepend summary if available
-             prompt_for_gemini = f"{current_state_summary}\nPlayer's Action: {player_input_original}"
-
-
-        retrieved_context_docs = []
-        if rag_mgr.collection and rag_mgr.collection.count() > 0 : 
-            logger.info("\n[RAG] Searching for relevant context based on original input...")
-            try:
-                # Use original input for RAG search, not the summary-prepended one.
-                retrieved_context_docs = rag_mgr.search(player_input_original, n_results=3) 
-                if retrieved_context_docs:
-                    logger.info(f"[RAG] Found {len(retrieved_context_docs)} context snippets for '{player_input_original}'.")
-                else:
-                    logger.info(f"[RAG] No additional relevant context found for '{player_input_original}'.")
-            except Exception as e: 
-                logger.error(f"[RAG] Error during search for '{player_input_original}': {e}", exc_info=True)
-                retrieved_context_docs = [] 
-        else:
-            logger.info("[RAG] Skipping search as RAG collection is empty or not available.")
-
-        rag_context_for_gemini = None
-        if retrieved_context_docs:
-            rag_context_for_gemini = "\n".join([f"- {doc}" for doc in retrieved_context_docs])
-            
-        logger.info("\nDM's Turn (Streaming response):")
-        try:
-            # Pass the potentially summary-prepended prompt to Gemini
-            dm_response = gemini_dm.send_message(
-                user_prompt_text=prompt_for_gemini, 
-                rag_context=rag_context_for_gemini 
-            )
-            # send_message handles printing and history
-
-            # --- Basic Gemini Response Parsing and State Update ---
-            if player_for_action: # Ensure player exists for actions
-                if "you take 5 damage" in dm_response.lower(): # dm_response is the streamed string output
-                    logger.info("DM response indicates player takes 5 damage. Updating state.")
-                    player_for_action.take_damage(5)
-                    game_state.apply_event({'type': 'damage', 'target': MAIN_PLAYER_ID, 'amount': 5, 'source': 'gemini_response'})
-                # Add more response parsing here as needed
-
-            if "Error:" in dm_response and gemini_dm.model is None: 
-                 logger.error(f"DM response indicates model error. Response: {dm_response}")
-        except Exception as e:
-            logger.error(f"Error during interaction with Gemini: {e}", exc_info=True)
-            print("\nAn error occurred with the DM. Please try again.")
-
-    logger.info("--- Adventure Ended ---")
+    logger.info("--- Tkinter mainloop ended. Application shutting down. ---")
+    # Perform any final cleanup or saving if necessary, though saving is also tied to exit command.
+    if game_state_manager: # Ensure it was initialized
+        game_state_manager.save_game(SAVE_GAME_FILENAME)
+        logger.info("Final game save attempt on shutdown.")
 
 # --- END OF FILE main.py ---
