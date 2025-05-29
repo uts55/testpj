@@ -276,7 +276,6 @@ def process_player_input(player_input_text):
 
 
 if __name__ == "__main__":
-    global app_ui, game_state_manager, dialogue_manager, rag_system_manager, root_tk_window
     # --- Environment and API Key Setup ---
     load_dotenv()
     api_key = os.getenv(config.GOOGLE_API_KEY_ENV)
