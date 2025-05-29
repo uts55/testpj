@@ -106,10 +106,24 @@ if __name__ == "__main__":
         logger.warning(f"An unexpected error occurred during Google Search Tool setup: {e}. Proceeding without tools.", exc_info=True)
 
     try:
+        dm_system_instruction = (
+            "You are a Dungeon Master for a Dungeons & Dragons 5th Edition game. "
+            "Your primary role is to describe the world, narrate events, roleplay non-player characters (NPCs), "
+            "and adjudicate the rules of the game. Be descriptive, engaging, and fair. "
+            "Use the information provided by the RAG system to answer rule questions or provide context. "
+            "If asked to perform an action that requires a tool (like a Google Search), "
+            "initiate the tool use and incorporate its results into your response."
+        )
+        logger.info("System instruction for Dialogue Manager defined.")
+
         gemini_dm = GeminiDialogueManager(
             api_key=api_key,
             gemini_model_name=config.GEMINI_MODEL_NAME,
-            tools=tools_list_for_gemini
+            tools=tools_list_for_gemini,
+            system_instruction_text=dm_system_instruction,
+            max_history_items=config.MAX_HISTORY_ITEMS,
+            max_retries=config.MAX_API_RETRIES,
+            initial_backoff_seconds=config.INITIAL_BACKOFF_SECONDS
         )
         if not gemini_dm.model: # Check if Gemini DM failed to initialize its model
             logger.critical("Gemini Dialogue Manager's model is not initialized. Exiting.")
