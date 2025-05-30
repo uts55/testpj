@@ -3,8 +3,10 @@ import os
 import json
 import tempfile
 import logging
-from unittest.mock import patch, mock_open # Added mock_open for test_load_empty_json_file
-from game_state import GameState, Player, Item, NPC, Location, ALL_QUESTS # Added NPC, ALL_QUESTS
+import copy # Added for deepcopy
+from unittest.mock import patch, mock_open
+from game_state import GameState, Player, Item, NPC, Location, ALL_QUESTS, Quest # Added Quest for ALL_QUESTS typing
+import config as game_config # To access any config constants if needed, though game_state.py uses a hardcoded default loc
 
 # Configure logging to be quiet during tests by default
 # You can increase level to INFO or DEBUG for specific test debugging
@@ -192,6 +194,9 @@ class TestGameStateSaveLoad(unittest.TestCase):
             # Check quests (assuming ALL_QUESTS is simple and serializable for this test)
             self.assertTrue(hasattr(gs_loaded, 'quests'))
             self.assertEqual(len(gs_loaded.quests), len(ALL_QUESTS))
+            # Ensure quest objects are also loaded correctly if they have more complex structure
+            if ALL_QUESTS and gs_loaded.quests:
+                 self.assertIsInstance(list(gs_loaded.quests.values())[0], Quest)
 
 
         finally:
@@ -379,8 +384,215 @@ class TestGameStateSaveLoad(unittest.TestCase):
     @patch('game_state.logger')
     def test_load_file_not_found(self, mock_logger):
         gs = GameState()
+        # Test the case where the load_game method itself is expected to handle the FileNotFoundError
+        # and log an info message, without raising an unhandled exception.
+        # The current implementation in game_state.py catches FileNotFoundError and logs.
+        initial_state_dict = gs.to_dict()
         gs.load_game("non_existent_save_file.json")
-        mock_logger.info.assert_called_once_with("Save file not found at non_existent_save_file.json. Starting a new game or using default state.")
+        final_state_dict = gs.to_dict()
+
+        # Assert that game state remains unchanged.
+        self.assertEqual(initial_state_dict, final_state_dict, "Game state should not change if file not found.")
+
+        mock_logger.info.assert_called_once_with("Save file not found at non_existent_save_file.json. Game state remains unchanged.")
+        mock_logger.error.assert_not_called() # Ensure no error was logged for this expected case.
+
+    @patch('game_state.logger')
+    def test_load_game_atomic_operation_on_failure(self, mock_logger):
+        gs_initial = self._create_basic_gamestate()
+        # Add a specific player for this test to ensure it's part of the copy
+        gs_initial.players["atomic_test_player"] = Player.from_dict({
+            "id": "atomic_test_player", "name": "Atomic", "inventory": [], "skills": [],
+            "knowledge_fragments": [], "current_location": self.loc1_id, "player_class": "TestClass",
+            "level": 1, "experience_points": 0, "ability_scores": {}, "combat_stats": {},
+            "hit_points": {"current": 10, "maximum": 10, "temporary": 0},
+            "spell_slots": {}, "equipment": {"currency": {"gold": 0}}, "status_effects": [],
+            "proficiencies": {}, "feats": [], "background": "", "alignment": "",
+            "personality_traits": [], "ideals": [], "bonds": [], "flaws": [], "notes": ""
+        })
+
+        initial_players_copy = copy.deepcopy(gs_initial.players)
+        initial_items_copy = copy.deepcopy(gs_initial.items)
+        initial_locations_copy = copy.deepcopy(gs_initial.locations)
+        initial_npcs_copy = copy.deepcopy(gs_initial.npcs)
+        initial_world_vars_copy = copy.deepcopy(gs_initial.world_variables)
+        initial_turn_count_copy = gs_initial.turn_count
+
+        # Prepare a save file that is valid JSON but will cause Player.from_dict to fail
+        # The content of the save file itself needs to be valid enough to pass json.load
+        # and initial item/location/npc loading if Player.from_dict is the failure point.
+        save_data_for_failure = gs_initial.to_dict() # Use a valid current state as base
+        # Modify something minor that Player.from_dict might process, or rely on the patch.
+        # For this test, the patch is the primary failure mechanism.
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as tmp_file:
+            json.dump(save_data_for_failure, tmp_file)
+            corrupted_save_filepath = tmp_file.name
+
+        self.addCleanup(os.remove, corrupted_save_filepath)
+
+        # Patch Player.from_dict to raise an error during the loading of players
+        with patch('game_state.Player.from_dict', side_effect=ValueError("Simulated player load error")):
+            gs_initial.load_game(corrupted_save_filepath)
+
+        # Verify that the game state attributes are still deeply equal to their original states
+        self.assertEqual(gs_initial.players, initial_players_copy)
+        self.assertEqual(gs_initial.items, initial_items_copy)
+        self.assertEqual(gs_initial.locations, initial_locations_copy)
+        self.assertEqual(gs_initial.npcs, initial_npcs_copy)
+        self.assertEqual(gs_initial.world_variables, initial_world_vars_copy)
+        self.assertEqual(gs_initial.turn_count, initial_turn_count_copy)
+
+        # Ensure logger.error (for the exception) and logger.info (for rollback) were called
+        mock_logger.error.assert_called()
+        # Check that the error message contains specific substrings from the exception
+        error_args, _ = mock_logger.error.call_args
+        self.assertIn("An unexpected error occurred while loading and validating the game", error_args[0])
+        self.assertIn("Simulated player load error", error_args[0])
+
+        mock_logger.info.assert_any_call("Successfully restored game state to pre-load attempt.")
+
+
+    @patch('game_state.logger')
+    def test_load_entities_with_invalid_location_moved_to_default(self, mock_logger):
+        # game_state.py uses "default_start_location" hardcoded as a fallback.
+        # config.py also has PRESET_SCENARIOS with "default_start_location".
+        # We will use this known ID.
+        default_loc_id = "default_start_location"
+        other_valid_loc_id = "other_valid_loc"
+
+        player_invalid_loc_id = "player_invalid_loc"
+        npc_invalid_loc_id = "npc_invalid_loc"
+
+        save_data = {
+            "locations": {
+                default_loc_id: {"id": default_loc_id, "name": "Default Start", "description": "", "exits": {}, "items": [], "npcs": []},
+                other_valid_loc_id: {"id": other_valid_loc_id, "name": "Other Room", "description": "", "exits": {}, "items": [], "npcs": []}
+            },
+            "players": {
+                "p1": Player(id="p1", name="Player LostInSpace", inventory=[], skills=[], knowledge_fragments=[], current_location=player_invalid_loc_id).to_dict()
+            },
+            "npcs": {
+                "n1": NPC(id="n1", name="NPC Adrift", current_location=npc_invalid_loc_id, description="", lore_fragments=[], dialogue_responses={}, status="neutral").to_dict()
+            },
+            "items": {},
+            "world_variables": {},
+            "turn_count": 0
+        }
+        # Ensure player dict has all required fields for from_dict
+        save_data["players"]["p1"].update({
+            "player_class": "Warrior", "level": 1, "experience_points": 0,
+            "ability_scores": {}, "combat_stats": {}, "hit_points": {"current":10, "maximum":10, "temporary":0},
+            "spell_slots": {}, "equipment": {"currency":{}}, "status_effects": [], "proficiencies": {}, "feats": [],
+            "background": "", "alignment": "", "personality_traits": [], "ideals": [], "bonds": [], "flaws": [], "notes": ""
+        })
+
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as tmp_file:
+            json.dump(save_data, tmp_file)
+            save_filepath = tmp_file.name
+        self.addCleanup(os.remove, save_filepath)
+
+        gs = GameState()
+        gs.load_game(save_filepath)
+
+        loaded_player = gs.players["p1"]
+        loaded_npc = gs.npcs["n1"]
+
+        self.assertEqual(loaded_player.current_location, default_loc_id)
+        self.assertEqual(loaded_npc.current_location, default_loc_id)
+
+        mock_logger.warning.assert_any_call(f"Player p1 ({loaded_player.name}) current_location '{player_invalid_loc_id}' is invalid or does not exist in loaded locations.")
+        mock_logger.info.assert_any_call(f"Attempting to move Player p1 to default start location '{default_loc_id}'.")
+        mock_logger.info.assert_any_call(f"Player p1 ({loaded_player.name}) has been moved to fallback location '{default_loc_id}'.")
+
+        mock_logger.warning.assert_any_call(f"NPC n1 ({loaded_npc.name}) current_location '{npc_invalid_loc_id}' is invalid or does not exist in loaded locations.")
+        mock_logger.info.assert_any_call(f"Attempting to move NPC n1 to default start location '{default_loc_id}'.")
+        mock_logger.info.assert_any_call(f"NPC n1 ({loaded_npc.name}) has been moved to fallback location '{default_loc_id}'.")
+
+    def test_save_load_complex_state_deep_comparison(self):
+        gs_original = GameState()
+        gs_original.load_quests(ALL_QUESTS) # Load static quests
+
+        # Populate with complex data
+        gs_original.items = {
+            "item_sword": Item(id="item_sword", name="DragonSlayer", description="Kills dragons.", effects={"damage_bonus": 5}),
+            "item_potion": Item(id="item_potion", name="Mega Potion", description="Heals a lot.", effects={"type": "heal", "amount": 50})
+        }
+        gs_original.locations = {
+            "loc_castle": Location(id="loc_castle", name="Dragon's Castle", description="A scary place.", exits={"south": "loc_village"}, items=["item_sword"], npcs=["npc_dragon"]),
+            "loc_village": Location(id="loc_village", name="Quiet Village", description="A peaceful place.", exits={"north": "loc_castle"}, items=["item_potion"], npcs=[])
+        }
+        gs_original.npcs = {
+            "npc_dragon": NPC(id="npc_dragon", name="Smaug", current_location="loc_castle", description="A big red dragon.", lore_fragments=["Rich!"], dialogue_responses={"threaten": "ROAR!"}, status="hostile", hp=100)
+        }
+
+        player_data = {
+            'id': "player_hero", 'name': "Hero", 'inventory': ["item_potion"],
+            'skills': ["swordsmanship", "lockpicking"], 'knowledge_fragments': ["dragon_weakness"],
+            'current_location': "loc_village", 'player_class': "Paladin", 'level': 10, 'experience_points': 10000,
+            'ability_scores': {"strength": 18, "dexterity": 14, "constitution": 16, "intelligence": 10, "wisdom": 12, "charisma": 15},
+            'combat_stats': {"armor_class": 20, "initiative_bonus": 2, "speed": 30},
+            'hit_points': {"current": 90, "maximum": 100, "temporary": 5},
+            'spell_slots': {"level1": 4, "level2": 3},
+            'equipment': {
+                "weapon": "item_sword", "armor": "plate_armor_id", "shield": "shield_id", "helmet": "helmet_id",
+                "boots": "boots_id", "gloves": "gloves_id", "amulet": "amulet_id", "ring1": "ring_id1", "ring2": "ring_id2",
+                "currency": {"gold": 1000, "silver": 500, "copper": 200}
+            },
+            'status_effects': ["blessed"], 'proficiencies': {"skills": ["athletics", "perception"], "saving_throws": ["wisdom", "charisma"]},
+            'feats': ["tough", "great_weapon_master"], 'background': "Noble", 'alignment': "Lawful Good",
+            'personality_traits': ["brave", "honorable"], 'ideals': ["justice"], 'bonds': ["my_kingdom"], 'flaws': ["overconfident"],
+            'notes': "Ready for adventure!",
+            'active_quests': ["quest1"],
+            'completed_quests': [],
+            'quest_status': {"quest1": "accepted"},
+            'quest_progress': {"quest1": {'objectives': ['obj1', 'obj2'], 'completed_objectives': set(['obj1'])}}
+        }
+        gs_original.players["player_hero"] = Player.from_dict(player_data)
+
+        gs_original.world_variables = {"time_of_day": "dusk", "weather": "stormy"}
+        gs_original.turn_count = 123
+
+        # Save
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as tmp_file:
+            save_filepath = tmp_file.name
+        self.addCleanup(os.remove, save_filepath)
+        gs_original.save_game(save_filepath)
+
+        # Load
+        gs_loaded = GameState()
+        gs_loaded.load_game(save_filepath) # This will also call load_quests
+
+        # High-level comparison using to_dict()
+        # Need to ensure quest_progress sets are compared correctly if to_dict doesn't handle them as sorted lists
+        original_dict = gs_original.to_dict()
+        loaded_dict = gs_loaded.to_dict()
+
+        # Convert sets in quest_progress to sorted lists for consistent comparison
+        for p_id, p_data in original_dict['players'].items():
+            if 'quest_progress' in p_data:
+                for q_id, q_prog in p_data['quest_progress'].items():
+                    if 'completed_objectives' in q_prog and isinstance(q_prog['completed_objectives'], set):
+                        q_prog['completed_objectives'] = sorted(list(q_prog['completed_objectives']))
+        for p_id, p_data in loaded_dict['players'].items():
+            if 'quest_progress' in p_data:
+                for q_id, q_prog in p_data['quest_progress'].items():
+                    if 'completed_objectives' in q_prog and isinstance(q_prog['completed_objectives'], set):
+                         q_prog['completed_objectives'] = sorted(list(q_prog['completed_objectives']))
+
+
+        self.maxDiff = None # Show full diff on failure
+        self.assertEqual(original_dict, loaded_dict)
+
+        # More granular checks (optional, but good for verifying specifics like set conversion in quest_progress)
+        self.assertEqual(gs_loaded.players["player_hero"].quest_progress["quest1"]["completed_objectives"], set(['obj1']))
+        self.assertEqual(gs_loaded.turn_count, 123)
+        self.assertEqual(gs_loaded.world_variables, {"time_of_day": "dusk", "weather": "stormy"})
+        self.assertIn("item_sword", gs_loaded.items)
+        self.assertEqual(gs_loaded.items["item_sword"].effects, {"damage_bonus": 5})
+        self.assertEqual(gs_loaded.locations["loc_castle"].npcs, ["npc_dragon"])
+        self.assertEqual(gs_loaded.npcs["npc_dragon"].hp, 100)
 
 
 if __name__ == '__main__':

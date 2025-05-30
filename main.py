@@ -302,20 +302,39 @@ def handle_save_game():
             actual_filename = filename + ".json"
         else:
             actual_filename = filename
-            filename = filename[:-5] # Remove .json for the narration message part
+            # filename variable for narration message part should be without .json
+            # filename = filename[:-5] # This was removing .json if user typed it. Let's adjust.
+
+        # For narration, ensure we use the name without .json, regardless of user input.
+        narration_filename = filename if not filename.lower().endswith(".json") else filename[:-5]
 
         save_path = os.path.join(config.SAVE_GAME_DIR, actual_filename)
-        try:
-            game_state_manager.save_game(save_path)
-            logger.info(f"Game saved to {save_path} via UI button.")
-            if game_play_frame:
-                game_play_frame.add_narration(f"Game saved as {filename}.json.\n")
-        except Exception as e:
-            logger.error(f"Error saving game to {save_path}: {e}", exc_info=True)
-            if game_play_frame:
-                game_play_frame.add_narration(f"Error: Could not save game to {filename}.json. {type(e).__name__}\n")
+
+        proceed_with_save = True
+        if os.path.exists(save_path):
+            proceed_with_save = messagebox.askyesno(
+                "Confirm Overwrite",
+                f"The file '{actual_filename}' already exists. Do you want to overwrite it?",
+                parent=root_tk_window
+            )
+            if not proceed_with_save:
+                logger.info(f"Save cancelled by user due to existing file: {actual_filename}")
+                if game_play_frame:
+                    game_play_frame.add_narration("Save cancelled.\n")
+                return # Exit without saving
+
+        if proceed_with_save:
+            try:
+                game_state_manager.save_game(save_path)
+                logger.info(f"Game saved to {save_path} via UI button.")
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Game saved as {actual_filename}.\n") # Use actual_filename for clarity
+            except Exception as e:
+                logger.error(f"Error saving game to {save_path}: {e}", exc_info=True)
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Error: Could not save game to {actual_filename}. {type(e).__name__}\n")
     else:
-        logger.info("Save game cancelled by user.")
+        logger.info("Save game dialogue cancelled by user (no filename entered).")
         if game_play_frame:
             game_play_frame.add_narration("Save cancelled.\n")
 
