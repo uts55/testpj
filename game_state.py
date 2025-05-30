@@ -25,47 +25,127 @@ class Item:
         )
 
 class Player:
-    def __init__(self, id: str, name: str, stats: dict, inventory: list[str],  # Changed to list[str] for item IDs
-                 skills: list, knowledge_fragments: list, current_location: str):
+    def __init__(self, id: str, name: str, inventory: list[str],
+                 skills: list, knowledge_fragments: list, current_location: str,
+                 player_class: str = None, level: int = 1, experience_points: int = 0,
+                 ability_scores: dict = None, combat_stats: dict = None, hit_points: dict = None,
+                 spell_slots: dict = None, equipment: dict = None, status_effects: list = None,
+                 proficiencies: dict = None, feats: list = None, background: str = None,
+                 alignment: str = None, personality_traits: list = None, ideals: list = None,
+                 bonds: list = None, flaws: list = None, notes: str = None,
+                 active_quests: list = None, completed_quests: list = None):
         self.id = id
         self.name = name
-        self.stats = stats if stats is not None else {}
         self.inventory = inventory if inventory is not None else []  # List of item IDs
         self.skills = skills if skills is not None else []
         self.knowledge_fragments = knowledge_fragments if knowledge_fragments is not None else []
         self.current_location = current_location
 
+        self.player_class = player_class
+        self.level = level
+        self.experience_points = experience_points
+        
+        self.ability_scores = ability_scores if ability_scores is not None else {}
+        self.combat_stats = combat_stats if combat_stats is not None else {}
+        self.hit_points = hit_points if hit_points is not None else {"current": 0, "maximum": 0, "temporary": 0}
+        self.spell_slots = spell_slots if spell_slots is not None else {}
+        
+        default_currency = {"gold": 0, "silver": 0, "copper": 0}
+        default_equipment = {
+            "weapon": None, "armor": None, "shield": None, "helmet": None,
+            "boots": None, "gloves": None, "amulet": None, "ring1": None, "ring2": None,
+            "currency": default_currency
+        }
+        self.equipment = equipment if equipment is not None else default_equipment
+        if 'currency' not in self.equipment or not isinstance(self.equipment['currency'], dict):
+            self.equipment['currency'] = default_currency.copy()
+
+        self.status_effects = status_effects if status_effects is not None else []
+        self.proficiencies = proficiencies if proficiencies is not None else {}
+        self.feats = feats if feats is not None else []
+        self.background = background
+        self.alignment = alignment
+        self.personality_traits = personality_traits if personality_traits is not None else []
+        self.ideals = ideals if ideals is not None else []
+        self.bonds = bonds if bonds is not None else []
+        self.flaws = flaws if flaws is not None else []
+        self.notes = notes
+        self.active_quests = active_quests if active_quests is not None else []
+        self.completed_quests = completed_quests if completed_quests is not None else []
+
     def to_dict(self) -> dict:
         return {
             'id': self.id,
             'name': self.name,
-            'stats': self.stats,
-            'inventory': self.inventory,  # Store item IDs directly
+            'inventory': self.inventory,
             'skills': self.skills,
             'knowledge_fragments': self.knowledge_fragments,
             'current_location': self.current_location,
+            'player_class': self.player_class,
+            'level': self.level,
+            'experience_points': self.experience_points,
+            'ability_scores': self.ability_scores,
+            'combat_stats': self.combat_stats,
+            'hit_points': self.hit_points,
+            'spell_slots': self.spell_slots,
+            'equipment': self.equipment,
+            'status_effects': self.status_effects,
+            'proficiencies': self.proficiencies,
+            'feats': self.feats,
+            'background': self.background,
+            'alignment': self.alignment,
+            'personality_traits': self.personality_traits,
+            'ideals': self.ideals,
+            'bonds': self.bonds,
+            'flaws': self.flaws,
+            'notes': self.notes,
+            'active_quests': self.active_quests,
+            'completed_quests': self.completed_quests,
         }
 
     @classmethod
     def from_dict(cls, data: dict):
-        # Inventory is now a list of strings (item IDs)
         inventory = data.get('inventory', [])
+        # Ensure default for nested currency if loading older data
+        equipment_data = data.get('equipment', {})
+        if 'currency' not in equipment_data or not isinstance(equipment_data.get('currency'), dict):
+            equipment_data['currency'] = {"gold": 0, "silver": 0, "copper": 0}
+
         return cls(
             id=data['id'],
             name=data['name'],
-            stats=data.get('stats', {}),
-            inventory=inventory,  # Expecting list of item IDs
+            inventory=inventory,
             skills=data.get('skills', []),
             knowledge_fragments=data.get('knowledge_fragments', []),
-            current_location=data['current_location']
+            current_location=data.get('current_location'), # Make robust for missing current_location
+            player_class=data.get('player_class'),
+            level=data.get('level', 1),
+            experience_points=data.get('experience_points', 0),
+            ability_scores=data.get('ability_scores', {}),
+            combat_stats=data.get('combat_stats', {}),
+            hit_points=data.get('hit_points', {"current": 0, "maximum": 0, "temporary": 0}),
+            spell_slots=data.get('spell_slots', {}),
+            equipment=equipment_data,
+            status_effects=data.get('status_effects', []),
+            proficiencies=data.get('proficiencies', {}),
+            feats=data.get('feats', []),
+            background=data.get('background'),
+            alignment=data.get('alignment'),
+            personality_traits=data.get('personality_traits', []),
+            ideals=data.get('ideals', []),
+            bonds=data.get('bonds', []),
+            flaws=data.get('flaws', []),
+            notes=data.get('notes'),
+            active_quests=data.get('active_quests', []),
+            completed_quests=data.get('completed_quests', [])
         )
 
     def take_damage(self, amount: int):
-        if 'hp' in self.stats:
-            self.stats['hp'] -= amount
-            logger.info(f"Player {self.name} ({self.id}) took {amount} damage. HP is now {self.stats['hp']}.")
+        if 'current' in self.hit_points:
+            self.hit_points['current'] -= amount
+            logger.info(f"Player {self.name} ({self.id}) took {amount} damage. HP is now {self.hit_points['current']}.")
         else:
-            logger.warning(f"Player {self.name} ({self.id}) has no 'hp' stat to take damage.")
+            logger.warning(f"Player {self.name} ({self.id}) has no 'current' HP to take damage.")
 
     def use_skill(self, skill_name: str):
         logger.info(f"Player {self.name} ({self.id}) used skill: {skill_name}.")
@@ -82,6 +162,40 @@ class Player:
         old_location = self.current_location
         self.current_location = new_location_id
         logger.info(f"Player {self.name} ({self.id}) moved from {old_location} to {new_location_id}.")
+
+    def update_ability_score(self, ability_name: str, new_score: int):
+        if ability_name in self.ability_scores:
+            self.ability_scores[ability_name] = new_score
+            logger.info(f"Player {self.name} ({self.id}) ability score {ability_name} updated to {new_score}.")
+            # Note: Recalculating modifiers or dependent stats (like spell save DC) would be done elsewhere or here if specified.
+        else:
+            logger.warning(f"Player {self.name} ({self.id}) does not have ability score {ability_name}.")
+
+    def change_experience_points(self, points: int):
+        self.experience_points += points
+        logger.info(f"Player {self.name} ({self.id}) experience points changed by {points}. Total XP: {self.experience_points}.")
+        # Note: Level up logic would typically be triggered here or by a separate call.
+
+    def set_weapon(self, item_id: str | None):
+        self.equipment['weapon'] = item_id
+        logger.info(f"Player {self.name} ({self.id}) weapon set to {item_id}.")
+
+    def set_armor(self, item_id: str | None):
+        self.equipment['armor'] = item_id
+        logger.info(f"Player {self.name} ({self.id}) armor set to {item_id}.")
+
+    def set_shield(self, item_id: str | None):
+        self.equipment['shield'] = item_id
+        logger.info(f"Player {self.name} ({self.id}) shield set to {item_id}.")
+
+    def update_currency(self, currency_type: str, amount_change: int):
+        if currency_type in self.equipment.get('currency', {}):
+            self.equipment['currency'][currency_type] += amount_change
+            if self.equipment['currency'][currency_type] < 0:
+                self.equipment['currency'][currency_type] = 0 # Prevent negative currency
+            logger.info(f"Player {self.name} ({self.id}) currency {currency_type} changed by {amount_change}. New amount: {self.equipment['currency'][currency_type]}.")
+        else:
+            logger.warning(f"Player {self.name} ({self.id}) does not have currency type {currency_type}.")
 
 
 class NPC:
@@ -279,14 +393,39 @@ class GameState:
         self.world_variables.clear()
         
         # Create main player
-        player_stats = {'hp': 100, 'mp': 50, 'attack': 10}
-        main_player = Player(id=main_player_id,
-                             name=default_player_name,
-                             stats=player_stats,
-                             inventory=[],
-                             skills=['basic_attack'],
-                             knowledge_fragments=[],
-                             current_location=start_location_id)
+        main_player = Player(
+            id=main_player_id,
+            name=default_player_name,
+            inventory=[],
+            skills=['basic_attack'],
+            knowledge_fragments=[],
+            current_location=start_location_id,
+            # Default values for new Player attributes
+            player_class="Adventurer", 
+            level=1, 
+            experience_points=0,
+            ability_scores={"strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10},
+            combat_stats={"armor_class": 10, "initiative_bonus": 0, "speed": 30},
+            hit_points={"current": 10, "maximum": 10, "temporary": 0},
+            spell_slots={},
+            equipment={
+                "weapon": None, "armor": None, "shield": None, "helmet": None,
+                "boots": None, "gloves": None, "amulet": None, "ring1": None, "ring2": None,
+                "currency": {"gold": 10, "silver": 0, "copper": 0}
+            },
+            status_effects=[],
+            proficiencies={"saving_throws": [], "skills": []},
+            feats=[],
+            background="Commoner",
+            alignment="Neutral",
+            personality_traits=[],
+            ideals=[],
+            bonds=[],
+            flaws=[],
+            notes="",
+            active_quests=[],
+            completed_quests=[]
+        )
         self.players[main_player_id] = main_player
         logger.info(f"Created player {default_player_name} ({main_player_id}).")
 
