@@ -8,7 +8,7 @@ GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
 VECTOR_DB_PATH = "./chroma_db"
 COLLECTION_NAME = "dnd_settings"
-RAG_DOCUMENT_SOURCES = ['./data']
+RAG_DOCUMENT_SOURCES = ['./data/NPCs', './data/GameObjects', './data/Players']
 RAG_DOCUMENT_FILTERS = {}
 RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name', 'text_content']
 
