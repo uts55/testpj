@@ -84,21 +84,26 @@ class GamePlayFrame(tk.Frame):
 
     # Method to add text to the narration area from outside (e.g., from main.py)
     def add_narration(self, message: str): # Added type hint for clarity
+        """Adds a message to the narration area, ensuring it's scrollable and read-only."""
         self.narration_area.config(state='normal')
         self.narration_area.insert(tk.END, message + '\n') # Ensure newline is added
         self.narration_area.see(tk.END)
         self.narration_area.config(state='disabled')
 
     def update_hp(self, hp_value):
+        """Updates the HP label in the UI."""
         self.hp_label.config(text=f"HP: {hp_value}")
 
     def update_location(self, location_name):
+        """Updates the Location label in the UI."""
         self.location_label.config(text=f"Location: {location_name}")
 
     def update_inventory(self, inventory_string): # Expects a pre-formatted string
+        """Updates the Inventory label in the UI. Expects a pre-formatted string."""
         self.inventory_label.config(text=f"Inventory: {inventory_string}")
 
     def update_npcs(self, npc_string): # Expects a pre-formatted string
+        """Updates the NPCs label in the UI. Expects a pre-formatted string."""
         self.npcs_label.config(text=f"NPCs: {npc_string}")
 
 if __name__ == "__main__":

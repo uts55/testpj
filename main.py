@@ -350,7 +350,7 @@ def handle_exit_game_via_game_play_ui():
 
 
 def update_ui_game_state():
-    """Fetches current game state and updates all UI labels for GamePlayFrame."""
+    """Fetches current game state and updates all relevant UI labels in the GamePlayFrame."""
     global game_play_frame, game_state_manager, MAIN_PLAYER_ID # app_ui changed to game_play_frame
     if not game_play_frame or not game_state_manager:
         logger.warning("Cannot update UI: game_play_frame or game_state_manager not initialized.")
@@ -358,19 +358,19 @@ def update_ui_game_state():
 
     player = game_state_manager.get_player(MAIN_PLAYER_ID)
     if player:
-        # HP
+        # HP: Fetches current HP, defaults to 'N/A' if unavailable.
         # Corrected to access hit_points directly as 'stats' attribute doesn't exist
         hp_current = player.hit_points.get('current', 'N/A') if player.hit_points else 'N/A'
         game_play_frame.update_hp(str(hp_current)) # Ensure it's a string for UI
 
-        # Location
+        # Location: Fetches current location name, defaults to 'Unknown'.
         loc_name = "Unknown"
         location_obj = game_state_manager.locations.get(player.current_location)
         if location_obj:
             loc_name = location_obj.name
         game_play_frame.update_location(loc_name)
 
-        # Inventory
+        # Inventory: Lists names of items in player's inventory. Displays 'Empty' if none. Falls back to item ID if name is missing.
         inventory_item_names = []
         if player.inventory:
             for item_id in player.inventory:
@@ -379,12 +379,13 @@ def update_ui_game_state():
         inventory_str = ", ".join(inventory_item_names) if inventory_item_names else "Empty"
         game_play_frame.update_inventory(inventory_str)
         
-        # NPCs
+        # NPCs: Lists names of NPCs in the current location. Displays 'None' if no NPCs are present.
         npcs_in_loc_objs = game_state_manager.get_npcs_in_location(player.current_location)
         npc_names_list = [npc.name for npc in npcs_in_loc_objs] if npcs_in_loc_objs else []
         npcs_str = ", ".join(npc_names_list) if npc_names_list else "None"
         game_play_frame.update_npcs(npcs_str)
     else:
+        # Fallback display if the main player object is not found in game state.
         logger.warning(f"Player {MAIN_PLAYER_ID} not found for UI update.")
         game_play_frame.update_hp("N/A")
         game_play_frame.update_location("Unknown")
