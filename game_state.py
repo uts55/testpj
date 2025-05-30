@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import random # Add this
+from utils import SKILL_ABILITY_MAP, PROFICIENCY_BONUS # Add this
 
 logger = logging.getLogger(__name__)
 
@@ -148,9 +150,52 @@ class Player:
         else:
             logger.warning(f"Player {self.name} ({self.id}) has no 'current' HP to take damage.")
 
-    def use_skill(self, skill_name: str):
-        logger.info(f"Player {self.name} ({self.id}) used skill: {skill_name}.")
-        # Placeholder for skill logic
+    def use_skill(self, skill_name: str) -> dict:
+        skill_name_lower = skill_name.lower() # Normalize for lookup
+        logger.info(f"Player {self.name} ({self.id}) attempting skill: {skill_name_lower}.")
+
+        if skill_name_lower not in SKILL_ABILITY_MAP:
+            logger.warning(f"Skill '{skill_name_lower}' not found in SKILL_ABILITY_MAP for player {self.name}.")
+            return {
+                "skill": skill_name,
+                "error": f"Skill '{skill_name_lower}' is not a recognized skill.",
+                "total_roll": 0, # Or some other default
+                "description": f"{self.name} attempted to use unknown skill: {skill_name}."
+            }
+
+        ability_key = SKILL_ABILITY_MAP[skill_name_lower]
+        ability_score = self.ability_scores.get(ability_key)
+
+        if ability_score is None:
+            logger.warning(f"Ability score '{ability_key}' not found for player {self.name} when using skill '{skill_name_lower}'. Defaulting to 10.")
+            ability_score = 10 # Default or handle as an error
+
+        d20_roll = random.randint(1, 20)
+        ability_modifier = (ability_score - 10) // 2
+
+        is_proficient = skill_name_lower in [s.lower() for s in self.proficiencies.get('skills', [])]
+        applied_proficiency_bonus = PROFICIENCY_BONUS if is_proficient else 0
+
+        total_roll = d20_roll + ability_modifier + applied_proficiency_bonus
+
+        log_message = (
+            f"Skill Check: {skill_name.capitalize()}. Player: {self.name}. "
+            f"D20: {d20_roll}, Ability: {ability_key.capitalize()} ({ability_score}, Mod: {ability_modifier}), "
+            f"Proficient: {'Yes' if is_proficient else 'No'} (Bonus: {applied_proficiency_bonus}), Total: {total_roll}"
+        )
+        logger.info(log_message)
+
+        return {
+            "skill": skill_name,
+            "d20_roll": d20_roll,
+            "ability_key": ability_key,
+            "ability_score": ability_score,
+            "ability_modifier": ability_modifier,
+            "is_proficient": is_proficient,
+            "applied_proficiency_bonus": applied_proficiency_bonus,
+            "total_roll": total_roll,
+            "description": f"{self.name} attempts {skill_name}. Result: {total_roll} (d20={d20_roll}, {ability_key[:3].upper()} Mod={ability_modifier}, Prof Bonus={applied_proficiency_bonus})"
+        }
 
     def add_item_to_inventory(self, item_id: str):
         if item_id not in self.inventory:

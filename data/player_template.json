@@ -1,3 +1,6 @@
+import json
+
+player_data_str = """
 {
   "id": "player_1",
   "name": "Valerius",
@@ -68,3 +71,18 @@
   "active_quests": ["quest_find_lost_artifact"],
   "completed_quests": ["quest_deliver_message"]
 }
+"""
+
+player_data = json.loads(player_data_str)
+
+# Update the 'skills' field
+player_data["skills"] = ["arcana", "history", "investigation", "perception", "insight", "medicine"]
+
+# Update the 'proficiencies.skills' field
+if "proficiencies" not in player_data:
+    player_data["proficiencies"] = {}
+player_data["proficiencies"]["skills"] = ["arcana", "history", "insight", "investigation", "medicine"]
+
+# Serialize back to JSON with pretty print
+output_json = json.dumps(player_data, indent=2)
+print(output_json)
