@@ -4,6 +4,7 @@ import os
 import random # Add this
 from utils import SKILL_ABILITY_MAP, PROFICIENCY_BONUS # Add this
 from quests import Quest, ALL_QUESTS # Add this
+import config # Added
 
 logger = logging.getLogger(__name__)
 
@@ -574,76 +575,136 @@ class GameState:
         }
 
     def load_game(self, filepath: str):
+        # Store a copy of the current state's critical attributes
+        original_players = {pid: p.to_dict() for pid, p in self.players.items()}
+        original_npcs = {nid: n.to_dict() for nid, n in self.npcs.items()}
+        original_locations = {lid: l.to_dict() for lid, l in self.locations.items()}
+        original_items = {iid: i.to_dict() for iid, i in self.items.items()}
+        original_world_variables = self.world_variables.copy()
+        original_turn_count = self.turn_count
+        # Quests are typically static, but if they could be modified during gameplay and saved, include them too.
+        # For now, assuming quests are reloaded from ALL_QUESTS consistently.
+
         try:
             with open(filepath, 'r') as f:
                 data = json.load(f)
 
-            # 1. Load items first (no dependencies)
-            self.items = {item_id: Item.from_dict(item_data) for item_id, item_data in data.get('items', {}).items()}
-            logger.info(f"Loaded {len(self.items)} items.")
+            # Create temporary structures
+            temp_items: dict[str, Item] = {}
+            temp_npcs: dict[str, NPC] = {}
+            temp_locations: dict[str, Location] = {}
+            temp_players: dict[str, Player] = {}
+            temp_world_variables: dict = {}
+            temp_turn_count: int = 0
 
-            # 2. Load NPCs (can depend on items if they have inventory, but current NPC class doesn't)
-            self.npcs = {npc_id: NPC.from_dict(npc_data) for npc_id, npc_data in data.get('npcs', {}).items()}
-            logger.info(f"Loaded {len(self.npcs)} NPCs.")
+            # 1. Load items first into temporary structure
+            temp_items = {item_id: Item.from_dict(item_data) for item_id, item_data in data.get('items', {}).items()}
+            logger.debug(f"Attempting to load {len(temp_items)} items into temporary structure.")
 
-            # 3. Load locations (can depend on items and NPCs)
-            self.locations = {}
+            # 2. Load NPCs into temporary structure
+            temp_npcs = {npc_id: NPC.from_dict(npc_data) for npc_id, npc_data in data.get('npcs', {}).items()}
+            logger.debug(f"Attempting to load {len(temp_npcs)} NPCs into temporary structure.")
+
+            # 3. Load locations into temporary structure
+            temp_locations = {}
             for loc_id, loc_data in data.get('locations', {}).items():
                 location = Location.from_dict(loc_data)
-                self.locations[loc_id] = location
-            logger.info(f"Loaded {len(self.locations)} locations.")
+                temp_locations[loc_id] = location
+            logger.debug(f"Attempting to load {len(temp_locations)} locations into temporary structure.")
 
-            # Validate location items and NPCs
-            for loc_id, location in self.locations.items():
+            # Validate location items and NPCs within temporary structures
+            for loc_id, location in temp_locations.items():
                 # Validate items in location
-                for item_id in location.items[:]: # Iterate over a copy for safe removal
-                    if item_id not in self.items:
-                        logger.warning(f"Location {location.id} items list contains non-existent item {item_id}. Removing.")
+                for item_id in location.items[:]:
+                    if item_id not in temp_items:
+                        logger.warning(f"Location {location.id} items list contains non-existent item {item_id}. Removing from temp load data.")
                         location.items.remove(item_id)
                 # Validate NPCs in location
-                for npc_id in location.npcs[:]: # Iterate over a copy for safe removal
-                    if npc_id not in self.npcs:
-                        logger.warning(f"Location {location.id} NPCs list contains non-existent NPC {npc_id}. Removing.")
+                for npc_id in location.npcs[:]:
+                    if npc_id not in temp_npcs:
+                        logger.warning(f"Location {location.id} NPCs list contains non-existent NPC {npc_id}. Removing from temp load data.")
                         location.npcs.remove(npc_id)
 
-            # 4. Load players (can depend on items, locations)
-            self.players = {player_id: Player.from_dict(player_data) for player_id, player_data in data.get('players', {}).items()}
-            logger.info(f"Loaded {len(self.players)} players.")
+            # 4. Load players into temporary structure
+            temp_players = {player_id: Player.from_dict(player_data) for player_id, player_data in data.get('players', {}).items()}
+            logger.debug(f"Attempting to load {len(temp_players)} players into temporary structure.")
 
-            # Validate player inventory
-            for player_id, player in self.players.items():
-                for item_id in player.inventory[:]: # Iterate over a copy for safe removal
-                    if item_id not in self.items:
-                        logger.warning(f"Player {player.id} inventory contains non-existent item {item_id}. Removing.")
+            # Validate player inventory within temporary structures
+            for player_id, player in temp_players.items():
+                for item_id in player.inventory[:]:
+                    if item_id not in temp_items:
+                        logger.warning(f"Player {player.id} inventory (in temp load data) contains non-existent item {item_id}. Removing.")
                         player.inventory.remove(item_id)
+                # Validate player quest items if they are distinct and need checking against temp_items
 
-            self.world_variables = data.get('world_variables', {})
-            self.turn_count = data.get('turn_count', 0)
+            temp_world_variables = data.get('world_variables', {})
+            temp_turn_count = data.get('turn_count', 0)
 
-            # Load quests (typically static data, loaded after core game objects)
-            self.load_quests(ALL_QUESTS) # Added
+            # Validate and correct entity locations
+            entities_to_check = list(temp_players.values()) + list(temp_npcs.values())
+            default_location_id_to_use = "default_start_location" # From config.PRESET_SCENARIOS
 
-            # Final validation for entity locations
-            for player_id, player in self.players.items():
-                if player.current_location and player.current_location not in self.locations:
-                    logger.warning(f"Player {player.id} current location {player.current_location} is invalid or does not exist. Player may be stranded.")
-                    # Optional: Reset to a default valid location if critical, e.g., player.current_location = "default_start_location_id"
-                    # For now, just logging.
+            for entity in entities_to_check:
+                entity_type = "Player" if isinstance(entity, Player) else "NPC"
+                is_location_invalid = False
 
-            for npc_id, npc in self.npcs.items():
-                if npc.current_location and npc.current_location not in self.locations:
-                    logger.warning(f"NPC {npc.id} current location {npc.current_location} is invalid or does not exist. NPC may be inaccessible.")
-                    # Optional: Reset to a default or remove NPC if location is critical for its function.
-                    # For now, just logging.
+                if entity.current_location is None:
+                    is_location_invalid = True
+                    logger.warning(f"{entity_type} {entity.id} ({entity.name}) has a None current_location.")
+                elif entity.current_location not in temp_locations:
+                    is_location_invalid = True
+                    logger.warning(f"{entity_type} {entity.id} ({entity.name}) current_location '{entity.current_location}' is invalid or does not exist in loaded locations.")
 
-            logger.info(f"Game loaded successfully from {filepath} with validation checks.")
+                if is_location_invalid:
+                    chosen_fallback_location = None
+                    # Try config.DEFAULT_START_LOCATION_ID (using the one from default scenario)
+                    if default_location_id_to_use in temp_locations:
+                        chosen_fallback_location = default_location_id_to_use
+                        logger.info(f"Attempting to move {entity_type} {entity.id} to default start location '{chosen_fallback_location}'.")
+                    # Else, try the first location from temp_locations
+                    elif temp_locations:
+                        first_available_location = next(iter(temp_locations))
+                        chosen_fallback_location = first_available_location
+                        logger.info(f"Default start location not available or invalid. Attempting to move {entity_type} {entity.id} to first available location '{chosen_fallback_location}'.")
+
+                    if chosen_fallback_location:
+                        entity.current_location = chosen_fallback_location
+                        logger.info(f"{entity_type} {entity.id} ({entity.name}) has been moved to fallback location '{chosen_fallback_location}'.")
+                    else:
+                        logger.critical(f"{entity_type} {entity.id} ({entity.name}) has an invalid location ('{entity.current_location}'), and no valid fallback location could be determined (e.g., temp_locations is empty). Entity may be inaccessible.")
+
+            # If all loading and validation steps are successful, assign to actual instance attributes
+            self.items = temp_items
+            self.npcs = temp_npcs
+            self.locations = temp_locations
+            self.players = temp_players
+            self.world_variables = temp_world_variables
+            self.turn_count = temp_turn_count
+
+            # Load quests (typically static data, loaded after core game objects are confirmed)
+            self.load_quests(ALL_QUESTS)
+
+            logger.info(f"Game loaded successfully from {filepath}. Loaded: {len(self.items)} items, {len(self.npcs)} NPCs, {len(self.locations)} locations, {len(self.players)} players.")
 
         except FileNotFoundError:
-            logger.info(f"Save file not found at {filepath}. Starting a new game or using default state.")
+            logger.info(f"Save file not found at {filepath}. Game state remains unchanged.")
+            # No need to restore original state as it was never modified
         except json.JSONDecodeError as e:
-            logger.error(f"Could not decode JSON from {filepath}. Error: {e}")
+            logger.error(f"Could not decode JSON from {filepath}. Error: {e}. Game state remains unchanged.")
+            # No need to restore original state
         except Exception as e: 
-            logger.error(f"An unexpected error occurred while loading the game from {filepath}. Error: {e}", exc_info=True)
+            logger.error(f"An unexpected error occurred while loading and validating the game from {filepath}. Error: {e}. Attempting to restore pre-load game state.", exc_info=True)
+            # Restore the original state
+            self.players = {pid: Player.from_dict(p_data) for pid, p_data in original_players.items()}
+            self.npcs = {nid: NPC.from_dict(n_data) for nid, n_data in original_npcs.items()}
+            self.locations = {lid: Location.from_dict(l_data) for lid, l_data in original_locations.items()}
+            self.items = {iid: Item.from_dict(i_data) for iid, i_data in original_items.items()}
+            self.world_variables = original_world_variables
+            self.turn_count = original_turn_count
+            # Consider re-calling load_quests if it was part of the original state that needs restoring.
+            # However, if ALL_QUESTS is static, it might not be necessary unless quests can be dynamically altered and saved.
+            logger.info("Successfully restored game state to pre-load attempt.")
+
 
     def _ensure_location_exists(self, location_id: str, location_name: str = None, description: str = None):
         if location_id not in self.locations:
