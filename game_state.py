@@ -8,16 +8,18 @@ from quests import Quest, ALL_QUESTS # Add this
 logger = logging.getLogger(__name__)
 
 class Item:
-    def __init__(self, id: str, name: str, description: str):
+    def __init__(self, id: str, name: str, description: str, effects: dict = None):
         self.id = id
         self.name = name
         self.description = description
+        self.effects = effects if effects is not None else {}
 
     def to_dict(self) -> dict:
         return {
             'id': self.id,
             'name': self.name,
             'description': self.description,
+            'effects': self.effects,
         }
 
     @classmethod
@@ -26,6 +28,7 @@ class Item:
             id=data['id'],
             name=data['name'],
             description=data['description'],
+            effects=data.get('effects', {}),
         )
 
 class Player:
@@ -264,6 +267,87 @@ class Player:
             logger.info(f"Player {self.name} ({self.id}) currency {currency_type} changed by {amount_change}. New amount: {self.equipment['currency'][currency_type]}.")
         else:
             logger.warning(f"Player {self.name} ({self.id}) does not have currency type {currency_type}.")
+
+    def acquire_item_from_location(self, item_id: str, location: 'Location', game_state: 'GameState') -> bool:
+        """Allows the player to acquire an item from a location."""
+        if item_id not in location.items:
+            logger.warning(f"Item {item_id} not found at {location.name} ({location.id}) for player {self.name} ({self.id}).")
+            return False
+
+        # Check if item exists in the master list of items in game_state
+        if item_id not in game_state.items:
+            logger.error(f"Item {item_id} found in location {location.name} but not in master item list. Data inconsistency.")
+            # Even if it's in location, if it's not a known item, it's problematic.
+            # Depending on strictness, you might still allow acquiring it from location,
+            # but it's better to log an error. For now, we'll prevent acquisition.
+            return False
+
+        location.items.remove(item_id)
+        self.add_item_to_inventory(item_id) # This method already logs inventory addition
+        logger.info(f"Player {self.name} ({self.id}) acquired item {item_id} from {location.name} ({location.id}).")
+        return True
+
+    def use_item(self, item_id: str, game_state: 'GameState') -> bool:
+        """Allows the player to use an item from their inventory and apply its effects."""
+        if item_id not in self.inventory:
+            logger.warning(f"Player {self.name} ({self.id}) tried to use item {item_id} but does not possess it.")
+            return False
+
+        item = game_state.items.get(item_id)
+        if not item:
+            logger.error(f"Item {item_id} in inventory for player {self.name} ({self.id}) but not found in game_state.items. Data inconsistency.")
+            return False
+
+        effects = item.effects
+        item_used_or_effect_attempted = False # Flag to track if any effect was processed or if item was just "used"
+
+        if effects:
+            effect_type = effects.get("type")
+            if effect_type == "heal":
+                if 'current' in self.hit_points and 'maximum' in self.hit_points:
+                    amount = effects.get("amount", 0)
+                    if amount > 0:
+                        healed_amount = min(amount, self.hit_points['maximum'] - self.hit_points['current'])
+                        if healed_amount > 0:
+                            self.hit_points['current'] += healed_amount
+                            logger.info(f"Player {self.name} ({self.id}) used {item.name}. Recovered {healed_amount} HP. Current HP: {self.hit_points['current']}/{self.hit_points['maximum']}.")
+                        else:
+                            logger.info(f"Player {self.name} ({self.id}) used {item.name}, but HP is already full.")
+                        item_used_or_effect_attempted = True
+                    else:
+                        logger.warning(f"Player {self.name} ({self.id}) used {item.name}, but heal amount is zero or invalid.")
+                        item_used_or_effect_attempted = True # Still counts as "used"
+                else:
+                    logger.warning(f"Player {self.name} ({self.id}) tried to use heal item {item.name}, but HP data is incomplete.")
+            # Placeholder for other effect types
+            elif effect_type == "some_other_effect_type":
+                logger.info(f"Player {self.name} ({self.id}) used {item.name}. Effect type '{effect_type}' not yet implemented.")
+                item_used_or_effect_attempted = True
+            elif effect_type: # An effect type is specified but not handled
+                logger.warning(f"Player {self.name} ({self.id}) used {item.name}, but effect type '{effect_type}' is unknown or not handled.")
+                item_used_or_effect_attempted = True
+            else: # No effect type specified in effects dict
+                logger.info(f"Player {self.name} ({self.id}) used {item.name}, but it has no defined effect type.")
+                item_used_or_effect_attempted = True # Counts as "used" even if no specific action
+        else:
+            logger.info(f"Player {self.name} ({self.id}) used {item.name}, but it has no effects defined.")
+            item_used_or_effect_attempted = True # Counts as "used"
+
+        # Assuming the item is consumable if it was used or an effect was attempted.
+        # This could be made more granular with an item property like "consumable: true/false" in item.effects
+        if item_used_or_effect_attempted:
+            if item_id in self.inventory: # Double check, though it should be
+                self.inventory.remove(item_id)
+                logger.info(f"Item {item.name} ({item_id}) was consumed by player {self.name} ({self.id}).")
+            return True
+
+        # If no effects were processed and item wasn't "used" (e.g. item has effects but not of a known type and we decide not to consume)
+        # This part of the logic might need refinement based on how unhandled effects should behave regarding consumption.
+        # For now, if item_used_or_effect_attempted is False, it means no known effect was triggered.
+        # Let's assume if an item is "used", even if its specific effect isn't implemented, it's consumed.
+        # The current logic ensures item_used_or_effect_attempted is true if *any* effect dict exists or even if it's empty.
+
+        return False # Should ideally be covered by item_used_or_effect_attempted logic
 
 
 class NPC:
@@ -656,6 +740,22 @@ class GameState:
         if default_loc1_id in self.locations and default_item_id not in self.locations[default_loc1_id].items:
             self.locations[default_loc1_id].items.append(default_item_id)
             logger.info(f"Placed default item {default_item_id} in default location {default_loc1_id}.")
+
+        # Add a sample healing item
+        healing_potion_id = "item_healing_potion_minor"
+        self._ensure_item_exists(
+            healing_potion_id,
+            item_name="Minor Healing Potion",
+            description="A common potion that restores a small amount of health."
+        )
+        # Now, directly access the item from self.items and set its effects
+        if healing_potion_id in self.items:
+            self.items[healing_potion_id].effects = {"type": "heal", "amount": 10}
+
+        # Place this healing potion in a starting location.
+        if default_loc1_id in self.locations and healing_potion_id not in self.locations[default_loc1_id].items:
+            self.locations[default_loc1_id].items.append(healing_potion_id)
+            logger.info(f"Placed healing potion {healing_potion_id} in {default_loc1_id}.")
 
         # Default NPC (ensure it doesn't overwrite scenario-specified NPCs if IDs clash)
         default_npc_id = "npc_001"
