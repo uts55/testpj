@@ -1,0 +1,5 @@
+{
+    "name": "The Sunstone",
+    "description": "A legendary artifact said to hold the power of the sun. It glows faintly.",
+    "properties": ["light_source", "magical"]
+}

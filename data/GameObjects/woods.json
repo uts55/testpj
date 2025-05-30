@@ -1,0 +1,5 @@
+{
+    "name": "Whispering Woods",
+    "description": "A dark and ancient forest, rumored to be enchanted. Strange sounds emanate from within.",
+    "contains": ["Old Man Hemlock's hut", "hidden grove"]
+}

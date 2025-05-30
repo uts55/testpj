@@ -1,151 +1,106 @@
 import os
 import json
-import logging
-from langchain_text_splitters import RecursiveCharacterTextSplitter # Added
-from config import CHUNK_SIZE, CHUNK_OVERLAP
 
-# --- Logging Configuration ---
-logger = logging.getLogger(__name__)
+def load_game_data(npc_dir: str = "data/NPCs", game_object_dir: str = "data/GameObjects") -> dict:
+    """
+    Loads all NPC and GameObject data from JSON files in specified directories.
 
-# --- Function Definitions ---
-def split_text_into_chunks(text: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP) -> list[str]: # Modified
-    """Splits text into chunks using RecursiveCharacterTextSplitter.""" # Added
-    if chunk_overlap >= chunk_size: # Added
-        raise ValueError("Chunk overlap must be smaller than chunk size.") # Added
-    text_splitter = RecursiveCharacterTextSplitter( # Added
-        chunk_size=chunk_size, # Added
-        chunk_overlap=chunk_overlap, # Added
-        length_function=len, # Added
-        is_separator_regex=False, # Added
-    ) # Added
-    return text_splitter.split_text(text) # Added
+    Args:
+        npc_dir: The directory path containing NPC JSON files.
+        game_object_dir: The directory path containing GameObject JSON files.
 
-def load_documents(source_paths: list[str]) -> list[dict]:
-    documents = []
-    for path in source_paths:
-        if os.path.isfile(path):
-            if path.endswith(".json"):
+    Returns:
+        A dictionary with two keys:
+        'npcs': A list of NPC data (each item is a dictionary parsed from JSON).
+        'game_objects': A list of GameObject data (similarly, dictionaries from JSON).
+        Returns empty lists for categories if directories don't exist or no files are found.
+    """
+    data = {"npcs": [], "game_objects": []}
+
+    # Load NPCs
+    if os.path.exists(npc_dir) and os.path.isdir(npc_dir):
+        for filename in os.listdir(npc_dir):
+            if filename.endswith(".json"):
+                filepath = os.path.join(npc_dir, filename)
                 try:
-                    with open(path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        metadata = {"source": path, "document_type": "json"}
-                        if isinstance(data, list):
-                            for item in data:
-                                if isinstance(item, dict):
-                                    item["_metadata"] = metadata
-                            documents.extend(data)
-                        elif isinstance(data, dict):
-                            data["_metadata"] = metadata
-                            documents.append(data)
+                    with open(filepath, 'r') as f:
+                        loaded_json_content = json.load(f)
+                        if isinstance(loaded_json_content, list):
+                            if len(loaded_json_content) == 1 and isinstance(loaded_json_content[0], dict):
+                                data["npcs"].append(loaded_json_content[0]) # Extract the single dict
+                            elif not loaded_json_content: # Empty list
+                                print(f"Warning: JSON file {filepath} contains an empty list, skipping.")
+                            else: # List with multiple items or non-dict items
+                                print(f"Warning: JSON file {filepath} contains a list with multiple items or non-dict items. Skipping.")
+                        elif isinstance(loaded_json_content, dict):
+                            data["npcs"].append(loaded_json_content) # Append the dict directly
                         else:
-                            logger.warning(f"Unexpected JSON structure in {path}. Expected list or dict at root.")
+                            print(f"Warning: JSON file {filepath} does not contain a dictionary or a list with a single dictionary. Skipping.")
                 except FileNotFoundError:
-                    logger.error(f"File not found - {path}")
+                    # Using print for logging as per environment constraints
+                    print(f"Warning: File not found {filepath}, skipping.")
                 except json.JSONDecodeError:
-                    logger.error(f"Invalid JSON format in - {path}")
+                    print(f"Warning: Could not parse JSON from {filepath}, skipping. Check JSON validity.")
                 except Exception as e:
-                    logger.error(f"An unexpected error occurred while processing {path}: {e}")
-            elif path.endswith(".txt"): # Added .txt file handling
+                    print(f"Warning: An unexpected error occurred while processing {filepath}: {e}, skipping.")
+    else:
+        print(f"Warning: NPC directory '{npc_dir}' not found. No NPCs will be loaded from here.")
+
+    # Load GameObjects
+    if os.path.exists(game_object_dir) and os.path.isdir(game_object_dir):
+        for filename in os.listdir(game_object_dir):
+            if filename.endswith(".json"):
+                filepath = os.path.join(game_object_dir, filename)
                 try:
-                    with open(path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        metadata = {"source": path, "document_type": "txt"}
-                        documents.append({"text_content": content, "_metadata": metadata})
+                    with open(filepath, 'r') as f:
+                        loaded_json_content = json.load(f)
+                        if isinstance(loaded_json_content, list):
+                            if len(loaded_json_content) == 1 and isinstance(loaded_json_content[0], dict):
+                                data["game_objects"].append(loaded_json_content[0]) # Extract the single dict
+                            elif not loaded_json_content: # Empty list
+                                print(f"Warning: JSON file {filepath} contains an empty list, skipping.")
+                            else: # List with multiple items or non-dict items
+                                print(f"Warning: JSON file {filepath} contains a list with multiple items or non-dict items. Skipping.")
+                        elif isinstance(loaded_json_content, dict):
+                            data["game_objects"].append(loaded_json_content) # Append the dict directly
+                        else:
+                            print(f"Warning: JSON file {filepath} does not contain a dictionary or a list with a single dictionary. Skipping.")
                 except FileNotFoundError:
-                    logger.error(f"File not found - {path}")
+                    print(f"Warning: File not found {filepath}, skipping.")
+                except json.JSONDecodeError:
+                    print(f"Warning: Could not parse JSON from {filepath}, skipping. Check JSON validity.")
                 except Exception as e:
-                    logger.error(f"An unexpected error occurred while processing {path}: {e}")
-            else:
-                logger.warning(f"Skipping non-JSON or non-TXT file: {path}") # Modified log message
-        elif os.path.isdir(path):
-            for filename in os.listdir(path):
-                filepath = os.path.join(path, filename)
-                if os.path.isfile(filepath) and filename.endswith(".json"):
-                    try:
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            metadata = {"source": filepath, "document_type": "json"} # Added metadata
-                            if isinstance(data, list):
-                                for item in data: # Added loop for metadata
-                                    if isinstance(item, dict): # Added check for metadata
-                                        item["_metadata"] = metadata # Added metadata
-                                documents.extend(data)
-                            elif isinstance(data, dict):
-                                data["_metadata"] = metadata # Added metadata
-                                documents.append(data)
-                            else:
-                                logger.warning(f"Unexpected JSON structure in {filepath}. Expected list or dict at root.")
-                    except FileNotFoundError: 
-                        logger.error(f"File not found - {filepath}")
-                    except json.JSONDecodeError:
-                        logger.error(f"Invalid JSON format in - {filepath}")
-                    except Exception as e:
-                        logger.error(f"An unexpected error occurred while processing {filepath}: {e}")
-                elif os.path.isfile(filepath) and filename.endswith(".txt"): # Added .txt file handling for directories
-                    try:
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                            metadata = {"source": filepath, "document_type": "txt"}
-                            documents.append({"text_content": content, "_metadata": metadata})
-                    except FileNotFoundError:
-                        logger.error(f"File not found - {filepath}")
-                    except Exception as e:
-                        logger.error(f"An unexpected error occurred while processing {filepath}: {e}")
-                elif os.path.isfile(filepath): 
-                    logger.warning(f"Skipping non-JSON or non-TXT file: {filepath}") # Modified log message
-        else:
-            logger.warning(f"Source path not found or invalid, skipping: {path}")
-    return documents
+                    print(f"Warning: An unexpected error occurred while processing {filepath}: {e}, skipping.")
+    else:
+        print(f"Warning: GameObject directory '{game_object_dir}' not found. No GameObjects will be loaded from here.")
 
-def _get_nested_value(doc: dict, key_path: str):
-    keys = key_path.split('.')
-    value = doc
-    for key in keys:
-        if isinstance(value, dict) and key in value:
-            value = value[key]
-        elif isinstance(value, list): 
-            try:
-                idx = int(key)
-                if 0 <= idx < len(value):
-                    value = value[idx]
-                else:
-                    return None 
-            except ValueError: # Not an integer index
-                return None 
-        else: # Key not found or value is not a collection
-            return None 
-    return value
+    return data
 
-def filter_documents(documents: list[dict], filters: dict) -> list[dict]:
-    filtered_docs = []
-    for doc in documents:
-        match = True
-        for key_path, expected_value in filters.items():
-            actual_value = _get_nested_value(doc, key_path)
-            if actual_value != expected_value:
-                match = False
-                break
-        if match:
-            filtered_docs.append(doc)
-    return filtered_docs
+if __name__ == '__main__':
+    # Example usage:
+    print("--- Running data_loader.py example usage ---")
 
-def _extract_text_from_value(value) -> list[str]:
-    texts = []
-    if isinstance(value, str):
-        texts.append(value)
-    elif isinstance(value, list):
-        for item in value:
-            texts.extend(_extract_text_from_value(item))
-    elif isinstance(value, dict):
-        for sub_value in value.values():
-            texts.extend(_extract_text_from_value(sub_value))
-    return texts
+    print("\nLoading game data from default directories...")
+    game_data = load_game_data()
 
-def extract_text_for_rag(document: dict, text_fields: list[str]) -> str:
-    extracted_texts = []
-    for field_path in text_fields:
-        value = _get_nested_value(document, field_path)
-        if value is not None:
-            texts_from_field = _extract_text_from_value(value)
-            extracted_texts.extend(texts_from_field)
-    return " ".join(extracted_texts)
+    print(f"\nLoaded {len(game_data['npcs'])} NPCs:")
+    if game_data['npcs']:
+        for npc in game_data['npcs']:
+            print(f"  - {npc.get('name', 'Unnamed NPC')} (Description: {npc.get('description', 'N/A')[:30]}...)")
+    else:
+        print("  No NPCs loaded.")
+
+    print(f"\nLoaded {len(game_data['game_objects'])} GameObjects:")
+    if game_data['game_objects']:
+        for obj in game_data['game_objects']:
+            print(f"  - {obj.get('name', 'Unnamed Object')} (Description: {obj.get('description', 'N/A')[:30]}...)")
+    else:
+        print("  No GameObjects loaded.")
+
+    print("\n--- Testing with non-existent directories ---")
+    non_existent_data = load_game_data(npc_dir="data/NonExistentNPCs", game_object_dir="data/NonExistentObjects")
+    print(f"NPCs loaded from non-existent dirs: {len(non_existent_data['npcs'])}")
+    print(f"GameObjects loaded from non-existent dirs: {len(non_existent_data['game_objects'])}")
+
+    # The malformed.json file in data/NPCs/ should have triggered a warning during the default loading.
+    print("\n--- data_loader.py example usage complete ---")
