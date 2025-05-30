@@ -578,22 +578,65 @@ class GameState:
             with open(filepath, 'r') as f:
                 data = json.load(f)
 
+            # 1. Load items first (no dependencies)
             self.items = {item_id: Item.from_dict(item_data) for item_id, item_data in data.get('items', {}).items()}
-            
-            # Player.from_dict now expects inventory to be list of item IDs
-            self.players = {player_id: Player.from_dict(player_data) for player_id, player_data in data.get('players', {}).items()}
+            logger.info(f"Loaded {len(self.items)} items.")
 
+            # 2. Load NPCs (can depend on items if they have inventory, but current NPC class doesn't)
             self.npcs = {npc_id: NPC.from_dict(npc_data) for npc_id, npc_data in data.get('npcs', {}).items()}
-            
+            logger.info(f"Loaded {len(self.npcs)} NPCs.")
+
+            # 3. Load locations (can depend on items and NPCs)
             self.locations = {}
             for loc_id, loc_data in data.get('locations', {}).items():
                 location = Location.from_dict(loc_data)
                 self.locations[loc_id] = location
+            logger.info(f"Loaded {len(self.locations)} locations.")
+
+            # Validate location items and NPCs
+            for loc_id, location in self.locations.items():
+                # Validate items in location
+                for item_id in location.items[:]: # Iterate over a copy for safe removal
+                    if item_id not in self.items:
+                        logger.warning(f"Location {location.id} items list contains non-existent item {item_id}. Removing.")
+                        location.items.remove(item_id)
+                # Validate NPCs in location
+                for npc_id in location.npcs[:]: # Iterate over a copy for safe removal
+                    if npc_id not in self.npcs:
+                        logger.warning(f"Location {location.id} NPCs list contains non-existent NPC {npc_id}. Removing.")
+                        location.npcs.remove(npc_id)
+
+            # 4. Load players (can depend on items, locations)
+            self.players = {player_id: Player.from_dict(player_data) for player_id, player_data in data.get('players', {}).items()}
+            logger.info(f"Loaded {len(self.players)} players.")
+
+            # Validate player inventory
+            for player_id, player in self.players.items():
+                for item_id in player.inventory[:]: # Iterate over a copy for safe removal
+                    if item_id not in self.items:
+                        logger.warning(f"Player {player.id} inventory contains non-existent item {item_id}. Removing.")
+                        player.inventory.remove(item_id)
 
             self.world_variables = data.get('world_variables', {})
             self.turn_count = data.get('turn_count', 0)
+
+            # Load quests (typically static data, loaded after core game objects)
             self.load_quests(ALL_QUESTS) # Added
-            logger.info(f"Game loaded successfully from {filepath}")
+
+            # Final validation for entity locations
+            for player_id, player in self.players.items():
+                if player.current_location and player.current_location not in self.locations:
+                    logger.warning(f"Player {player.id} current location {player.current_location} is invalid or does not exist. Player may be stranded.")
+                    # Optional: Reset to a default valid location if critical, e.g., player.current_location = "default_start_location_id"
+                    # For now, just logging.
+
+            for npc_id, npc in self.npcs.items():
+                if npc.current_location and npc.current_location not in self.locations:
+                    logger.warning(f"NPC {npc.id} current location {npc.current_location} is invalid or does not exist. NPC may be inaccessible.")
+                    # Optional: Reset to a default or remove NPC if location is critical for its function.
+                    # For now, just logging.
+
+            logger.info(f"Game loaded successfully from {filepath} with validation checks.")
 
         except FileNotFoundError:
             logger.info(f"Save file not found at {filepath}. Starting a new game or using default state.")
