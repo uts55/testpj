@@ -10,7 +10,7 @@ import logging
 import os # Added for checking file existence
 # import json # No longer needed directly here, handled by data_loader
 import tkinter as tk
-from tkinter import messagebox # Added for load game popups
+from tkinter import messagebox, simpledialog, Toplevel, Listbox, Scrollbar, Button  # Added Toplevel, Listbox, Scrollbar, Button
 import threading # Added for threading
 from ui import GamePlayFrame
 from ui.main_menu_frame import MainMenuFrame
@@ -112,74 +112,143 @@ def start_new_game():
     logger.info("Initial game state UI updated.")
 
 def load_existing_game():
-    global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID # SAVE_GAME_FILENAME removed from globals
+    global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID
     logger.info("Attempting to load an existing game...")
 
     if not game_state_manager:
         logger.error("GameStateManager not initialized. Cannot load game.")
-        messagebox.showerror("Load Game Error", "GameStateManager not ready. Cannot load game.")
+        messagebox.showerror("Load Game Error", "GameStateManager not ready. Cannot load game.", parent=root_tk_window)
         return
 
-    # Attempt to load the game. load_game logs its own errors/status.
-    game_state_manager.load_game(config.SAVE_GAME_FILENAME) # Use config.SAVE_GAME_FILENAME
+    if not os.path.isdir(config.SAVE_GAME_DIR):
+        logger.error(f"Save game directory not found: {config.SAVE_GAME_DIR}")
+        messagebox.showerror("Load Game Error", f"Save directory '{config.SAVE_GAME_DIR}' not found.", parent=root_tk_window)
+        return
 
-    # Check if loading was successful by verifying player data
-    if game_state_manager.get_player(MAIN_PLAYER_ID):
-        logger.info(f"Player {MAIN_PLAYER_ID} found in loaded game state. Load successful.")
-        messagebox.showinfo("Load Game", "Game loaded successfully!")
+    save_files = [f for f in os.listdir(config.SAVE_GAME_DIR) if f.endswith(".json")]
 
-        if dialogue_manager:
-            dialogue_manager.history = [] # Clear history for the loaded game session
-            logger.info("Dialogue history cleared for loaded game.")
+    if not save_files:
+        logger.info("No save files found.")
+        messagebox.showinfo("Load Game", "No save files found in the save directory.", parent=root_tk_window)
+        return
+
+    load_window = Toplevel(root_tk_window)
+    load_window.title("Load Game")
+    load_window.geometry("300x250") # Adjust as needed
+    load_window.transient(root_tk_window) # Make it modal-like
+    load_window.grab_set() # Grab focus
+
+    listbox_frame = tk.Frame(load_window)
+    listbox_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+    scrollbar = Scrollbar(listbox_frame, orient=tk.VERTICAL)
+    listbox = Listbox(listbox_frame, yscrollcommand=scrollbar.set, exportselection=False)
+    scrollbar.config(command=listbox.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    for sf in save_files:
+        listbox.insert(tk.END, sf)
+
+    def on_load_selected():
+        # These globals are assigned to or modified within this nested function
+        global game_play_frame, dialogue_manager, root_tk_window, MAIN_PLAYER_ID
+        # game_state_manager is accessed via the global scope of load_existing_game, but not reassigned here.
+
+        selected_indices = listbox.curselection()
+        if not selected_indices:
+            messagebox.showinfo("Load Game", "Please select a save file to load.", parent=load_window)
+            return
+
+        selected_filename = listbox.get(selected_indices[0])
+        selected_path = os.path.join(config.SAVE_GAME_DIR, selected_filename)
+        
+        logger.info(f"Attempting to load: {selected_path}")
+        game_state_manager.load_game(selected_path) # GameState.load_game logs its own messages
+
+        if game_state_manager.get_player(MAIN_PLAYER_ID):
+            logger.info(f"Player {MAIN_PLAYER_ID} found. Load successful for {selected_filename}.")
+            messagebox.showinfo("Load Game", f"Game '{selected_filename}' loaded successfully!", parent=load_window)
+            load_window.destroy()
+
+            if dialogue_manager:
+                dialogue_manager.history = []
+                logger.info("Dialogue history cleared for loaded game.")
+            else:
+                logger.error("DialogueManager not initialized. Cannot clear history.")
+
+            if game_play_frame:
+                game_play_frame.destroy()
+                logger.info("Previous GamePlayFrame instance destroyed.")
+
+            game_play_frame = GamePlayFrame(
+                master=root_tk_window,
+                process_input_callback=process_player_input,
+                save_game_callback=handle_save_game,
+                load_game_callback=handle_load_game,
+                exit_callback=handle_exit_game_via_game_play_ui
+            )
+            logger.info("New GamePlayFrame instance created for loaded game.")
+
+            show_frame(game_play_frame)
+            logger.info("Switched to GamePlayFrame for loaded game.")
+
+            update_ui_game_state()
+
+            if game_play_frame:
+                game_play_frame.add_narration(f"Game '{selected_filename}' loaded. Continue your adventure!\n")
+            logger.info("GamePlayFrame updated and narration added.")
+
         else:
-            logger.error("DialogueManager not initialized. Cannot clear history for loaded game.")
-            # This could be a non-critical issue if history isn't strictly needed immediately
+            logger.warning(f"Failed to load game from {selected_filename} or player not found.")
+            messagebox.showerror("Load Error", f"Failed to load '{selected_filename}'. File might be corrupted or not a valid save.", parent=load_window)
+            # Optionally, clear game_state if load was partial and bad: game_state_manager.initialize_new_game(...) or similar reset.
 
-        if game_play_frame:
-            game_play_frame.destroy()
-            logger.info("Previous GamePlayFrame instance destroyed.")
+    def on_cancel_load():
+        load_window.destroy()
 
-        game_play_frame = GamePlayFrame(
-            master=root_tk_window,
-            process_input_callback=process_player_input,
-            save_game_callback=handle_save_game,
-            load_game_callback=handle_load_game, # This is the in-game load button
-            exit_callback=handle_exit_game_via_game_play_ui
-        )
-        logger.info("New GamePlayFrame instance created for loaded game.")
-        
-        show_frame(game_play_frame)
-        logger.info("Switched to GamePlayFrame for loaded game.")
-        
-        update_ui_game_state() # Refresh GamePlayFrame with loaded data
-        
-        if game_play_frame:
-            game_play_frame.add_narration("Game loaded. Continue your adventure!\n")
-        logger.info("GamePlayFrame updated and narration added for loaded game.")
+    button_frame = tk.Frame(load_window)
+    button_frame.pack(pady=5, padx=10, fill=tk.X)
 
-    else:
-        logger.warning(f"Failed to load game or player {MAIN_PLAYER_ID} not found after load attempt.")
-        messagebox.showerror("Load Game", "Failed to load game. File not found or corrupted.")
-        # Remain on MainMenuFrame
+    load_button = Button(button_frame, text="Load Selected", command=on_load_selected)
+    load_button.pack(side=tk.LEFT, expand=True, padx=5)
 
+    cancel_button = Button(button_frame, text="Cancel", command=on_cancel_load)
+    cancel_button.pack(side=tk.RIGHT, expand=True, padx=5)
 
 # --- Callback Functions for UI interactions ---
 def handle_save_game():
-    global game_state_manager, game_play_frame # SAVE_GAME_FILENAME removed from globals
+    global game_state_manager, game_play_frame, root_tk_window
     if not game_state_manager:
         logger.warning("Save game called but game_state_manager is not initialized.")
         if game_play_frame:
             game_play_frame.add_narration("Error: Could not save game (GameState not ready).\n")
         return
-    try:
-        game_state_manager.save_game(config.SAVE_GAME_FILENAME) # Use config.SAVE_GAME_FILENAME
-        logger.info("Game saved via UI button.")
+
+    filename = simpledialog.askstring("Save Game", "Enter filename for save:", parent=root_tk_window)
+
+    if filename:
+        # Ensure the filename ends with .json, but don't add if user included it
+        if not filename.lower().endswith(".json"):
+            actual_filename = filename + ".json"
+        else:
+            actual_filename = filename
+            filename = filename[:-5] # Remove .json for the narration message part
+
+        save_path = os.path.join(config.SAVE_GAME_DIR, actual_filename)
+        try:
+            game_state_manager.save_game(save_path)
+            logger.info(f"Game saved to {save_path} via UI button.")
+            if game_play_frame:
+                game_play_frame.add_narration(f"Game saved as {filename}.json.\n")
+        except Exception as e:
+            logger.error(f"Error saving game to {save_path}: {e}", exc_info=True)
+            if game_play_frame:
+                game_play_frame.add_narration(f"Error: Could not save game to {filename}.json. {type(e).__name__}\n")
+    else:
+        logger.info("Save game cancelled by user.")
         if game_play_frame:
-            game_play_frame.add_narration("Game Saved.\n")
-    except Exception as e:
-        logger.error(f"Error saving game: {e}", exc_info=True)
-        if game_play_frame:
-            game_play_frame.add_narration(f"Error: Could not save game. {type(e).__name__}\n")
+            game_play_frame.add_narration("Save cancelled.\n")
 
 def handle_load_game(): # This is the in-game load game button callback
     global game_state_manager, game_play_frame # SAVE_GAME_FILENAME removed from globals
@@ -188,19 +257,14 @@ def handle_load_game(): # This is the in-game load game button callback
         if game_play_frame: 
             game_play_frame.add_narration("Error: Could not load game (GameState not ready).\n")
         return
-    try:
-        game_state_manager.load_game(config.SAVE_GAME_FILENAME) # Use config.SAVE_GAME_FILENAME
-        # If game_play_frame exists and is the current view, update it.
-        if game_play_frame and current_frame == game_play_frame:
-             update_ui_game_state() 
-        logger.info("Game loaded via UI button.")
-        if game_play_frame: 
-            game_play_frame.add_narration("Game Loaded from in-game button. Narrative might be out of sync.\n")
-    except Exception as e:
-        logger.error(f"Error loading game from in-game button: {e}", exc_info=True)
-        if game_play_frame: 
-            game_play_frame.add_narration(f"Error: Could not load game. {type(e).__name__}\n")
 
+    # Removed direct load logic from in-game button
+    logger.info("In-game load button clicked. Directed user to Main Menu for loading.")
+    if game_play_frame:
+        game_play_frame.add_narration(
+            "To load a specific save file, please use the 'Load Saved Game' option from the Main Menu.\n"
+            "Progress since your last explicit save might be lost if you load from Main Menu without saving now.\n"
+        )
 
 def handle_exit_game_via_game_play_ui(): 
     global game_state_manager, game_play_frame, root_tk_window # SAVE_GAME_FILENAME removed from globals
@@ -226,7 +290,9 @@ def update_ui_game_state():
     player = game_state_manager.get_player(MAIN_PLAYER_ID)
     if player:
         # HP
-        game_play_frame.update_hp(player.stats.get('hp', 'N/A'))
+        # Corrected to access hit_points directly as 'stats' attribute doesn't exist
+        hp_current = player.hit_points.get('current', 'N/A') if player.hit_points else 'N/A'
+        game_play_frame.update_hp(str(hp_current)) # Ensure it's a string for UI
 
         # Location
         loc_name = "Unknown"
@@ -469,7 +535,7 @@ if __name__ == "__main__":
             root_tk_window.destroy()
 
     # Instantiate Frames
-    global main_menu_frame, settings_frame 
+    # global main_menu_frame, settings_frame # Removed incorrect global statement
     main_menu_frame = MainMenuFrame(root_tk_window,
                                    start_new_game, 
                                    load_existing_game, # Actual function for Load Game

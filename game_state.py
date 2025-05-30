@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -491,6 +492,9 @@ class GameState:
     def save_game(self, filepath: str):
         try:
             data = self.to_dict()
+            save_dir = os.path.dirname(filepath)
+            if save_dir:
+                os.makedirs(save_dir, exist_ok=True)
             with open(filepath, 'w') as f:
                 json.dump(data, f, indent=4)
             logger.info(f"Game saved successfully to {filepath}")
