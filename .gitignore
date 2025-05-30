@@ -5,4 +5,4 @@ __pycache__/
 .DS_Store
 chroma_db/
 *.log
-save_game.json
+Save/
