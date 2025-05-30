@@ -775,7 +775,45 @@ class GameState:
             if default_loc1_id in self.locations and default_npc_id not in self.locations[default_loc1_id].npcs:
                 self.locations[default_loc1_id].npcs.append(default_npc_id)
                 logger.info(f"Placed default NPC {default_npc_id} in default location {default_loc1_id}.")
-        
+
+        # Create "Bob the Bartender" NPC
+        bob_bartender_id = "npc_bartender_001"
+        if bob_bartender_id not in self.npcs: # Only create if not existing
+            bob_dialogue = {
+                "greetings": [
+                    "Welcome to the Prancing Pony! What can I get for ya?",
+                    "Well met, traveler! Pull up a stool.",
+                    "Need a drink or perhaps some local news?"
+                ],
+                "local_rumors": [
+                    "I've heard whispers of strange lights up on Weathertop hill...",
+                    "Some say old Farmer Giles found a peculiar ring in his fields."
+                ]
+            }
+            bob_bartender = NPC(
+                id=bob_bartender_id,
+                name="Bob the Bartender",
+                current_location=default_loc1_id, # Place Bob in the default start location
+                description="A jolly-looking bartender with a friendly smile, always ready to chat or offer a drink.",
+                lore_fragments=[
+                    "Bob has worked at the Prancing Pony Inn for twenty years.",
+                    "He claims to make the best ale in the region."
+                ],
+                dialogue_responses=bob_dialogue,
+                status="neutral",
+                hp=50
+            )
+            self.npcs[bob_bartender.id] = bob_bartender
+            logger.info(f"Created default NPC: {bob_bartender.id} ({bob_bartender.name}).")
+
+            # Add Bob to the default start location's NPC list
+            if default_loc1_id in self.locations:
+                if bob_bartender.id not in self.locations[default_loc1_id].npcs:
+                    self.locations[default_loc1_id].npcs.append(bob_bartender.id)
+                    logger.info(f"Placed default NPC {bob_bartender.id} in default location {default_loc1_id}.")
+            else:
+                logger.warning(f"Default start location {default_loc1_id} not found when trying to place {bob_bartender.id}.")
+
         # Set turn count and world variables
         self.turn_count = 0
         self.world_variables = {'time_of_day': 'noon', 'weather': 'clear'} # These can be generic

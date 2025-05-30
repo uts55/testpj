@@ -1,0 +1,26 @@
+[
+  {
+    "id": "npc_bartender_001",
+    "name": "Bob the Bartender",
+    "type": "npc",
+    "hp": 50,
+    "current_location": "default_start_location",
+    "description": "A jolly-looking bartender with a friendly smile, always ready to chat or offer a drink.",
+    "lore_fragments": [
+      "Bob has worked at the Prancing Pony Inn for twenty years.",
+      "He claims to make the best ale in the region."
+    ],
+    "dialogue_responses": {
+      "greetings": [
+        "Welcome to the Prancing Pony! What can I get for ya?",
+        "Well met, traveler! Pull up a stool.",
+        "Need a drink or perhaps some local news?"
+      ],
+      "local_rumors": [
+        "I've heard whispers of strange lights up on Weathertop hill...",
+        "Some say old Farmer Giles found a peculiar ring in his fields."
+      ]
+    },
+    "status": "neutral"
+  }
+]

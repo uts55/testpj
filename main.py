@@ -493,7 +493,77 @@ def process_player_input(player_input_text):
 
     player_for_action = game_state_manager.get_player(MAIN_PLAYER_ID) if game_state_manager else None
     if player_for_action:
-        if player_input_text.lower().startswith("go "):
+        # --- Talk to NPC Command ---
+        if player_input_text.lower().startswith("talk to "):
+            command_parts = player_input_text.split(" ", 2) # talk to <NPC NAME>
+            if len(command_parts) > 2 and command_parts[2].strip():
+                npc_name_to_find = command_parts[2].strip()
+                player = game_state_manager.get_player(MAIN_PLAYER_ID)
+
+                if player and player.current_location:
+                    npcs_in_location = game_state_manager.get_npcs_in_location(player.current_location)
+                    npc_target = None
+                    for npc_obj in npcs_in_location:
+                        if npc_obj.name.lower() == npc_name_to_find.lower():
+                            npc_target = npc_obj
+                            break
+
+                    if npc_target:
+                        logger.info(f"Player intends to talk to NPC: {npc_target.name}")
+
+                        # --- NPC Dialogue Handling ---
+                        dialogue_to_show = None
+                        dialogue_responses = npc_target.dialogue_responses
+
+                        if isinstance(dialogue_responses, dict):
+                            greeting_key_found = None
+                            if "greetings" in dialogue_responses:
+                                greeting_key_found = "greetings"
+                            elif "greeting" in dialogue_responses: # Fallback to "greeting"
+                                greeting_key_found = "greeting"
+
+                            if greeting_key_found and \
+                               isinstance(dialogue_responses[greeting_key_found], list) and \
+                               dialogue_responses[greeting_key_found]:
+                                selected_dialogue = dialogue_responses[greeting_key_found][0]
+                                dialogue_to_show = f"{npc_target.name} says: \"{selected_dialogue}\"\n"
+
+                        if game_play_frame:
+                            if dialogue_to_show:
+                                game_play_frame.add_narration(dialogue_to_show)
+                            else:
+                                game_play_frame.add_narration(f"{npc_target.name} nods at you but doesn't say much.\n")
+                        # --- End NPC Dialogue Handling ---
+
+                        # This command is handled locally, does not go to DM/API yet. Re-enable input.
+                        if game_play_frame:
+                            game_play_frame.input_entry.config(state='normal')
+                            game_play_frame.send_button.config(state='normal')
+                        return # Crucial: prevent fall-through to API call
+                    else:
+                        if game_play_frame:
+                            game_play_frame.add_narration(f"You don't see anyone named '{npc_name_to_find}' here.\n")
+                        if game_play_frame: # Re-enable input
+                            game_play_frame.input_entry.config(state='normal')
+                            game_play_frame.send_button.config(state='normal')
+                        return
+                else:
+                    logger.warning("Player or player location not found for 'talk to' command.")
+                    if game_play_frame:
+                        game_play_frame.add_narration("Cannot process 'talk to' command: critical player data missing.\n")
+                    if game_play_frame: # Re-enable input
+                        game_play_frame.input_entry.config(state='normal')
+                        game_play_frame.send_button.config(state='normal')
+                    return
+            else: # "talk to" but no NPC name
+                if game_play_frame:
+                    game_play_frame.add_narration("Who do you want to talk to? (e.g., talk to Old Villager)\n")
+                if game_play_frame: # Re-enable input
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return
+
+        elif player_input_text.lower().startswith("go "):
             direction = player_input_text.lower().split(" ", 1)[1]
             if player_for_action.current_location:
                 current_loc_obj = game_state_manager.locations.get(player_for_action.current_location)
@@ -516,9 +586,15 @@ def process_player_input(player_input_text):
             else:
                 if game_play_frame: game_play_frame.add_narration(f"You already have the {game_state_manager.items[SWORD_ID].name}.\n")
         
-        update_ui_game_state() 
+        update_ui_game_state()
+        # NOTE: The 'go' command and others below might also need to re-enable input if they don't use the thread.
+        # For now, only 'talk to', 'attack', 'roll', 'use' explicitly handle input re-enabling or use the thread.
+        # The 'go' and 'take sword' commands are quick and update UI, then fall through to the threaded call.
+        # This might be okay, or they might need their own input re-enable and return if they shouldn't go to DM.
+        # Let's assume for now they are meant to potentially have DM follow-up.
 
     # --- Attack Command ---
+    # This existing command already handles its own input re-enabling or calls the thread.
     elif player_input_text.lower().startswith("attack "):
         parts = player_input_text.split(" ", 1)
         if len(parts) > 1:
@@ -655,8 +731,84 @@ def process_player_input(player_input_text):
                 game_play_frame.input_entry.config(state='normal')
                 game_play_frame.send_button.config(state='normal')
             return
+    # --- Roll Command ---
+    # This existing command already handles its own input re-enabling or calls the thread.
+    elif player_input_text.lower().startswith("roll "):
+        command_part = player_input_text.lower().split(" ", 1)[1].strip() # e.g., "d20" or "1d20"
+
+        num_dice = 1 # Currently supporting 1 die
+        sides = 0
+
+        # Simple parsing for "d<N>" or "1d<N>"
+        if command_part.startswith('d'):
+            try:
+                sides = int(command_part[1:])
+            except ValueError:
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Use 'd<number>', e.g., 'roll d20'.\n")
+                if game_play_frame: # Re-enable input
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return
+        elif 'd' in command_part:
+            parts = command_part.split('d')
+            if len(parts) == 2:
+                try:
+                    # For now, only support 1dX, parts[0] should be '1' or empty
+                    if parts[0] == '' or parts[0] == '1':
+                        sides = int(parts[1])
+                    else:
+                        if game_play_frame:
+                            game_play_frame.add_narration(f"Unsupported dice format: '{command_part}'. Try 'd<number>' or '1d<number>'.\n")
+                        if game_play_frame: # Re-enable input
+                            game_play_frame.input_entry.config(state='normal')
+                            game_play_frame.send_button.config(state='normal')
+                        return
+                except ValueError:
+                    if game_play_frame:
+                        game_play_frame.add_narration(f"Invalid dice numbers: '{command_part}'.\n")
+                    if game_play_frame: # Re-enable input
+                        game_play_frame.input_entry.config(state='normal')
+                        game_play_frame.send_button.config(state='normal')
+                    return
+            else: # Invalid format like "d" or "d20d"
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'.\n")
+                if game_play_frame: # Re-enable input
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return
+        else: # No 'd' found, e.g. "roll 20"
+            if game_play_frame:
+                game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Did you mean 'd{command_part}'?\n")
+            if game_play_frame: # Re-enable input
+                game_play_frame.input_entry.config(state='normal')
+                game_play_frame.send_button.config(state='normal')
+            return
+
+        if sides > 0:
+            roll_result = roll_dice(sides)
+            player_feedback = f"You roll a d{sides} and get: {roll_result}.\n"
+            if game_play_frame:
+                game_play_frame.add_narration(player_feedback)
+
+            player = game_state_manager.get_player(MAIN_PLAYER_ID) # Get player for name
+            player_name = player.name if player else "Player"
+            text_for_dm = f"{player_name} rolls a d{sides} for an action, getting a {roll_result}."
+
+            thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(text_for_dm,))
+            thread.start()
+            return # Dice roll handled
+        else: # Fallback, should be caught by parsing
+            if game_play_frame:
+                game_play_frame.add_narration(f"Could not determine the type of dice to roll from '{command_part}'.\n")
+            if game_play_frame: # Re-enable input
+                game_play_frame.input_entry.config(state='normal')
+                game_play_frame.send_button.config(state='normal')
+            return
 
     # --- Use Skill Command ---
+    # This existing command already handles its own input re-enabling or calls the thread.
     elif player_input_text.lower().startswith("use "):
         parts = player_input_text.split(" ", 1)
         if len(parts) > 1:
@@ -717,10 +869,13 @@ def process_player_input(player_input_text):
                 game_play_frame.send_button.config(state='normal')
             return
 
-    # If we reach here, no specific local command was fully handled and returned.
-    # So, pass the original player_input_text to the DM.
-    thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(player_input_text,))
-    thread.start()
+    # If we reach here, no specific local command was fully handled and returned (and explicitly returned).
+    # So, pass the original player_input_text to the DM via the threaded call.
+    # The input field and send button will be re-enabled in the finally block of threaded_api_call_and_ui_updates.
+    else:
+        logger.info(f"Input '{player_input_text}' not handled by specific local commands, sending to threaded API call.")
+        thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(player_input_text,))
+        thread.start()
 
 
 if __name__ == "__main__":
