@@ -1,4 +1,5 @@
 # utils.py
+import random
 
 # Mapping of skills to their primary ability scores
 SKILL_ABILITY_MAP = {
@@ -35,3 +36,17 @@ ABILITY_ABBREVIATIONS = {
     "wisdom": "WIS",
     "charisma": "CHA",
 }
+
+def roll_dice(sides: int) -> int:
+    """
+    Simulates rolling a single die with a given number of sides.
+    Args:
+        sides: The number of sides on the die (e.g., 6 for a d6, 20 for a d20).
+    Returns:
+        A random integer between 1 and `sides` (inclusive).
+    Raises:
+        ValueError: if sides is less than 1.
+    """
+    if sides < 1:
+        raise ValueError("Number of sides must be at least 1.")
+    return random.randint(1, sides)
