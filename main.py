@@ -588,6 +588,67 @@ def process_player_input(player_input_text):
                 game_play_frame.send_button.config(state='normal')
             return
 
+    # --- Use Skill Command ---
+    elif player_input_text.lower().startswith("use "):
+        parts = player_input_text.split(" ", 1)
+        if len(parts) > 1:
+            skill_name = parts[1].strip()
+            if not skill_name:
+                if game_play_frame:
+                    game_play_frame.add_narration("Please specify a skill to use. e.g., 'use investigation'\n")
+                if game_play_frame: # Re-enable input if needed (though thread does it)
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return # Exit this processing path
+
+            player = game_state_manager.get_player(MAIN_PLAYER_ID)
+            if not player:
+                logger.error(f"Player {MAIN_PLAYER_ID} not found to use skill.")
+                if game_play_frame:
+                    game_play_frame.add_narration("Error: Current player not found.\n")
+                if game_play_frame:
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return # Exit
+
+            skill_result = player.use_skill(skill_name)
+
+            if "error" in skill_result:
+                error_message = skill_result.get('description', skill_result.get('error', 'Unknown skill error.'))
+                logger.warning(f"Skill use error for {skill_name} by {player.name}: {error_message}")
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Error using skill: {error_message}\n")
+                # Input re-enabled by finally block of threaded_api_call_and_ui_updates if we were to call it
+                # For direct error feedback without DM call, re-enable here if not calling thread.
+                if game_play_frame:
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return # Exit this processing path
+            else:
+                roll_description = skill_result.get('description', f"Attempted {skill_name}.")
+                logger.info(f"Player {player.name} used skill {skill_name}. Result: {roll_description}")
+                if game_play_frame:
+                    game_play_frame.add_narration(f"You attempt to use {skill_name}...\n{roll_description}\n")
+
+                # Construct prompt for Gemini DM
+                dm_prompt = (
+                    f"My character, {player.name}, attempts to use the skill '{skill_result['skill']}'. "
+                    f"The character's action and roll result is: '{skill_result['description']}'. "
+                    f"Describe what happens next. Does the character succeed? What information do they gather or what is the outcome of their action?"
+                )
+
+                # Call the threaded API function to send this to the DM
+                thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(dm_prompt,))
+                thread.start()
+                return # Skill use action sent to DM
+        else:
+            if game_play_frame:
+                game_play_frame.add_narration("Please specify a skill. e.g., 'use investigation'\n")
+            if game_play_frame: # Re-enable input
+                game_play_frame.input_entry.config(state='normal')
+                game_play_frame.send_button.config(state='normal')
+            return
+
     # If we reach here, no specific local command was fully handled and returned.
     # So, pass the original player_input_text to the DM.
     thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(player_input_text,))
