@@ -3,6 +3,7 @@ import logging
 import os
 import random # Add this
 from utils import SKILL_ABILITY_MAP, PROFICIENCY_BONUS # Add this
+from quests import Quest, ALL_QUESTS # Add this
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ class Player:
                  proficiencies: dict = None, feats: list = None, background: str = None,
                  alignment: str = None, personality_traits: list = None, ideals: list = None,
                  bonds: list = None, flaws: list = None, notes: str = None,
-                 active_quests: list = None, completed_quests: list = None):
+                 active_quests: list = None, completed_quests: list = None,
+                 quest_status: dict[str, str] = None, quest_progress: dict[str, dict] = None): # Modified
         self.id = id
         self.name = name
         self.inventory = inventory if inventory is not None else []  # List of item IDs
@@ -75,8 +77,16 @@ class Player:
         self.notes = notes
         self.active_quests = active_quests if active_quests is not None else []
         self.completed_quests = completed_quests if completed_quests is not None else []
+        self.quest_status = quest_status if quest_status is not None else {} # Added
+        self.quest_progress = quest_progress if quest_progress is not None else {} # Added
 
     def to_dict(self) -> dict:
+        serializable_quest_progress = {} # Added
+        for q_id, prog_data_dict in self.quest_progress.items(): # Added
+            serializable_quest_progress[q_id] = { # Added
+                'objectives': list(prog_data_dict.get('objectives', [])), # Added
+                'completed_objectives': list(prog_data_dict.get('completed_objectives', set())) # Added
+            } # Added
         return {
             'id': self.id,
             'name': self.name,
@@ -104,6 +114,8 @@ class Player:
             'notes': self.notes,
             'active_quests': self.active_quests,
             'completed_quests': self.completed_quests,
+            'quest_status': self.quest_status, # Added
+            'quest_progress': serializable_quest_progress, # Added
         }
 
     @classmethod
@@ -113,6 +125,14 @@ class Player:
         equipment_data = data.get('equipment', {})
         if 'currency' not in equipment_data or not isinstance(equipment_data.get('currency'), dict):
             equipment_data['currency'] = {"gold": 0, "silver": 0, "copper": 0}
+
+        raw_quest_progress = data.get('quest_progress', {}) # Added
+        final_quest_progress = {} # Added
+        for qid, prog_data_dict in raw_quest_progress.items(): # Added
+            final_quest_progress[qid] = { # Added
+                'objectives': list(prog_data_dict.get('objectives', [])), # Added
+                'completed_objectives': set(prog_data_dict.get('completed_objectives', [])) # Added
+            } # Added
 
         return cls(
             id=data['id'],
@@ -140,7 +160,9 @@ class Player:
             flaws=data.get('flaws', []),
             notes=data.get('notes'),
             active_quests=data.get('active_quests', []),
-            completed_quests=data.get('completed_quests', [])
+            completed_quests=data.get('completed_quests', []),
+            quest_status=data.get('quest_status', {}), # Added
+            quest_progress=final_quest_progress # Added
         )
 
     def take_damage(self, amount: int):
@@ -339,8 +361,63 @@ class GameState:
         self.npcs: dict[str, NPC] = {}
         self.locations: dict[str, Location] = {}
         self.items: dict[str, Item] = {} # Master list of all items
+        self.quests: dict[str, Quest] = {} # Added
         self.world_variables: dict = {}
         self.turn_count: int = 0
+
+    def load_quests(self, quests_data: dict[str, Quest]): # Added
+        self.quests = quests_data # Added
+        logger.info("Quests loaded into game state.") # Added
+
+    def get_quest(self, quest_id: str) -> Quest | None: # Added
+        return self.quests.get(quest_id) # Added
+
+    def accept_quest(self, player_id: str, quest_id: str) -> bool: # Added
+        player = self.get_player(player_id) # Added
+        if not player: logger.error(f"Player {player_id} not found."); return False # Added
+        quest = self.get_quest(quest_id) # Added
+        if not quest: logger.error(f"Quest {quest_id} not found."); return False # Added
+        if quest_id in player.active_quests or quest_id in player.completed_quests: logger.info(f"Quest {quest_id} already handled for player {player_id}."); return False # Added
+        player.active_quests.append(quest_id) # Added
+        player.quest_status[quest_id] = quest.status_descriptions.get('accepted', 'accepted') # Added
+        player.quest_progress[quest_id] = {'objectives': list(quest.objectives), 'completed_objectives': set()} # Added
+        logger.info(f"Player {player_id} accepted quest {quest_id}.") # Added
+        return True # Added
+
+    def advance_quest_objective(self, player_id: str, quest_id: str, objective_description: str) -> bool: # Added
+        player = self.get_player(player_id) # Added
+        if not player: logger.error(f"Player {player_id} not found."); return False # Added
+        quest = self.get_quest(quest_id) # Added
+        if not quest: logger.error(f"Quest {quest_id} not found."); return False # Added
+        if quest_id not in player.active_quests: logger.warning(f"Quest {quest_id} not active for player {player_id}."); return False # Added
+        if quest_id not in player.quest_progress: logger.error(f"Quest progress for {quest_id} not found for player {player_id}."); return False # Added
+        progress_data = player.quest_progress[quest_id] # Added
+        if objective_description in progress_data.get('objectives', []) and objective_description not in progress_data.get('completed_objectives', set()): # Added
+            progress_data['completed_objectives'].add(objective_description) # Added
+            logger.info(f"Player {player_id} advanced objective '{objective_description}' for quest {quest_id}.") # Added
+            # Optional: Update player.quest_status[quest_id] based on objective completion if specific status exists in quest.status_descriptions # Added
+            return True # Added
+        else: logger.warning(f"Objective '{objective_description}' for quest {quest_id} not advanceable for player {player_id}."); return False # Added
+
+    def complete_quest(self, player_id: str, quest_id: str) -> bool: # Added
+        player = self.get_player(player_id) # Added
+        if not player: logger.error(f"Player {player_id} not found."); return False # Added
+        quest = self.get_quest(quest_id) # Added
+        if not quest: logger.error(f"Quest {quest_id} not found."); return False # Added
+        if quest_id not in player.active_quests: logger.warning(f"Quest {quest_id} not active for player {player_id} to complete."); return False # Added
+        if quest_id not in player.quest_progress: logger.error(f"Quest progress for {quest_id} not found for player {player_id}."); return False # Added
+        progress_data = player.quest_progress[quest_id] # Added
+        if set(progress_data.get('objectives', [])) == progress_data.get('completed_objectives', set()): # Added
+            player.active_quests.remove(quest_id) # Added
+            player.completed_quests.append(quest_id) # Added
+            player.quest_status[quest_id] = quest.status_descriptions.get('completed', 'completed') # Added
+            xp_reward = quest.rewards.get('xp', 0) # Added
+            if xp_reward > 0: player.change_experience_points(xp_reward) # Added
+            for item_id in quest.rewards.get('items', []): player.add_item_to_inventory(item_id) # Added
+            for currency_type, amount in quest.rewards.get('currency', {}).items(): player.update_currency(currency_type, amount) # Added
+            logger.info(f"Player {player_id} completed quest {quest_id} and received rewards.") # Added
+            return True # Added
+        else: logger.info(f"Player {player_id} attempt to complete quest {quest_id} failed: objectives not met."); return False # Added
 
     def get_player(self, player_id: str) -> Player | None:
         return self.players.get(player_id)
@@ -431,6 +508,7 @@ class GameState:
 
             self.world_variables = data.get('world_variables', {})
             self.turn_count = data.get('turn_count', 0)
+            self.load_quests(ALL_QUESTS) # Added
             logger.info(f"Game loaded successfully from {filepath}")
 
         except FileNotFoundError:
@@ -482,7 +560,9 @@ class GameState:
             flaws=[],
             notes="",
             active_quests=[],
-            completed_quests=[]
+            completed_quests=[],
+            quest_status={}, # Added
+            quest_progress={} # Added
         )
         self.players[main_player_id] = main_player
         logger.info(f"Created player {default_player_name} ({main_player_id}).")
@@ -542,7 +622,7 @@ class GameState:
         self.turn_count = 0
         self.world_variables = {'time_of_day': 'noon', 'weather': 'clear'}
         logger.info("Turn count set to 0. World variables initialized.")
-        
+        self.load_quests(ALL_QUESTS) # Added
         logger.info("New game initialization complete.")
 
 
