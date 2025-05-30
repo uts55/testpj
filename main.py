@@ -35,6 +35,7 @@ DEFAULT_START_LOCATION_ID = "default_start_location"
 
 # Global variables for UI frames and managers
 # app_ui is now game_play_frame
+selected_scenario_cache = {} # Cache for scenario selection dialog
 game_play_frame = None # Will hold the GamePlayFrame instance
 main_menu_frame = None
 settings_frame = None
@@ -54,16 +55,84 @@ def show_frame(frame_instance):
     current_frame = frame_instance
     current_frame.pack(fill=tk.BOTH, expand=True) # Or grid()
 
+
+# --- Scenario Selection Dialog ---
+def select_scenario_dialog(parent_window) -> dict | None:
+    global selected_scenario_cache
+    dialog = Toplevel(parent_window)
+    dialog.title("Select a Scenario")
+    dialog.geometry("400x300")
+    dialog.transient(parent_window)
+    dialog.grab_set()
+
+    scenarios = config.PRESET_SCENARIOS
+    selected_scenario_cache['result'] = None # Reset or initialize
+
+    listbox_frame = tk.Frame(dialog)
+    listbox_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+    scrollbar = Scrollbar(listbox_frame, orient=tk.VERTICAL)
+    listbox = Listbox(listbox_frame, yscrollcommand=scrollbar.set, exportselection=False)
+    scrollbar.config(command=listbox.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    for scenario in scenarios:
+        listbox.insert(tk.END, scenario['name'])
+
+    def on_start():
+        selected_indices = listbox.curselection()
+        if not selected_indices:
+            messagebox.showwarning("No Selection", "Please select a scenario to start.", parent=dialog)
+            return
+        selected_scenario_cache['result'] = scenarios[selected_indices[0]]
+        dialog.destroy()
+
+    def on_cancel():
+        selected_scenario_cache['result'] = None
+        dialog.destroy()
+
+    dialog.protocol("WM_DELETE_WINDOW", on_cancel) # Handle window close button
+
+    button_frame = tk.Frame(dialog)
+    button_frame.pack(pady=5, padx=10, fill=tk.X)
+
+    start_button = Button(button_frame, text="Start Game", command=on_start)
+    start_button.pack(side=tk.LEFT, expand=True, padx=5)
+
+    cancel_button = Button(button_frame, text="Cancel", command=on_cancel)
+    cancel_button.pack(side=tk.RIGHT, expand=True, padx=5)
+
+    parent_window.wait_window(dialog) # Wait for dialog to close
+    return selected_scenario_cache.get('result')
+
+
 # --- Game Flow Functions ---
 def start_new_game():
-    global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID, DEFAULT_START_LOCATION_ID
-    logger.info("Starting a new game...")
+    global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID, DEFAULT_START_LOCATION_ID, selected_scenario_cache
+    logger.info("Attempting to start a new game...")
+
+    selected_scenario = select_scenario_dialog(root_tk_window)
+
+    if selected_scenario is None:
+        logger.info("Scenario selection cancelled or closed. New game start aborted.")
+        # No message to user needed here, as they actively cancelled.
+        return
+
+    logger.info(f"Scenario selected: {selected_scenario['name']}")
 
     if game_state_manager:
-        game_state_manager.initialize_new_game(MAIN_PLAYER_ID, "Adventurer", DEFAULT_START_LOCATION_ID)
+        # Pass DEFAULT_START_LOCATION_ID as the third positional argument for the default world setup part
+        # scenario_data will be used for player start and specific scenario elements
+        game_state_manager.initialize_new_game(
+            MAIN_PLAYER_ID,
+            "Adventurer", # Default player name, could also be scenario driven in future
+            DEFAULT_START_LOCATION_ID, # For default location generation
+            scenario_data=selected_scenario
+        )
     else:
         logger.error("GameStateManager not initialized. Cannot start new game.")
-        # Optionally, inform the user via a dialog or main menu message update
+        messagebox.showerror("Error", "GameStateManager not ready. Cannot start new game.", parent=root_tk_window)
         return
 
     if dialogue_manager:
@@ -73,8 +142,6 @@ def start_new_game():
         logger.error("DialogueManager not initialized. Cannot clear history.")
         # This is problematic for game consistency.
 
-    # Instantiate or re-initialize GamePlayFrame
-    # For simplicity, destroying and recreating if it exists.
     if game_play_frame:
         game_play_frame.destroy() 
         logger.info("Previous GamePlayFrame instance destroyed.")
@@ -83,7 +150,7 @@ def start_new_game():
         master=root_tk_window,
         process_input_callback=process_player_input,
         save_game_callback=handle_save_game,
-        load_game_callback=handle_load_game, # This callback might need adjustment if called from gameplay
+        load_game_callback=handle_load_game,
         exit_callback=handle_exit_game_via_game_play_ui
     )
     logger.info("New GamePlayFrame instance created.")
@@ -91,26 +158,27 @@ def start_new_game():
     show_frame(game_play_frame)
     logger.info("Switched to GamePlayFrame.")
 
-    # Send initial prompt to DM
-    initial_dm_response = "Welcome to your new adventure!" # Default
+    # Send initial prompt to DM using scenario's initial prompt
+    initial_dm_response = "Welcome to your adventure!" # Fallback
     try:
         if dialogue_manager:
-            initial_dm_response = dialogue_manager.send_message(config.INITIAL_PROMPT_TEXT)
-            if not initial_dm_response: # Handle empty response case
-                 initial_dm_response = "The adventure begins in silence... (DM sent an empty opening)"
-                 logger.warning("Initial DM response was empty.")
+            prompt_to_send = selected_scenario['initial_prompt']
+            initial_dm_response = dialogue_manager.send_message(prompt_to_send)
+            if not initial_dm_response:
+                 initial_dm_response = "The adventure begins in silence... (DM sent an empty opening for the scenario)"
+                 logger.warning(f"Initial DM response for scenario '{selected_scenario['name']}' was empty.")
         else:
-            logger.error("Dialogue manager not available for initial prompt.")
-            initial_dm_response = "Error: Dialogue Manager not available. Cannot start the game."
+            logger.error("Dialogue manager not available for initial scenario prompt.")
+            initial_dm_response = "Error: Dialogue Manager not available. Cannot start the game with scenario prompt."
     except Exception as e:
-        logger.error(f"Error sending initial prompt: {e}", exc_info=True)
-        initial_dm_response = f"Error: Could not get initial message from DM. {type(e).__name__}"
+        logger.error(f"Error sending initial scenario prompt: {e}", exc_info=True)
+        initial_dm_response = f"Error: Could not get initial message from DM for scenario. {type(e).__name__}"
 
     if game_play_frame:
         game_play_frame.add_narration(initial_dm_response + "\n")
     
-    update_ui_game_state() # Update HP, location, etc.
-    logger.info("Initial game state UI updated.")
+    update_ui_game_state()
+    logger.info("Initial game state UI updated for the new game with scenario.")
 
 def load_existing_game():
     global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID

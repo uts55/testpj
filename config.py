@@ -37,4 +37,27 @@ SAVE_GAME_FILENAME = "autosave.json"
 
 # Other
 INITIAL_PROMPT_TEXT = "당신은 Dungeons & Dragons 5판 게임의 숙련된 던전 마스터입니다. 플레이어의 첫 행동을 기다리는 상황을 가정하고, 모험의 시작을 알리는 흥미로운 도입부를 묘사해주세요."
+
+PRESET_SCENARIOS = [
+    {
+        "id": "goblin_cave_escape",
+        "name": "Escape from the Goblin Cave",
+        "initial_prompt": "You awaken in a damp, dark cave, the stench of goblins filling your nostrils. Your head throbs, and you have no memory of how you got here. A rusty dagger lies beside you. Find a way out!",
+        "start_location_id": "goblin_cave_entrance",
+        "player_start_setup": {"items": ["rusty_dagger_001"], "hp_modifier": -2}
+    },
+    {
+        "id": "haunted_mansion_investigation",
+        "name": "The Haunted Mansion",
+        "initial_prompt": "The villagers have spoken of strange noises and ghostly apparitions emanating from the old Blackwood Manor. You've been hired to investigate. You stand before its imposing, creaky gates as dusk settles.",
+        "start_location_id": "blackwood_manor_gates"
+    },
+    {
+        "id": "default_adventure_start",
+        "name": "A Standard Adventure Start",
+        "initial_prompt": INITIAL_PROMPT_TEXT,
+        "start_location_id": "default_start_location"
+    }
+]
+
 USER_EXIT_COMMANDS = ["그만", "종료", "exit"]
