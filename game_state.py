@@ -518,8 +518,55 @@ class GameState:
         except Exception as e: 
             logger.error(f"An unexpected error occurred while loading the game from {filepath}. Error: {e}", exc_info=True)
 
-    def initialize_new_game(self, main_player_id: str, default_player_name: str, start_location_id: str):
-        logger.info(f"Initializing new game with player ID {main_player_id} at {start_location_id}.")
+    def _ensure_location_exists(self, location_id: str, location_name: str = None, description: str = None):
+        if location_id not in self.locations:
+            self.locations[location_id] = Location(
+                id=location_id,
+                name=location_name or location_id.replace('_', ' ').title(),
+                description=description or f"A location: {location_id.replace('_', ' ').title()}.",
+                exits={},
+                items=[],
+                npcs=[]
+            )
+            logger.info(f"Created placeholder location: {location_id}")
+            return True # Indicates location was created
+        return False # Indicates location already existed
+
+    def _ensure_item_exists(self, item_id: str, item_name: str = None, description: str = None):
+        if item_id not in self.items:
+            self.items[item_id] = Item(
+                id=item_id,
+                name=item_name or item_id.replace('_', ' ').title(),
+                description=description or "A scenario starting item."
+            )
+            logger.info(f"Created placeholder item: {item_id}")
+            return True # Indicates item was created
+        return False # Indicates item already existed
+
+    def initialize_new_game(self, main_player_id: str, default_player_name: str,
+                            start_location_id: str, scenario_data: dict = None): # Modified signature
+
+        effective_start_location_id = start_location_id
+        player_initial_inventory = []
+        player_hp_modifier = 0
+
+        if scenario_data:
+            logger.info(f"Initializing new game with scenario: {scenario_data.get('name', 'Unnamed Scenario')}")
+            effective_start_location_id = scenario_data['start_location_id']
+
+            # Ensure scenario start location exists
+            self._ensure_location_exists(effective_start_location_id, scenario_data.get('name', effective_start_location_id)) # Use scenario name for location if available
+
+            # Handle player_start_setup if present
+            player_setup = scenario_data.get('player_start_setup', {})
+            if 'items' in player_setup:
+                for item_id in player_setup['items']:
+                    self._ensure_item_exists(item_id) # Create placeholder if not existing
+                    player_initial_inventory.append(item_id)
+            if 'hp_modifier' in player_setup:
+                player_hp_modifier = player_setup['hp_modifier']
+        else:
+            logger.info(f"Initializing new game with default settings for player ID {main_player_id} at {start_location_id}.")
 
         # Clear existing game data
         self.players.clear()
@@ -532,17 +579,17 @@ class GameState:
         main_player = Player(
             id=main_player_id,
             name=default_player_name,
-            inventory=[],
+            inventory=player_initial_inventory, # Use potentially scenario-defined inventory
             skills=['basic_attack'],
             knowledge_fragments=[],
-            current_location=start_location_id,
+            current_location=effective_start_location_id, # Use scenario or default start location
             # Default values for new Player attributes
             player_class="Adventurer", 
             level=1, 
             experience_points=0,
             ability_scores={"strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10},
             combat_stats={"armor_class": 10, "initiative_bonus": 0, "speed": 30},
-            hit_points={"current": 10, "maximum": 10, "temporary": 0},
+            hit_points={"current": 10, "maximum": 10, "temporary": 0}, # HP modifier applied after this
             spell_slots={},
             equipment={
                 "weapon": None, "armor": None, "shield": None, "helmet": None,
@@ -565,66 +612,76 @@ class GameState:
             quest_progress={} # Added
         )
         self.players[main_player_id] = main_player
-        logger.info(f"Created player {default_player_name} ({main_player_id}).")
 
-        # Create locations
-        loc1_id = start_location_id
-        loc2_id = "north_road"
+        # Apply HP modifier if any
+        if player_hp_modifier != 0:
+            main_player.hit_points['current'] += player_hp_modifier
+            if main_player.hit_points['current'] < 1:
+                main_player.hit_points['current'] = 1 # Ensure HP doesn't go below 1
+            if main_player.hit_points['current'] > main_player.hit_points['maximum']: # Also ensure current HP does not exceed max due to modifier
+                main_player.hit_points['current'] = main_player.hit_points['maximum']
 
-        location1 = Location(id=loc1_id,
-                             name="Village Square",
-                             description="The center of a quiet village. Paths lead in several directions.",
-                             exits={'north': loc2_id},
-                             items=[],
-                             npcs=[])
+        logger.info(f"Created player {default_player_name} ({main_player_id}) at {effective_start_location_id} with HP {main_player.hit_points['current']}.")
+
+        # --- Default Content Creation (runs for both scenario and default game) ---
+        # This section populates the world with some baseline content.
+        # Scenarios can override or exist alongside this.
         
-        location2 = Location(id=loc2_id,
-                             name="North Road",
-                             description="A dusty road leading out of the village, heading north.",
-                             exits={'south': loc1_id},
-                             items=[],
-                             npcs=[])
+        # Default locations (ensure they don't overwrite scenario-specified locations if IDs clash)
+        # The original start_location_id passed to the function is used for default setup.
+        # If a scenario is used, effective_start_location_id will be different.
+        default_loc1_id = start_location_id # This is the original parameter, used for default setup
+        default_loc2_id = "north_road"
+
+        # Only create default locations if they weren't already created by scenario logic (or ensure they are distinct)
+        self._ensure_location_exists(default_loc1_id, "Village Square", "The center of a quiet village. Paths lead in several directions.")
+        self._ensure_location_exists(default_loc2_id, "North Road", "A dusty road leading out of the village, heading north.")
         
-        self.locations[loc1_id] = location1
-        self.locations[loc2_id] = location2
-        logger.info(f"Created locations: {loc1_id}, {loc2_id}.")
+        # Setup exits for default locations, being careful not to break scenario-defined exits if IDs overlap.
+        # This is a bit tricky if scenario locations have same IDs as default.
+        # A robust way is to only add exits if the location was newly created by _ensure_location_exists or if exits are empty.
+        if default_loc1_id in self.locations and not self.locations[default_loc1_id].exits:
+             self.locations[default_loc1_id].exits['north'] = default_loc2_id
+        if default_loc2_id in self.locations and not self.locations[default_loc2_id].exits:
+             self.locations[default_loc2_id].exits['south'] = default_loc1_id
 
-        # Create item
-        item_id = "note_001"
-        mysterious_note = Item(id=item_id,
-                               name="Mysterious Note",
-                               description="A crumpled piece of paper with faded writing.")
-        self.items[item_id] = mysterious_note
-        logger.info(f"Created item: {item_id} ({mysterious_note.name}).")
+        logger.info(f"Ensured default locations are present: {default_loc1_id}, {default_loc2_id}.")
 
-        # Place item in starting location
-        self.locations[loc1_id].items.append(item_id)
-        logger.info(f"Placed item {item_id} in location {loc1_id}.")
+        # Default item (ensure it doesn't overwrite scenario-specified items if IDs clash)
+        default_item_id = "note_001"
+        self._ensure_item_exists(default_item_id, "Mysterious Note", "A crumpled piece of paper with faded writing.")
+        logger.info(f"Ensured default item is present: {default_item_id}.")
 
-        # Create NPC
-        npc_id = "npc_001"
-        old_villager = NPC(id=npc_id,
-                           name="Old Villager",
-                           current_location=loc1_id,
-                           description="A friendly-looking villager with wise eyes.",
-                           lore_fragments=["Heard tales of a hidden cave nearby..."],
-                           dialogue_responses={'greeting': "Welcome, traveler!", 'farewell': "Safe travels!"},
-                           status="neutral",
-                           hp=30)
-        self.npcs[npc_id] = old_villager
-        logger.info(f"Created NPC: {npc_id} ({old_villager.name}).")
+        # Place default item in its default location, if that location exists and item not already there
+        if default_loc1_id in self.locations and default_item_id not in self.locations[default_loc1_id].items:
+            self.locations[default_loc1_id].items.append(default_item_id)
+            logger.info(f"Placed default item {default_item_id} in default location {default_loc1_id}.")
 
-        # Add NPC to starting location
-        self.locations[loc1_id].npcs.append(npc_id)
-        logger.info(f"Placed NPC {npc_id} in location {loc1_id}.")
+        # Default NPC (ensure it doesn't overwrite scenario-specified NPCs if IDs clash)
+        default_npc_id = "npc_001"
+        if default_npc_id not in self.npcs: # Only create if not existing (e.g. from a scenario)
+            old_villager = NPC(id=default_npc_id,
+                               name="Old Villager",
+                               current_location=default_loc1_id, # Default NPC in default start location
+                               description="A friendly-looking villager with wise eyes.",
+                               lore_fragments=["Heard tales of a hidden cave nearby..."],
+                               dialogue_responses={'greeting': "Welcome, traveler!", 'farewell': "Safe travels!"},
+                               status="neutral",
+                               hp=30)
+            self.npcs[default_npc_id] = old_villager
+            logger.info(f"Created default NPC: {default_npc_id} ({old_villager.name}).")
+
+            # Add default NPC to its default location, if that location exists and NPC not already there
+            if default_loc1_id in self.locations and default_npc_id not in self.locations[default_loc1_id].npcs:
+                self.locations[default_loc1_id].npcs.append(default_npc_id)
+                logger.info(f"Placed default NPC {default_npc_id} in default location {default_loc1_id}.")
         
         # Set turn count and world variables
         self.turn_count = 0
-        self.world_variables = {'time_of_day': 'noon', 'weather': 'clear'}
+        self.world_variables = {'time_of_day': 'noon', 'weather': 'clear'} # These can be generic
         logger.info("Turn count set to 0. World variables initialized.")
-        self.load_quests(ALL_QUESTS) # Added
+        self.load_quests(ALL_QUESTS)
         logger.info("New game initialization complete.")
-
 
     def save_game(self, filepath: str):
         try:
