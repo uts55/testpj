@@ -4,6 +4,10 @@ import random # Added for jitter in retry logic
 import google.generativeai as genai
 from google.generativeai import types # Required for tools if used
 
+# RAG integration imports
+from data_loader import load_game_data
+from rag_manager import retrieve_context as retrieve_rag_context
+
 # Initialize logging for the module
 logger = logging.getLogger(__name__)
 
@@ -54,15 +58,49 @@ class GeminiDialogueManager:
             # Raise an exception or handle this case appropriately
             # For instance, self.model will remain None, and send_message should check for this.
 
-    def send_message(self, user_prompt_text: str, rag_context: str = None, stream: bool = True) -> str:
+    def send_message(self, user_prompt_text: str, stream: bool = True) -> str:
+        """
+        Sends a message to the Gemini model, incorporating RAG context.
+
+        Args:
+            user_prompt_text: The raw input from the player.
+            stream: Whether to stream the response from Gemini.
+
+        Returns:
+            The model's response as a string.
+        """
         if not self.model:
             logger.error("Cannot send message: GenerativeModel is not initialized.")
             return "Error: Model not initialized."
 
+        # 1. Load game data
+        # Consider caching this if performance becomes an issue. For now, load per call.
+        logger.debug("Loading game data for RAG...")
+        game_data = load_game_data()
+        # load_game_data will print warnings for file issues (e.g. malformed JSON)
+
+        # 2. Retrieve RAG context
+        logger.debug(f"Retrieving RAG context for input: '{user_prompt_text[:100]}...'")
+        actual_rag_context = retrieve_rag_context(user_prompt_text, game_data)
+        logger.info(f"Retrieved RAG context: '{actual_rag_context[:200]}...'") # Log first 200 chars of context
+
+        # 3. Prepare the prompt with RAG context
+        final_user_prompt_for_model = user_prompt_text # Start with the original prompt
+
+        if actual_rag_context and actual_rag_context != "No specific context found for your input.":
+            rag_section_prompt = f"Relevant Information (from game world data):\n{actual_rag_context}\n---"
+            final_user_prompt_for_model = f"{rag_section_prompt}\nPlayer's original input: {user_prompt_text}"
+            logger.info("Prepended RAG context to user prompt.")
+        elif actual_rag_context == "No specific context found for your input.":
+            # Optionally, inform the model that a search was done and nothing specific was found.
+            no_context_prompt = "Relevant Information (from game world data):\nNo specific context found for your input after searching available data.\n---"
+            final_user_prompt_for_model = f"{no_context_prompt}\nPlayer's original input: {user_prompt_text}"
+            logger.info("Prepended 'no specific context found' RAG message to user prompt.")
+        # If actual_rag_context is empty, the original user_prompt_text is used.
+
         # History Truncation Logic
         if self.max_history_items is not None and len(self.history) > self.max_history_items:
             items_to_remove = len(self.history) - self.max_history_items
-            # As per instructions, prioritize removing oldest items to meet the count, not necessarily pairs.
             if items_to_remove > 0: 
                 logger.info(f"History length ({len(self.history)}) exceeds max ({self.max_history_items}). Truncating {items_to_remove} oldest items.")
                 self.history = self.history[items_to_remove:]
@@ -70,20 +108,14 @@ class GeminiDialogueManager:
 
         contents_for_request = list(self.history) # Start with a copy of the current (potentially truncated) history
 
-        # Add RAG context if provided
-        if rag_context:
-            rag_context_prompt = f"[참고 자료 (RAG 시스템 제공)]\n{rag_context}\n\n위 참고 자료를 바탕으로 답변해주세요."
-            contents_for_request.append({"role": "user", "parts": [{"text": rag_context_prompt}]})
-            logger.debug(f"Added RAG context to request: {rag_context_prompt}")
-
-        # Add current user prompt
-        contents_for_request.append({"role": "user", "parts": [{"text": user_prompt_text}]})
-        logger.info(f"Sending user prompt to Gemini: {user_prompt_text}")
+        # Add current user prompt (now potentially enhanced with RAG context)
+        contents_for_request.append({"role": "user", "parts": [{"text": final_user_prompt_for_model}]})
+        logger.info(f"Sending final prompt to Gemini: {final_user_prompt_for_model[:300]}...") # Log first 300 chars
 
         final_full_response = ""
-        final_model_response_parts_for_history = []
+        final_model_response_parts_for_history = [] # Store parts for history
 
-        for attempt in range(self.max_retries + 1):
+        for attempt in range(self.max_retries + 1): # Retries for API calls
             current_attempt_full_response = ""
             current_attempt_model_parts = []
 
@@ -137,51 +169,56 @@ class GeminiDialogueManager:
                         current_attempt_full_response = response_stream.text
                     else:
                         current_attempt_full_response = ''.join(p.text for p in current_attempt_model_parts if hasattr(p, 'text') and p.text)
-                    print(current_attempt_full_response)
+                    # Ensure the full response is printed if not streaming
+                    if not stream and current_attempt_full_response:
+                        print(current_attempt_full_response)
                     logger.info("Non-streamed response received.")
 
                 final_full_response = current_attempt_full_response
-                final_model_response_parts_for_history = current_attempt_model_parts
+                final_model_response_parts_for_history = current_attempt_model_parts # Save parts for history
                 logger.info(f"API call successful on attempt {attempt + 1}.")
                 break # Exit loop on success
 
-            except (types.BrokenResponseError, types.DeadlineExceededError) as e: # Retryable errors
+            except (types.BrokenResponseError, types.DeadlineExceededError, types.InternalServerError, types.ServiceUnavailableError) as e: # Retryable errors
                 logger.warning(f"API call failed with {type(e).__name__} (attempt {attempt + 1}/{self.max_retries + 1}): {e}")
                 if attempt == self.max_retries:
                     logger.error(f"Max retries reached for {type(e).__name__}. Giving up.")
                     final_full_response = f"Error: API call failed after {self.max_retries + 1} attempts due to {type(e).__name__}. ({e})"
-                    final_model_response_parts_for_history = [{"text": final_full_response}] # Ensure history reflects the error
-                    break # Break after final attempt
-                # else: continue to next iteration for retry by letting the loop continue
-            
-            except types.StopCandidateException as e: # Not retryable
-                logger.error(f"Gemini API request was stopped (not retryable): {e}", exc_info=False)
-                final_full_response = f"Error: The request was blocked by the API. ({e})"
-                final_model_response_parts_for_history = [{"text": final_full_response}]
-                print(final_full_response) # Print error to console
-                break # Do not retry
-
-            except Exception as e: # General, potentially unexpected errors
-                logger.error(f"An unexpected error occurred during API call (attempt {attempt + 1}/{self.max_retries + 1}): {e}", exc_info=True)
-                if attempt == self.max_retries:
-                    final_full_response = f"Error: An unexpected error occurred after {self.max_retries + 1} attempts. ({e})"
                     final_model_response_parts_for_history = [{"text": final_full_response}]
-                    print(final_full_response) # Print error to console
-                    break # Break after final attempt for general exceptions too
-                # else: continue to next iteration for retry
+                    break
+            
+            except types.StopCandidateException as e: # Not retryable, content blocked
+                logger.error(f"Gemini API request was stopped due to content policy (not retryable): {e}", exc_info=False)
+                final_full_response = f"Error: The request was blocked by the API due to content policy. ({e})"
+                final_model_response_parts_for_history = [{"text": final_full_response}]
+                if not stream: print(final_full_response)
+                break
 
-        # Update history using the final state of response variables
-        self.history.append({"role": "user", "parts": [{"text": user_prompt_text}]})
+            except Exception as e: # General, potentially unexpected errors (treat as not retryable by default)
+                logger.error(f"An unexpected error occurred during API call (attempt {attempt + 1}/{self.max_retries + 1}): {e}", exc_info=True)
+                # For a more robust solution, one might inspect 'e' further to decide if retry is warranted.
+                # For now, only specific, known transient errors are retried.
+                final_full_response = f"Error: An unexpected error occurred. ({e})"
+                final_model_response_parts_for_history = [{"text": final_full_response}]
+                if not stream: print(final_full_response)
+                break # Break after final attempt for general exceptions too
 
-        if final_model_response_parts_for_history:
+        # Update history using the final user prompt that was sent to the model
+        # and the model's response parts (or error message).
+        self.history.append({"role": "user", "parts": [{"text": final_user_prompt_for_model}]})
+
+        if final_model_response_parts_for_history: # If we have parts from the model (success or error message formatted as parts)
             self.history.append({"role": "model", "parts": final_model_response_parts_for_history})
+            # If it was a function call without immediate text, log that.
             if not final_full_response and any(hasattr(p, 'function_call') for p in final_model_response_parts_for_history):
-                logger.info("Model response contained function calls but no immediate text.")
-        elif "Error:" in final_full_response:
-            logger.info(f"Error occurred. Adding error message to history: {final_full_response}")
+                logger.info("Model response primarily contained function calls, no immediate text output.")
+        # If final_model_response_parts_for_history is empty but final_full_response contains an error string
+        # (e.g. from max retries exceeded before any successful part processing), ensure that error is in history.
+        elif "Error:" in final_full_response and not final_model_response_parts_for_history:
+            logger.info(f"Error occurred, and no model parts were captured. Adding error string to history: {final_full_response}")
             self.history.append({"role": "model", "parts": [{"text": final_full_response}]})
-        else:
-            logger.warning("Model returned no parts and no specific error. Appending current final_full_response (which might be empty) to history.")
-            self.history.append({"role": "model", "parts": [{"text": final_full_response if final_full_response else ""}]})
+        else: # Fallback, if parts are empty and no error string, save whatever full response we have (could be empty)
+            logger.warning("Model returned no specific parts and no specific error string. Appending current final_full_response to history.")
+            self.history.append({"role": "model", "parts": [{"text": final_full_response if final_full_response else "[No text content in response]"}]})
 
         return final_full_response

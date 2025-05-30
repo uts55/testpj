@@ -1,0 +1,5 @@
+{
+    "name": "Old Man Hemlock",
+    "description": "A wise old hermit who lives in the Whispering Woods. He is known for his knowledge of herbs.",
+    "dialogue_options": ["Tell me about the woods.", "Do you have any potions?"]
+}

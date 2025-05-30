@@ -1,1009 +1,138 @@
-# --- START OF FILE main.py ---
-
-import google.generativeai as genai
-from google.generativeai import types
 import os
-from dotenv import load_dotenv
-# traceback removed
-import re # 정규 표현식 사용 (문장 분할 등)
 import logging
-import os # Added for checking file existence
-# import json # No longer needed directly here, handled by data_loader
-import tkinter as tk
-from tkinter import messagebox, simpledialog, Toplevel, Listbox, Scrollbar, Button  # Added Toplevel, Listbox, Scrollbar, Button
-import threading # Added for threading
-from ui import GamePlayFrame
-from ui.main_menu_frame import MainMenuFrame
-from ui.settings_frame import SettingsFrame
+from gemini_dm import GeminiDialogueManager # Assuming gemini_dm.py contains GeminiDialogueManager
 
-# Import project modules
-import config # Global configuration constants
-from data_loader import load_documents, filter_documents, extract_text_for_rag, split_text_into_chunks
-from rag_manager import RAGManager
-from gemini_dm import GeminiDialogueManager
-from game_state import GameState, Player, NPC, Location, Item # Added for game state management
-from utils import roll_dice # Added for combat
+# Configure basic logging for the main application
+# Adjust level to DEBUG for more verbose output from GeminiDialogueManager if needed
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__) # Logger for main.py
+gem_dm_logger = logging.getLogger('gemini_dm') # Specifically get the logger from gemini_dm
+# Set gemini_dm logger level. If you want verbose logs from gemini_dm, set to logging.DEBUG
+# For normal operation, logging.INFO or logging.WARNING might be preferred.
+gem_dm_logger.setLevel(logging.INFO)
 
-# --- Logging Configuration ---
-# Basic config should be set up early, but specific logger instance for this file.
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# --- Configuration ---
+DEFAULT_MODEL_NAME = "gemini-1.5-flash-latest" # A common default model, adjust if needed
+# More detailed system instruction
+DEFAULT_SYSTEM_INSTRUCTION = (
+    "You are an expert Dungeon Master for a fantasy text-based adventure game. "
+    "Your primary role is to create an immersive and engaging narrative experience. "
+    "Describe the environment, characters, and events in vivid detail. "
+    "Respond to player actions realistically within the game world's logic. "
+    "Introduce challenges, puzzles, and opportunities for role-playing. "
+    "When 'Relevant Information' is provided below the player's input, you MUST use it "
+    "to inform your response, making the game world consistent and dynamic. "
+    "If no specific 'Relevant Information' is provided, rely on your general knowledge and the established game context. "
+    "Maintain a consistent tone suitable for a fantasy adventure. "
+    "Format your responses clearly for console display. Use paragraphs for descriptions "
+    "and distinct lines for dialogue if NPCs are speaking."
+)
 
-# SAVE_GAME_FILENAME = "save_game.json" # Moved to config.py
-MAIN_PLAYER_ID = "player_001"
-DEFAULT_START_LOCATION_ID = "default_start_location"
+def load_api_key():
+    """
+    Loads the Gemini API key from the environment variable 'GEMINI_API_KEY'.
+    Logs critical error and informs the user if the key is not found.
+    Returns:
+        str: The API key if found, otherwise None.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        logger.critical("GEMINI_API_KEY environment variable not found. This is mandatory.")
+        print("\n==================== CRITICAL ERROR ====================")
+        print("The GEMINI_API_KEY environment variable is not set.")
+        print("This key is essential for the AI Dungeon Master to function.")
+        print("Please set this environment variable and restart the game.")
+        print("Example (bash/zsh): export GEMINI_API_KEY='your_actual_api_key_here'")
+        print("Example (Windows CMD): set GEMINI_API_KEY=your_actual_api_key_here")
+        print("Example (PowerShell): $env:GEMINI_API_KEY='your_actual_api_key_here'")
+        print("========================================================")
+        return None
+    logger.info("GEMINI_API_KEY loaded successfully from environment variable.")
+    return api_key
 
-# Global variables for UI frames and managers
-# app_ui is now game_play_frame
-selected_scenario_cache = {} # Cache for scenario selection dialog
-game_play_frame = None # Will hold the GamePlayFrame instance
-main_menu_frame = None
-settings_frame = None
-current_frame = None # To keep track of the currently visible frame
+def main():
+    """
+    Main function to initialize and run the AI-powered text adventure game loop.
+    """
+    # Configure logging for this specific run
+    run_log_level = os.environ.get("GAME_LOG_LEVEL", "INFO").upper()
+    numeric_level = getattr(logging, run_log_level, logging.INFO)
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-game_state_manager = None # To hold the GameState instance
-dialogue_manager = None # To hold the GeminiDialogueManager instance
-rag_system_manager = None # To hold the RAGManager instance
-root_tk_window = None # To hold the main Tkinter window instance
+    logger.info(f"Starting the AI-Powered Text Adventure Game with log level {run_log_level}...")
+    print("\n========================================")
+    print(" Welcome to the AI-Powered Text Adventure!")
+    print("========================================")
+    print("You are about to embark on a journey crafted by an AI Dungeon Master.")
+    print("Describe your actions, explore the world, and make choices that shape your story.")
+    print("\nType 'quit' or 'exit' at any time to end your adventure.")
+    print("Let's begin...\n")
 
-
-# --- Frame Management ---
-def show_frame(frame_instance):
-    global current_frame
-    if current_frame:
-        current_frame.pack_forget() # Or grid_forget() if using grid
-    current_frame = frame_instance
-    current_frame.pack(fill=tk.BOTH, expand=True) # Or grid()
-
-
-# --- Scenario Selection Dialog ---
-def select_scenario_dialog(parent_window) -> dict | None:
-    global selected_scenario_cache
-    dialog = Toplevel(parent_window)
-    dialog.title("Select a Scenario")
-    dialog.geometry("400x300")
-    dialog.transient(parent_window)
-    dialog.grab_set()
-
-    scenarios = config.PRESET_SCENARIOS
-    selected_scenario_cache['result'] = None # Reset or initialize
-
-    listbox_frame = tk.Frame(dialog)
-    listbox_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
-
-    scrollbar = Scrollbar(listbox_frame, orient=tk.VERTICAL)
-    listbox = Listbox(listbox_frame, yscrollcommand=scrollbar.set, exportselection=False)
-    scrollbar.config(command=listbox.yview)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    for scenario in scenarios:
-        listbox.insert(tk.END, scenario['name'])
-
-    def on_start():
-        selected_indices = listbox.curselection()
-        if not selected_indices:
-            messagebox.showwarning("No Selection", "Please select a scenario to start.", parent=dialog)
-            return
-        selected_scenario_cache['result'] = scenarios[selected_indices[0]]
-        dialog.destroy()
-
-    def on_cancel():
-        selected_scenario_cache['result'] = None
-        dialog.destroy()
-
-    dialog.protocol("WM_DELETE_WINDOW", on_cancel) # Handle window close button
-
-    button_frame = tk.Frame(dialog)
-    button_frame.pack(pady=5, padx=10, fill=tk.X)
-
-    start_button = Button(button_frame, text="Start Game", command=on_start)
-    start_button.pack(side=tk.LEFT, expand=True, padx=5)
-
-    cancel_button = Button(button_frame, text="Cancel", command=on_cancel)
-    cancel_button.pack(side=tk.RIGHT, expand=True, padx=5)
-
-    parent_window.wait_window(dialog) # Wait for dialog to close
-    return selected_scenario_cache.get('result')
-
-
-# --- Game Flow Functions ---
-def start_new_game():
-    global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID, DEFAULT_START_LOCATION_ID, selected_scenario_cache
-    logger.info("Attempting to start a new game...")
-
-    selected_scenario = select_scenario_dialog(root_tk_window)
-
-    if selected_scenario is None:
-        logger.info("Scenario selection cancelled or closed. New game start aborted.")
-        # No message to user needed here, as they actively cancelled.
+    api_key = load_api_key()
+    if not api_key:
+        # load_api_key() already prints detailed user message and logs critical error
         return
 
-    logger.info(f"Scenario selected: {selected_scenario['name']}")
-
-    if game_state_manager:
-        # Pass DEFAULT_START_LOCATION_ID as the third positional argument for the default world setup part
-        # scenario_data will be used for player start and specific scenario elements
-        game_state_manager.initialize_new_game(
-            MAIN_PLAYER_ID,
-            "Adventurer", # Default player name, could also be scenario driven in future
-            DEFAULT_START_LOCATION_ID, # For default location generation
-            scenario_data=selected_scenario
-        )
-    else:
-        logger.error("GameStateManager not initialized. Cannot start new game.")
-        messagebox.showerror("Error", "GameStateManager not ready. Cannot start new game.", parent=root_tk_window)
-        return
-
-    if dialogue_manager:
-        dialogue_manager.history = [] # Clear history for a new game
-        logger.info("Dialogue history cleared.")
-    else:
-        logger.error("DialogueManager not initialized. Cannot clear history.")
-        # This is problematic for game consistency.
-
-    if game_play_frame:
-        game_play_frame.destroy() 
-        logger.info("Previous GamePlayFrame instance destroyed.")
-
-    game_play_frame = GamePlayFrame(
-        master=root_tk_window,
-        process_input_callback=process_player_input,
-        save_game_callback=handle_save_game,
-        load_game_callback=handle_load_game,
-        exit_callback=handle_exit_game_via_game_play_ui
-    )
-    logger.info("New GamePlayFrame instance created.")
-    
-    show_frame(game_play_frame)
-    logger.info("Switched to GamePlayFrame.")
-
-    # Send initial prompt to DM using scenario's initial prompt
-    initial_dm_response = "Welcome to your adventure!" # Fallback
+    logger.info(f"Initializing GeminiDialogueManager with model: {DEFAULT_MODEL_NAME}")
     try:
-        if dialogue_manager:
-            prompt_to_send = selected_scenario['initial_prompt']
-            initial_dm_response = dialogue_manager.send_message(prompt_to_send)
-            if not initial_dm_response:
-                 initial_dm_response = "The adventure begins in silence... (DM sent an empty opening for the scenario)"
-                 logger.warning(f"Initial DM response for scenario '{selected_scenario['name']}' was empty.")
-        else:
-            logger.error("Dialogue manager not available for initial scenario prompt.")
-            initial_dm_response = "Error: Dialogue Manager not available. Cannot start the game with scenario prompt."
+        dm = GeminiDialogueManager(
+            api_key=api_key,
+            gemini_model_name=DEFAULT_MODEL_NAME,
+            system_instruction_text=DEFAULT_SYSTEM_INSTRUCTION,
+            max_history_items=20 # Keeps the last 10 pairs of user/model turns
+        )
+        logger.info("GeminiDialogueManager initialized successfully.")
     except Exception as e:
-        logger.error(f"Error sending initial scenario prompt: {e}", exc_info=True)
-        initial_dm_response = f"Error: Could not get initial message from DM for scenario. {type(e).__name__}"
-
-    if game_play_frame:
-        game_play_frame.add_narration(initial_dm_response + "\n")
-    
-    update_ui_game_state()
-    logger.info("Initial game state UI updated for the new game with scenario.")
-
-def load_existing_game():
-    global game_state_manager, dialogue_manager, game_play_frame, root_tk_window, MAIN_PLAYER_ID
-    logger.info("Attempting to load an existing game...")
-
-    if not game_state_manager:
-        logger.error("GameStateManager not initialized. Cannot load game.")
-        messagebox.showerror("Load Game Error", "GameStateManager not ready. Cannot load game.", parent=root_tk_window)
+        logger.critical(f"Fatal error during GeminiDialogueManager initialization: {e}", exc_info=True)
+        print(f"\nError: Could not initialize the AI Dungeon Master. A critical error occurred: {e}")
+        print("Please ensure your API key is correct, the model name is valid, and there are no network issues.")
+        print("Check the logs for more detailed information. The game cannot continue.")
         return
-
-    if not os.path.isdir(config.SAVE_GAME_DIR):
-        logger.error(f"Save game directory not found: {config.SAVE_GAME_DIR}")
-        messagebox.showerror("Load Game Error", f"Save directory '{config.SAVE_GAME_DIR}' not found.", parent=root_tk_window)
-        return
-
-    save_files = [f for f in os.listdir(config.SAVE_GAME_DIR) if f.endswith(".json")]
-
-    if not save_files:
-        logger.info("No save files found.")
-        messagebox.showinfo("Load Game", "No save files found in the save directory.", parent=root_tk_window)
-        return
-
-    load_window = Toplevel(root_tk_window)
-    load_window.title("Load Game")
-    load_window.geometry("300x250") # Adjust as needed
-    load_window.transient(root_tk_window) # Make it modal-like
-    load_window.grab_set() # Grab focus
-
-    listbox_frame = tk.Frame(load_window)
-    listbox_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
-
-    scrollbar = Scrollbar(listbox_frame, orient=tk.VERTICAL)
-    listbox = Listbox(listbox_frame, yscrollcommand=scrollbar.set, exportselection=False)
-    scrollbar.config(command=listbox.yview)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    for sf in save_files:
-        listbox.insert(tk.END, sf)
-
-    def on_load_selected():
-        # These globals are assigned to or modified within this nested function
-        global game_play_frame, dialogue_manager, root_tk_window, MAIN_PLAYER_ID
-        # game_state_manager is accessed via the global scope of load_existing_game, but not reassigned here.
-
-        selected_indices = listbox.curselection()
-        if not selected_indices:
-            messagebox.showinfo("Load Game", "Please select a save file to load.", parent=load_window)
-            return
-
-        selected_filename = listbox.get(selected_indices[0])
-        selected_path = os.path.join(config.SAVE_GAME_DIR, selected_filename)
-        
-        logger.info(f"Attempting to load: {selected_path}")
-        game_state_manager.load_game(selected_path) # GameState.load_game logs its own messages
-
-        if game_state_manager.get_player(MAIN_PLAYER_ID):
-            logger.info(f"Player {MAIN_PLAYER_ID} found. Load successful for {selected_filename}.")
-            messagebox.showinfo("Load Game", f"Game '{selected_filename}' loaded successfully!", parent=load_window)
-            load_window.destroy()
-
-            if dialogue_manager:
-                dialogue_manager.history = []
-                logger.info("Dialogue history cleared for loaded game.")
-            else:
-                logger.error("DialogueManager not initialized. Cannot clear history.")
-
-            if game_play_frame:
-                game_play_frame.destroy()
-                logger.info("Previous GamePlayFrame instance destroyed.")
-
-            game_play_frame = GamePlayFrame(
-                master=root_tk_window,
-                process_input_callback=process_player_input,
-                save_game_callback=handle_save_game,
-                load_game_callback=handle_load_game,
-                exit_callback=handle_exit_game_via_game_play_ui
-            )
-            logger.info("New GamePlayFrame instance created for loaded game.")
-
-            show_frame(game_play_frame)
-            logger.info("Switched to GamePlayFrame for loaded game.")
-
-            update_ui_game_state()
-
-            if game_play_frame:
-                game_play_frame.add_narration(f"Game '{selected_filename}' loaded. Continue your adventure!\n")
-            logger.info("GamePlayFrame updated and narration added.")
-
-        else:
-            logger.warning(f"Failed to load game from {selected_filename} or player not found.")
-            messagebox.showerror("Load Error", f"Failed to load '{selected_filename}'. File might be corrupted or not a valid save.", parent=load_window)
-            # Optionally, clear game_state if load was partial and bad: game_state_manager.initialize_new_game(...) or similar reset.
-
-    def on_cancel_load():
-        load_window.destroy()
-
-    button_frame = tk.Frame(load_window)
-    button_frame.pack(pady=5, padx=10, fill=tk.X)
-
-    load_button = Button(button_frame, text="Load Selected", command=on_load_selected)
-    load_button.pack(side=tk.LEFT, expand=True, padx=5)
-
-    cancel_button = Button(button_frame, text="Cancel", command=on_cancel_load)
-    cancel_button.pack(side=tk.RIGHT, expand=True, padx=5)
-
-# --- Callback Functions for UI interactions ---
-def handle_save_game():
-    global game_state_manager, game_play_frame, root_tk_window
-    if not game_state_manager:
-        logger.warning("Save game called but game_state_manager is not initialized.")
-        if game_play_frame:
-            game_play_frame.add_narration("Error: Could not save game (GameState not ready).\n")
-        return
-
-    filename = simpledialog.askstring("Save Game", "Enter filename for save:", parent=root_tk_window)
-
-    if filename:
-        # Ensure the filename ends with .json, but don't add if user included it
-        if not filename.lower().endswith(".json"):
-            actual_filename = filename + ".json"
-        else:
-            actual_filename = filename
-            # filename variable for narration message part should be without .json
-            # filename = filename[:-5] # This was removing .json if user typed it. Let's adjust.
-
-        # For narration, ensure we use the name without .json, regardless of user input.
-        narration_filename = filename if not filename.lower().endswith(".json") else filename[:-5]
-
-        save_path = os.path.join(config.SAVE_GAME_DIR, actual_filename)
-
-        proceed_with_save = True
-        if os.path.exists(save_path):
-            proceed_with_save = messagebox.askyesno(
-                "Confirm Overwrite",
-                f"The file '{actual_filename}' already exists. Do you want to overwrite it?",
-                parent=root_tk_window
-            )
-            if not proceed_with_save:
-                logger.info(f"Save cancelled by user due to existing file: {actual_filename}")
-                if game_play_frame:
-                    game_play_frame.add_narration("Save cancelled.\n")
-                return # Exit without saving
-
-        if proceed_with_save:
-            try:
-                game_state_manager.save_game(save_path)
-                logger.info(f"Game saved to {save_path} via UI button.")
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Game saved as {actual_filename}.\n") # Use actual_filename for clarity
-            except Exception as e:
-                logger.error(f"Error saving game to {save_path}: {e}", exc_info=True)
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Error: Could not save game to {actual_filename}. {type(e).__name__}\n")
-    else:
-        logger.info("Save game dialogue cancelled by user (no filename entered).")
-        if game_play_frame:
-            game_play_frame.add_narration("Save cancelled.\n")
-
-def handle_load_game(): # This is the in-game load game button callback
-    global game_state_manager, game_play_frame # SAVE_GAME_FILENAME removed from globals
-    if not game_state_manager:
-        logger.warning("Load game called but game_state_manager is not initialized.")
-        if game_play_frame: 
-            game_play_frame.add_narration("Error: Could not load game (GameState not ready).\n")
-        return
-
-    # Removed direct load logic from in-game button
-    logger.info("In-game load button clicked. Directed user to Main Menu for loading.")
-    if game_play_frame:
-        game_play_frame.add_narration(
-            "To load a specific save file, please use the 'Load Saved Game' option from the Main Menu.\n"
-            "Progress since your last explicit save might be lost if you load from Main Menu without saving now.\n"
-        )
-
-def handle_exit_game_via_game_play_ui(): 
-    global game_state_manager, game_play_frame, root_tk_window # SAVE_GAME_FILENAME removed from globals
-    logger.info("Exit game called via GamePlay UI button.")
-    if game_state_manager:
-        game_state_manager.save_game(config.SAVE_GAME_FILENAME) # Use config.SAVE_GAME_FILENAME
-        logger.info("Game saved on exit from game play.")
-    if game_play_frame:
-        game_play_frame.add_narration("Exiting game...\n") 
-    if root_tk_window:
-        root_tk_window.destroy() # Close the Tkinter window
-    else:
-        logger.warning("Root Tkinter window not found for destruction during exit from game play UI.")
-
-
-def update_ui_game_state():
-    """Fetches current game state and updates all relevant UI labels in the GamePlayFrame."""
-    global game_play_frame, game_state_manager, MAIN_PLAYER_ID # app_ui changed to game_play_frame
-    if not game_play_frame or not game_state_manager:
-        logger.warning("Cannot update UI: game_play_frame or game_state_manager not initialized.")
-        return
-
-    player = game_state_manager.get_player(MAIN_PLAYER_ID)
-    if player:
-        # HP: Fetches current HP, defaults to 'N/A' if unavailable.
-        # Corrected to access hit_points directly as 'stats' attribute doesn't exist
-        hp_current = player.hit_points.get('current', 'N/A') if player.hit_points else 'N/A'
-        game_play_frame.update_hp(str(hp_current)) # Ensure it's a string for UI
-
-        # Location: Fetches current location name, defaults to 'Unknown'.
-        loc_name = "Unknown"
-        location_obj = game_state_manager.locations.get(player.current_location)
-        if location_obj:
-            loc_name = location_obj.name
-        game_play_frame.update_location(loc_name)
-
-        # Inventory: Lists names of items in player's inventory. Displays 'Empty' if none. Falls back to item ID if name is missing.
-        inventory_item_names = []
-        if player.inventory:
-            for item_id in player.inventory:
-                item_obj = game_state_manager.items.get(item_id)
-                inventory_item_names.append(item_obj.name if item_obj else item_id)
-        inventory_str = ", ".join(inventory_item_names) if inventory_item_names else "Empty"
-        game_play_frame.update_inventory(inventory_str)
-        
-        # NPCs: Lists names of NPCs in the current location. Displays 'None' if no NPCs are present.
-        npcs_in_loc_objs = game_state_manager.get_npcs_in_location(player.current_location)
-        npc_names_list = [npc.name for npc in npcs_in_loc_objs] if npcs_in_loc_objs else []
-        npcs_str = ", ".join(npc_names_list) if npc_names_list else "None"
-        game_play_frame.update_npcs(npcs_str)
-    else:
-        # Fallback display if the main player object is not found in game state.
-        logger.warning(f"Player {MAIN_PLAYER_ID} not found for UI update.")
-        game_play_frame.update_hp("N/A")
-        game_play_frame.update_location("Unknown")
-        game_play_frame.update_inventory("N/A")
-        game_play_frame.update_npcs("N/A")
-
-
-def threaded_api_call_and_ui_updates(input_for_dm):
-    """
-    This function runs in a separate thread to handle blocking API calls 
-    and then schedules UI updates back in the main thread.
-    """
-    global game_play_frame, game_state_manager, dialogue_manager, rag_system_manager, root_tk_window, MAIN_PLAYER_ID # app_ui changed to game_play_frame
-
-    player_for_action = game_state_manager.get_player(MAIN_PLAYER_ID) if game_state_manager else None
-    # dm_response_text variable is not needed here as it's fully handled within the try-except for API call
 
     try:
-        # --- Generate Current State Summary for Gemini ---
-        current_state_summary_for_dm = ""
-        if player_for_action:
-            player_hp = player_for_action.hit_points.get('current', 'N/A') if player_for_action.hit_points else 'N/A'
-            location_obj = game_state_manager.locations.get(player_for_action.current_location)
-            location_name = location_obj.name if location_obj else player_for_action.current_location
-            inventory_item_names = [game_state_manager.items.get(item_id).name if game_state_manager.items.get(item_id) else item_id for item_id in player_for_action.inventory]
-            inventory_str = ", ".join(inventory_item_names) if inventory_item_names else 'Empty'
-            npcs_in_loc_objs = game_state_manager.get_npcs_in_location(player_for_action.current_location)
-            npc_names = [npc.name for npc in npcs_in_loc_objs] if npcs_in_loc_objs else ["None"]
-            current_state_summary_for_dm = (
-                f"[Current Game State for DM Context]\n"
-                f"Player: {player_for_action.name} (HP: {player_hp})\n"
-                f"Location: {location_name}\n"
-                f"NPCs here: {', '.join(npc_names)}\n"
-                f"Inventory: {inventory_str}\n"
-            )
-        prompt_for_gemini = f"{current_state_summary_for_dm}\nContext/Event: {input_for_dm}"
+        while True:
+            player_input = input("\nWhat do you do? > ").strip()
 
-        # --- RAG Context Retrieval ---
-        rag_context_for_gemini = None
-        if rag_system_manager and rag_system_manager.collection and rag_system_manager.collection.count() > 0:
-            logger.info("\n[RAG] Searching for relevant context based on input...")
-            retrieved_context_docs = rag_system_manager.search(input_for_dm, n_results=3) # Use input_for_dm for RAG search
-            if retrieved_context_docs:
-                logger.info(f"[RAG] Found {len(retrieved_context_docs)} context snippets.")
-                rag_context_for_gemini = "\n".join([f"- {doc}" for doc in retrieved_context_docs])
-            else:
-                logger.info("[RAG] No additional relevant context found.")
-        
-        # --- Send to Gemini (DM) ---
-        dm_response_text = "Error: DM is not connected or failed to respond."
-        if dialogue_manager:
-            logger.info("\nDM's Turn (Sending to Gemini in thread):")
-            dm_response_text = dialogue_manager.send_message(
-                user_prompt_text=prompt_for_gemini,
-                rag_context=rag_context_for_gemini
-            )
-        else:
-            logger.warning("Dialogue Manager not available to process input.")
+            if player_input.lower() in ["quit", "exit"]:
+                logger.info("Player initiated 'quit' command.")
+                print("\nThank you for playing! Adventure awaits another time. Goodbye.")
+                break
 
-        # --- Schedule DM response narration in main thread ---
-        if game_play_frame and root_tk_window: 
-            root_tk_window.after(0, lambda: game_play_frame.add_narration(f"{dm_response_text}\n"))
+            if not player_input:
+                print("It seems you're lost in thought... Please type an action to continue your adventure.")
+                continue
 
-        # --- Basic Gemini Response Parsing and State Update (Scheduled) ---
-        if player_for_action and dm_response_text: 
-            if "you take 5 damage" in dm_response_text.lower(): 
-                logger.info("DM response indicates player takes 5 damage. Updating state.")
-                player_for_action.take_damage(5) 
-                game_state_manager.apply_event({'type': 'damage', 'target': MAIN_PLAYER_ID, 'amount': 5, 'source': 'gemini_response'})
-                if game_play_frame and root_tk_window:
-                    root_tk_window.after(0, lambda: game_play_frame.add_narration("You feel weaker as you take damage.\n"))
-        
-        if "Error:" in dm_response_text and dialogue_manager and dialogue_manager.model is None:
-             logger.error(f"DM response indicates model error. Response: {dm_response_text}")
+            logger.info(f"Player input received: '{player_input}'")
 
-    except Exception as e: 
-        logger.error(f"Error in threaded_api_call_and_ui_updates: {e}", exc_info=True)
-        ui_error_message = f"An error occurred: {type(e).__name__}. Please check logs or try again."
-        if game_play_frame and root_tk_window:
-            root_tk_window.after(0, lambda: game_play_frame.add_narration(ui_error_message + "\n"))
+            print("\nThe AI Dungeon Master is pondering your action...")
+
+            dm_response_full = dm.send_message(player_input, stream=True)
+
+            logger.debug(f"DM full response string from send_message (main.py): '{dm_response_full[:300]}...'")
+
+            # Critical error checks from DM response. send_message itself might log these too.
+            if dm_response_full.startswith("Error: Model not initialized.") or \
+               dm_response_full.startswith("Error: The request was blocked by the API"):
+                logger.critical(f"Critical error received from GeminiDialogueManager: {dm_response_full}. Terminating game loop.")
+                print(f"\nA critical error occurred with the AI DM: {dm_response_full}")
+                print("This usually indicates a problem with the API configuration or service. The game cannot continue.")
+                break
+            elif "Error:" in dm_response_full and "API call failed after" in dm_response_full : # check for max retries error
+                logger.critical(f"Persistent API call failure: {dm_response_full}. Terminating game loop.")
+                print(f"\nThere was a persistent problem communicating with the AI DM: {dm_response_full}")
+                print("Please check your network connection and API key status. The game cannot continue.")
+                break
+
+
+    except KeyboardInterrupt:
+        logger.info("Game loop interrupted by user (Ctrl+C).")
+        print("\n\nYour adventure has been paused by your command! Thank you for playing. Goodbye.")
+    except Exception as e:
+        logger.error(f"An unexpected critical error occurred in the main gameplay loop: {e}", exc_info=True)
+        print(f"\nAn unexpected critical error occurred: {e}. The adventure must unfortunately end. Please check the logs for details.")
     finally:
-        # --- Schedule UI updates and re-enable input in main thread ---
-        if game_play_frame and root_tk_window:
-            root_tk_window.after(0, update_ui_game_state) 
-            root_tk_window.after(0, lambda: game_play_frame.input_entry.config(state='normal'))
-            root_tk_window.after(0, lambda: game_play_frame.send_button.config(state='normal'))
-            logger.info("Input field and send button re-enabled.")
-
-
-def process_player_input(player_input_text):
-    """
-    Processes the player's input text from the UI.
-    Disables input, starts a thread for blocking calls, and re-enables input via the thread.
-    """
-    global game_play_frame, game_state_manager # app_ui changed to game_play_frame
-    logger.info(f"UI Input Received for processing: {player_input_text}")
-
-    if player_input_text.lower() in config.USER_EXIT_COMMANDS:
-        handle_exit_game_via_game_play_ui() 
-        return
-
-    if game_play_frame:
-        game_play_frame.input_entry.config(state='disabled')
-        game_play_frame.send_button.config(state='disabled')
-        logger.info("Input field and send button disabled.")
-
-    player_for_action = game_state_manager.get_player(MAIN_PLAYER_ID) if game_state_manager else None
-    if player_for_action:
-        # --- Talk to NPC Command ---
-        if player_input_text.lower().startswith("talk to "):
-            command_parts = player_input_text.split(" ", 2) # talk to <NPC NAME>
-            if len(command_parts) > 2 and command_parts[2].strip():
-                npc_name_to_find = command_parts[2].strip()
-                player = game_state_manager.get_player(MAIN_PLAYER_ID)
-
-                if player and player.current_location:
-                    npcs_in_location = game_state_manager.get_npcs_in_location(player.current_location)
-                    npc_target = None
-                    for npc_obj in npcs_in_location:
-                        if npc_obj.name.lower() == npc_name_to_find.lower():
-                            npc_target = npc_obj
-                            break
-
-                    if npc_target:
-                        logger.info(f"Player intends to talk to NPC: {npc_target.name}")
-
-                        # --- NPC Dialogue Handling ---
-                        dialogue_to_show = None
-                        dialogue_responses = npc_target.dialogue_responses
-
-                        if isinstance(dialogue_responses, dict):
-                            greeting_key_found = None
-                            if "greetings" in dialogue_responses:
-                                greeting_key_found = "greetings"
-                            elif "greeting" in dialogue_responses: # Fallback to "greeting"
-                                greeting_key_found = "greeting"
-
-                            if greeting_key_found and \
-                               isinstance(dialogue_responses[greeting_key_found], list) and \
-                               dialogue_responses[greeting_key_found]:
-                                selected_dialogue = dialogue_responses[greeting_key_found][0]
-                                dialogue_to_show = f"{npc_target.name} says: \"{selected_dialogue}\"\n"
-
-                        if game_play_frame:
-                            if dialogue_to_show:
-                                game_play_frame.add_narration(dialogue_to_show)
-                            else:
-                                game_play_frame.add_narration(f"{npc_target.name} nods at you but doesn't say much.\n")
-                        # --- End NPC Dialogue Handling ---
-
-                        # This command is handled locally, does not go to DM/API yet. Re-enable input.
-                        if game_play_frame:
-                            game_play_frame.input_entry.config(state='normal')
-                            game_play_frame.send_button.config(state='normal')
-                        return # Crucial: prevent fall-through to API call
-                    else:
-                        if game_play_frame:
-                            game_play_frame.add_narration(f"You don't see anyone named '{npc_name_to_find}' here.\n")
-                        if game_play_frame: # Re-enable input
-                            game_play_frame.input_entry.config(state='normal')
-                            game_play_frame.send_button.config(state='normal')
-                        return
-                else:
-                    logger.warning("Player or player location not found for 'talk to' command.")
-                    if game_play_frame:
-                        game_play_frame.add_narration("Cannot process 'talk to' command: critical player data missing.\n")
-                    if game_play_frame: # Re-enable input
-                        game_play_frame.input_entry.config(state='normal')
-                        game_play_frame.send_button.config(state='normal')
-                    return
-            else: # "talk to" but no NPC name
-                if game_play_frame:
-                    game_play_frame.add_narration("Who do you want to talk to? (e.g., talk to Old Villager)\n")
-                if game_play_frame: # Re-enable input
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return
-
-        elif player_input_text.lower().startswith("go "):
-            direction = player_input_text.lower().split(" ", 1)[1]
-            if player_for_action.current_location:
-                current_loc_obj = game_state_manager.locations.get(player_for_action.current_location)
-                if current_loc_obj and direction in current_loc_obj.exits:
-                    new_location_id = current_loc_obj.exits[direction]
-                    player_for_action.change_location(new_location_id) 
-                    if game_play_frame:
-                        new_loc_obj_name = game_state_manager.locations.get(new_location_id).name if game_state_manager.locations.get(new_location_id) else "an unknown place"
-                        game_play_frame.add_narration(f"You move {direction} to {new_loc_obj_name}.\n") 
-                else:
-                    if game_play_frame: game_play_frame.add_narration(f"You cannot go {direction} from here.\n")
-        
-        elif "take sword" in player_input_text.lower(): 
-            SWORD_ID = "sword_001" 
-            if SWORD_ID not in game_state_manager.items:
-                game_state_manager.items[SWORD_ID] = Item(id=SWORD_ID, name="Basic Sword", description="A simple steel sword.")
-            if SWORD_ID not in player_for_action.inventory:
-                player_for_action.add_item_to_inventory(SWORD_ID) 
-                if game_play_frame: game_play_frame.add_narration(f"You take the {game_state_manager.items[SWORD_ID].name}.\n") 
-            else:
-                if game_play_frame: game_play_frame.add_narration(f"You already have the {game_state_manager.items[SWORD_ID].name}.\n")
-        
-        update_ui_game_state()
-        # NOTE: The 'go' command and others below might also need to re-enable input if they don't use the thread.
-        # For now, only 'talk to', 'attack', 'roll', 'use' explicitly handle input re-enabling or use the thread.
-        # The 'go' and 'take sword' commands are quick and update UI, then fall through to the threaded call.
-        # This might be okay, or they might need their own input re-enable and return if they shouldn't go to DM.
-        # Let's assume for now they are meant to potentially have DM follow-up.
-
-    # --- Attack Command ---
-    # This existing command already handles its own input re-enabling or calls the thread.
-    elif player_input_text.lower().startswith("attack "):
-        parts = player_input_text.split(" ", 1)
-        if len(parts) > 1:
-            target_npc_name = parts[1].strip()
-            player = game_state_manager.get_player(MAIN_PLAYER_ID)
-
-            if player and player.current_location:
-                npcs_in_location = game_state_manager.get_npcs_in_location(player.current_location)
-                npc_target = None
-                for npc_obj in npcs_in_location:
-                    if npc_obj.name.lower() == target_npc_name.lower():
-                        npc_target = npc_obj
-                        break
-
-                if npc_target:
-                    if npc_target.hp > 0: # Check if NPC is already defeated
-                        damage_amount = roll_dice(6) # e.g., 1d6 damage
-                        npc_target.take_damage(damage_amount)
-
-                        player_feedback_message = f"You attack {npc_target.name} and deal {damage_amount} damage."
-                        if npc_target.hp > 0:
-                            player_feedback_message += f" Their HP is now {npc_target.hp}."
-                        else:
-                            player_feedback_message += f" {npc_target.name} has been defeated!"
-
-                        if game_play_frame: # Check if UI is available
-                            game_play_frame.add_narration(player_feedback_message + "\n")
-
-                        update_ui_game_state() # Update UI immediately
-
-                        text_for_dm = f"Player {player.name} attacked {npc_target.name}, dealing {damage_amount} damage. {npc_target.name}'s current HP is {npc_target.hp}."
-                        if npc_target.hp == 0:
-                            text_for_dm += f" {npc_target.name} has fallen in combat and is now defeated."
-
-                        # Start the thread with this descriptive text for the DM
-                        thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(text_for_dm,))
-                        thread.start()
-                        return # Attack handled, prevent further processing of this input
-                    else:
-                        if game_play_frame:
-                            game_play_frame.add_narration(f"{npc_target.name} is already defeated.\n")
-                        # No DM message needed if target already down, re-enable input directly
-                        if game_play_frame:
-                            game_play_frame.input_entry.config(state='normal')
-                            game_play_frame.send_button.config(state='normal')
-                        return
-                else:
-                    if game_play_frame:
-                        game_play_frame.add_narration(f"You don't see anyone named '{target_npc_name}' here to attack.\n")
-                    # No DM message, re-enable input
-                    if game_play_frame:
-                        game_play_frame.input_entry.config(state='normal')
-                        game_play_frame.send_button.config(state='normal')
-                    return
-        else:
-            if game_play_frame:
-                game_play_frame.add_narration("Who do you want to attack? (e.g., attack Goblin)\n")
-            # No DM message, re-enable input
-            if game_play_frame:
-                game_play_frame.input_entry.config(state='normal')
-                game_play_frame.send_button.config(state='normal')
-            return
-    # --- Roll Command ---
-    elif player_input_text.lower().startswith("roll "):
-        command_part = player_input_text.lower().split(" ", 1)[1].strip() # e.g., "d20" or "1d20"
-
-        num_dice = 1 # Currently supporting 1 die
-        sides = 0
-
-        # Simple parsing for "d<N>" or "1d<N>"
-        if command_part.startswith('d'):
-            try:
-                sides = int(command_part[1:])
-            except ValueError:
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Use 'd<number>', e.g., 'roll d20'.\n")
-                if game_play_frame: # Re-enable input
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return
-        elif 'd' in command_part:
-            parts = command_part.split('d')
-            if len(parts) == 2:
-                try:
-                    # For now, only support 1dX, parts[0] should be '1' or empty
-                    if parts[0] == '' or parts[0] == '1':
-                        sides = int(parts[1])
-                    else:
-                        if game_play_frame:
-                            game_play_frame.add_narration(f"Unsupported dice format: '{command_part}'. Try 'd<number>' or '1d<number>'.\n")
-                        if game_play_frame: # Re-enable input
-                            game_play_frame.input_entry.config(state='normal')
-                            game_play_frame.send_button.config(state='normal')
-                        return
-                except ValueError:
-                    if game_play_frame:
-                        game_play_frame.add_narration(f"Invalid dice numbers: '{command_part}'.\n")
-                    if game_play_frame: # Re-enable input
-                        game_play_frame.input_entry.config(state='normal')
-                        game_play_frame.send_button.config(state='normal')
-                    return
-            else: # Invalid format like "d" or "d20d"
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'.\n")
-                if game_play_frame: # Re-enable input
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return
-        else: # No 'd' found, e.g. "roll 20"
-            if game_play_frame:
-                game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Did you mean 'd{command_part}'?\n")
-            if game_play_frame: # Re-enable input
-                game_play_frame.input_entry.config(state='normal')
-                game_play_frame.send_button.config(state='normal')
-            return
-
-        if sides > 0:
-            roll_result = roll_dice(sides)
-            player_feedback = f"You roll a d{sides} and get: {roll_result}.\n"
-            if game_play_frame:
-                game_play_frame.add_narration(player_feedback)
-
-            player = game_state_manager.get_player(MAIN_PLAYER_ID) # Get player for name
-            player_name = player.name if player else "Player"
-            text_for_dm = f"{player_name} rolls a d{sides} for an action, getting a {roll_result}."
-
-            thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(text_for_dm,))
-            thread.start()
-            return # Dice roll handled
-        else: # Fallback, should be caught by parsing
-            if game_play_frame:
-                game_play_frame.add_narration(f"Could not determine the type of dice to roll from '{command_part}'.\n")
-            if game_play_frame: # Re-enable input
-                game_play_frame.input_entry.config(state='normal')
-                game_play_frame.send_button.config(state='normal')
-            return
-    # --- Roll Command ---
-    # This existing command already handles its own input re-enabling or calls the thread.
-    elif player_input_text.lower().startswith("roll "):
-        command_part = player_input_text.lower().split(" ", 1)[1].strip() # e.g., "d20" or "1d20"
-
-        num_dice = 1 # Currently supporting 1 die
-        sides = 0
-
-        # Simple parsing for "d<N>" or "1d<N>"
-        if command_part.startswith('d'):
-            try:
-                sides = int(command_part[1:])
-            except ValueError:
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Use 'd<number>', e.g., 'roll d20'.\n")
-                if game_play_frame: # Re-enable input
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return
-        elif 'd' in command_part:
-            parts = command_part.split('d')
-            if len(parts) == 2:
-                try:
-                    # For now, only support 1dX, parts[0] should be '1' or empty
-                    if parts[0] == '' or parts[0] == '1':
-                        sides = int(parts[1])
-                    else:
-                        if game_play_frame:
-                            game_play_frame.add_narration(f"Unsupported dice format: '{command_part}'. Try 'd<number>' or '1d<number>'.\n")
-                        if game_play_frame: # Re-enable input
-                            game_play_frame.input_entry.config(state='normal')
-                            game_play_frame.send_button.config(state='normal')
-                        return
-                except ValueError:
-                    if game_play_frame:
-                        game_play_frame.add_narration(f"Invalid dice numbers: '{command_part}'.\n")
-                    if game_play_frame: # Re-enable input
-                        game_play_frame.input_entry.config(state='normal')
-                        game_play_frame.send_button.config(state='normal')
-                    return
-            else: # Invalid format like "d" or "d20d"
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'.\n")
-                if game_play_frame: # Re-enable input
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return
-        else: # No 'd' found, e.g. "roll 20"
-            if game_play_frame:
-                game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Did you mean 'd{command_part}'?\n")
-            if game_play_frame: # Re-enable input
-                game_play_frame.input_entry.config(state='normal')
-                game_play_frame.send_button.config(state='normal')
-            return
-
-        if sides > 0:
-            roll_result = roll_dice(sides)
-            player_feedback = f"You roll a d{sides} and get: {roll_result}.\n"
-            if game_play_frame:
-                game_play_frame.add_narration(player_feedback)
-
-            player = game_state_manager.get_player(MAIN_PLAYER_ID) # Get player for name
-            player_name = player.name if player else "Player"
-            text_for_dm = f"{player_name} rolls a d{sides} for an action, getting a {roll_result}."
-
-            thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(text_for_dm,))
-            thread.start()
-            return # Dice roll handled
-        else: # Fallback, should be caught by parsing
-            if game_play_frame:
-                game_play_frame.add_narration(f"Could not determine the type of dice to roll from '{command_part}'.\n")
-            if game_play_frame: # Re-enable input
-                game_play_frame.input_entry.config(state='normal')
-                game_play_frame.send_button.config(state='normal')
-            return
-
-    # --- Use Skill Command ---
-    # This existing command already handles its own input re-enabling or calls the thread.
-    elif player_input_text.lower().startswith("use "):
-        parts = player_input_text.split(" ", 1)
-        if len(parts) > 1:
-            skill_name = parts[1].strip()
-            if not skill_name:
-                if game_play_frame:
-                    game_play_frame.add_narration("Please specify a skill to use. e.g., 'use investigation'\n")
-                if game_play_frame: # Re-enable input if needed (though thread does it)
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return # Exit this processing path
-
-            player = game_state_manager.get_player(MAIN_PLAYER_ID)
-            if not player:
-                logger.error(f"Player {MAIN_PLAYER_ID} not found to use skill.")
-                if game_play_frame:
-                    game_play_frame.add_narration("Error: Current player not found.\n")
-                if game_play_frame:
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return # Exit
-
-            skill_result = player.use_skill(skill_name)
-
-            if "error" in skill_result:
-                error_message = skill_result.get('description', skill_result.get('error', 'Unknown skill error.'))
-                logger.warning(f"Skill use error for {skill_name} by {player.name}: {error_message}")
-                if game_play_frame:
-                    game_play_frame.add_narration(f"Error using skill: {error_message}\n")
-                # Input re-enabled by finally block of threaded_api_call_and_ui_updates if we were to call it
-                # For direct error feedback without DM call, re-enable here if not calling thread.
-                if game_play_frame:
-                    game_play_frame.input_entry.config(state='normal')
-                    game_play_frame.send_button.config(state='normal')
-                return # Exit this processing path
-            else:
-                roll_description = skill_result.get('description', f"Attempted {skill_name}.")
-                logger.info(f"Player {player.name} used skill {skill_name}. Result: {roll_description}")
-                if game_play_frame:
-                    game_play_frame.add_narration(f"You attempt to use {skill_name}...\n{roll_description}\n")
-
-                # Construct prompt for Gemini DM
-                dm_prompt = (
-                    f"My character, {player.name}, attempts to use the skill '{skill_result['skill']}'. "
-                    f"The character's action and roll result is: '{skill_result['description']}'. "
-                    f"Describe what happens next. Does the character succeed? What information do they gather or what is the outcome of their action?"
-                )
-
-                # Call the threaded API function to send this to the DM
-                thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(dm_prompt,))
-                thread.start()
-                return # Skill use action sent to DM
-        else:
-            if game_play_frame:
-                game_play_frame.add_narration("Please specify a skill. e.g., 'use investigation'\n")
-            if game_play_frame: # Re-enable input
-                game_play_frame.input_entry.config(state='normal')
-                game_play_frame.send_button.config(state='normal')
-            return
-
-    # If we reach here, no specific local command was fully handled and returned (and explicitly returned).
-    # So, pass the original player_input_text to the DM via the threaded call.
-    # The input field and send button will be re-enabled in the finally block of threaded_api_call_and_ui_updates.
-    else:
-        logger.info(f"Input '{player_input_text}' not handled by specific local commands, sending to threaded API call.")
-        thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(player_input_text,))
-        thread.start()
-
+        logger.info("Game session ended. Performing cleanup if any.")
+        print("\nGame session concluded. Until next time, adventurer!")
 
 if __name__ == "__main__":
-    # --- Environment and API Key Setup ---
-    load_dotenv()
-    api_key = os.getenv(config.GOOGLE_API_KEY_ENV)
-    if not api_key:
-        logger.critical(f"Error: {config.GOOGLE_API_KEY_ENV} environment variable not found.")
-        exit()
-    logger.info("API key loaded successfully.")
-
-    # --- Initialize Managers (RAG, Gemini, GameState) ---
-    try:
-        rag_system_manager = RAGManager(
-            embedding_model_name=config.EMBEDDING_MODEL_NAME,
-            vector_db_path=config.VECTOR_DB_PATH,
-            collection_name=config.COLLECTION_NAME
-        )
-        if not rag_system_manager.collection:
-             logger.critical("RAG Manager's collection not initialized. Exiting.")
-             exit()
-        logger.info("RAG Manager initialized.")
-
-        all_documents = load_documents(config.RAG_DOCUMENT_SOURCES)
-        processed_documents = filter_documents(all_documents, config.RAG_DOCUMENT_FILTERS) if config.RAG_DOCUMENT_FILTERS else all_documents
-        text_chunks, document_ids, document_metadatas = [], [], []
-        for i, doc in enumerate(processed_documents):
-            extracted_text = extract_text_for_rag(doc, config.RAG_TEXT_FIELDS)
-            if extracted_text:
-                chunks_from_doc = split_text_into_chunks(extracted_text)
-                doc_id_base = doc.get('id', f'doc_{i}')
-                for chunk_idx, chunk_content in enumerate(chunks_from_doc):
-                    text_chunks.append(chunk_content)
-                    document_ids.append(f"{doc_id_base}_chunk_{chunk_idx}")
-                    document_metadatas.append({'source_id': doc.get('id', 'unknown'), 'name': doc.get('name', 'Unnamed Document')})
-        if text_chunks:
-            rag_system_manager.add_documents_to_collection(text_chunks, document_ids, document_metadatas)
-            logger.info(f"Total {len(text_chunks)} text chunks added to RAG system.")
-        else:
-            logger.warning("No text chunks available to add to RAG system.")
-        logger.info("RAG Document Loading and Processing Finished.")
-    except Exception as e:
-        logger.critical(f"Failed to initialize or populate RAGManager: {e}", exc_info=True)
-        exit()
-
-    try:
-        tools_list_for_gemini = [types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())] if 'GoogleSearchRetrieval' in dir(types) else None
-        dm_system_instruction = "You are a Dungeon Master for a D&D 5e game..." 
-        dialogue_manager = GeminiDialogueManager(
-            api_key=api_key,
-            gemini_model_name=config.GEMINI_MODEL_NAME,
-            tools=tools_list_for_gemini,
-            system_instruction_text=dm_system_instruction,
-            max_history_items=config.MAX_HISTORY_ITEMS
-        )
-        if not dialogue_manager.model:
-            logger.critical("Gemini Dialogue Manager's model not initialized. Exiting.")
-            exit()
-        logger.info("Gemini Dialogue Manager initialized.")
-    except Exception as e:
-        logger.critical(f"Failed to initialize GeminiDialogueManager: {e}", exc_info=True)
-        exit()
-
-    game_state_manager = GameState() # Initialize, but don't load/new game here.
-    logger.info("Game state manager initialized (empty).")
-
-    # --- Tkinter UI Setup ---
-    root_tk_window = tk.Tk() 
-    root_tk_window.title("Text Adventure RPG") 
-    root_tk_window.geometry("800x600") 
-
-    # Callbacks for MainMenuFrame
-    # placeholder_load_game is replaced by load_existing_game
-    def open_settings_menu(): 
-        global settings_frame
-        logger.info("Opening Settings frame.")
-        show_frame(settings_frame)
-
-    def exit_game_from_main_menu(): 
-        logger.info("Exit game clicked from Main Menu.")
-        if root_tk_window:
-            root_tk_window.destroy()
-
-    # Instantiate Frames
-    # global main_menu_frame, settings_frame # Removed incorrect global statement
-    main_menu_frame = MainMenuFrame(root_tk_window,
-                                   start_new_game, 
-                                   load_existing_game, # Actual function for Load Game
-                                   open_settings_menu, 
-                                   exit_game_from_main_menu)
-    
-    def show_main_menu_from_settings_callback(): 
-        global main_menu_frame
-        logger.info("Returning to Main Menu from Settings.")
-        show_frame(main_menu_frame)
-
-    settings_frame = SettingsFrame(root_tk_window, show_main_menu_from_settings_callback)
-
-    # Show MainMenuFrame First
-    logger.info("Showing Main Menu Frame.")
-    show_frame(main_menu_frame)
-    
-    logger.info("\n--- Application Initialized. Waiting for user interaction in Main Menu. ---")
-    root_tk_window.mainloop() 
-
-    logger.info("--- Tkinter mainloop ended. Application shutting down. ---")
-    if game_state_manager and game_play_frame and current_frame == game_play_frame: # Check if game was active
-        game_state_manager.save_game(config.SAVE_GAME_FILENAME) # Use config.SAVE_GAME_FILENAME
-        logger.info("Final game save attempt on shutdown (if game was active).")
-
-# --- END OF FILE main.py ---
+    main()
