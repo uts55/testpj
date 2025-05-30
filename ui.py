@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import scrolledtext
 
-class Application(tk.Frame):
+class GamePlayFrame(tk.Frame):
     def __init__(self, master=None, process_input_callback=None, 
                  save_game_callback=None, load_game_callback=None, exit_callback=None):
         super().__init__(master)
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         if app.master:
             app.master.destroy()
 
-    app = Application(master=root, 
+    app = GamePlayFrame(master=root, 
                       process_input_callback=dummy_process_input,
                       save_game_callback=dummy_save,
                       load_game_callback=dummy_load,
