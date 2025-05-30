@@ -22,6 +22,7 @@ from data_loader import load_documents, filter_documents, extract_text_for_rag, 
 from rag_manager import RAGManager
 from gemini_dm import GeminiDialogueManager
 from game_state import GameState, Player, NPC, Location, Item # Added for game state management
+from utils import roll_dice # Added for combat
 
 # --- Logging Configuration ---
 # Basic config should be set up early, but specific logger instance for this file.
@@ -323,7 +324,7 @@ def update_ui_game_state():
         game_play_frame.update_npcs("N/A")
 
 
-def threaded_api_call_and_ui_updates(player_input_text):
+def threaded_api_call_and_ui_updates(input_for_dm):
     """
     This function runs in a separate thread to handle blocking API calls 
     and then schedules UI updates back in the main thread.
@@ -337,7 +338,7 @@ def threaded_api_call_and_ui_updates(player_input_text):
         # --- Generate Current State Summary for Gemini ---
         current_state_summary_for_dm = ""
         if player_for_action:
-            player_hp = player_for_action.stats.get('hp', 'N/A')
+            player_hp = player_for_action.hit_points.get('current', 'N/A') if player_for_action.hit_points else 'N/A'
             location_obj = game_state_manager.locations.get(player_for_action.current_location)
             location_name = location_obj.name if location_obj else player_for_action.current_location
             inventory_item_names = [game_state_manager.items.get(item_id).name if game_state_manager.items.get(item_id) else item_id for item_id in player_for_action.inventory]
@@ -351,13 +352,13 @@ def threaded_api_call_and_ui_updates(player_input_text):
                 f"NPCs here: {', '.join(npc_names)}\n"
                 f"Inventory: {inventory_str}\n"
             )
-        prompt_for_gemini = f"{current_state_summary_for_dm}\nPlayer's Action: {player_input_text}"
+        prompt_for_gemini = f"{current_state_summary_for_dm}\nContext/Event: {input_for_dm}"
 
         # --- RAG Context Retrieval ---
         rag_context_for_gemini = None
         if rag_system_manager and rag_system_manager.collection and rag_system_manager.collection.count() > 0:
             logger.info("\n[RAG] Searching for relevant context based on input...")
-            retrieved_context_docs = rag_system_manager.search(player_input_text, n_results=3)
+            retrieved_context_docs = rag_system_manager.search(input_for_dm, n_results=3) # Use input_for_dm for RAG search
             if retrieved_context_docs:
                 logger.info(f"[RAG] Found {len(retrieved_context_docs)} context snippets.")
                 rag_context_for_gemini = "\n".join([f"- {doc}" for doc in retrieved_context_docs])
@@ -449,6 +450,146 @@ def process_player_input(player_input_text):
         
         update_ui_game_state() 
 
+    # --- Attack Command ---
+    elif player_input_text.lower().startswith("attack "):
+        parts = player_input_text.split(" ", 1)
+        if len(parts) > 1:
+            target_npc_name = parts[1].strip()
+            player = game_state_manager.get_player(MAIN_PLAYER_ID)
+
+            if player and player.current_location:
+                npcs_in_location = game_state_manager.get_npcs_in_location(player.current_location)
+                npc_target = None
+                for npc_obj in npcs_in_location:
+                    if npc_obj.name.lower() == target_npc_name.lower():
+                        npc_target = npc_obj
+                        break
+
+                if npc_target:
+                    if npc_target.hp > 0: # Check if NPC is already defeated
+                        damage_amount = roll_dice(6) # e.g., 1d6 damage
+                        npc_target.take_damage(damage_amount)
+
+                        player_feedback_message = f"You attack {npc_target.name} and deal {damage_amount} damage."
+                        if npc_target.hp > 0:
+                            player_feedback_message += f" Their HP is now {npc_target.hp}."
+                        else:
+                            player_feedback_message += f" {npc_target.name} has been defeated!"
+
+                        if game_play_frame: # Check if UI is available
+                            game_play_frame.add_narration(player_feedback_message + "\n")
+
+                        update_ui_game_state() # Update UI immediately
+
+                        text_for_dm = f"Player {player.name} attacked {npc_target.name}, dealing {damage_amount} damage. {npc_target.name}'s current HP is {npc_target.hp}."
+                        if npc_target.hp == 0:
+                            text_for_dm += f" {npc_target.name} has fallen in combat and is now defeated."
+
+                        # Start the thread with this descriptive text for the DM
+                        thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(text_for_dm,))
+                        thread.start()
+                        return # Attack handled, prevent further processing of this input
+                    else:
+                        if game_play_frame:
+                            game_play_frame.add_narration(f"{npc_target.name} is already defeated.\n")
+                        # No DM message needed if target already down, re-enable input directly
+                        if game_play_frame:
+                            game_play_frame.input_entry.config(state='normal')
+                            game_play_frame.send_button.config(state='normal')
+                        return
+                else:
+                    if game_play_frame:
+                        game_play_frame.add_narration(f"You don't see anyone named '{target_npc_name}' here to attack.\n")
+                    # No DM message, re-enable input
+                    if game_play_frame:
+                        game_play_frame.input_entry.config(state='normal')
+                        game_play_frame.send_button.config(state='normal')
+                    return
+        else:
+            if game_play_frame:
+                game_play_frame.add_narration("Who do you want to attack? (e.g., attack Goblin)\n")
+            # No DM message, re-enable input
+            if game_play_frame:
+                game_play_frame.input_entry.config(state='normal')
+                game_play_frame.send_button.config(state='normal')
+            return
+    # --- Roll Command ---
+    elif player_input_text.lower().startswith("roll "):
+        command_part = player_input_text.lower().split(" ", 1)[1].strip() # e.g., "d20" or "1d20"
+
+        num_dice = 1 # Currently supporting 1 die
+        sides = 0
+
+        # Simple parsing for "d<N>" or "1d<N>"
+        if command_part.startswith('d'):
+            try:
+                sides = int(command_part[1:])
+            except ValueError:
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Use 'd<number>', e.g., 'roll d20'.\n")
+                if game_play_frame: # Re-enable input
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return
+        elif 'd' in command_part:
+            parts = command_part.split('d')
+            if len(parts) == 2:
+                try:
+                    # For now, only support 1dX, parts[0] should be '1' or empty
+                    if parts[0] == '' or parts[0] == '1':
+                        sides = int(parts[1])
+                    else:
+                        if game_play_frame:
+                            game_play_frame.add_narration(f"Unsupported dice format: '{command_part}'. Try 'd<number>' or '1d<number>'.\n")
+                        if game_play_frame: # Re-enable input
+                            game_play_frame.input_entry.config(state='normal')
+                            game_play_frame.send_button.config(state='normal')
+                        return
+                except ValueError:
+                    if game_play_frame:
+                        game_play_frame.add_narration(f"Invalid dice numbers: '{command_part}'.\n")
+                    if game_play_frame: # Re-enable input
+                        game_play_frame.input_entry.config(state='normal')
+                        game_play_frame.send_button.config(state='normal')
+                    return
+            else: # Invalid format like "d" or "d20d"
+                if game_play_frame:
+                    game_play_frame.add_narration(f"Invalid dice format: '{command_part}'.\n")
+                if game_play_frame: # Re-enable input
+                    game_play_frame.input_entry.config(state='normal')
+                    game_play_frame.send_button.config(state='normal')
+                return
+        else: # No 'd' found, e.g. "roll 20"
+            if game_play_frame:
+                game_play_frame.add_narration(f"Invalid dice format: '{command_part}'. Did you mean 'd{command_part}'?\n")
+            if game_play_frame: # Re-enable input
+                game_play_frame.input_entry.config(state='normal')
+                game_play_frame.send_button.config(state='normal')
+            return
+
+        if sides > 0:
+            roll_result = roll_dice(sides)
+            player_feedback = f"You roll a d{sides} and get: {roll_result}.\n"
+            if game_play_frame:
+                game_play_frame.add_narration(player_feedback)
+
+            player = game_state_manager.get_player(MAIN_PLAYER_ID) # Get player for name
+            player_name = player.name if player else "Player"
+            text_for_dm = f"{player_name} rolls a d{sides} for an action, getting a {roll_result}."
+
+            thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(text_for_dm,))
+            thread.start()
+            return # Dice roll handled
+        else: # Fallback, should be caught by parsing
+            if game_play_frame:
+                game_play_frame.add_narration(f"Could not determine the type of dice to roll from '{command_part}'.\n")
+            if game_play_frame: # Re-enable input
+                game_play_frame.input_entry.config(state='normal')
+                game_play_frame.send_button.config(state='normal')
+            return
+
+    # If we reach here, no specific local command was fully handled and returned.
+    # So, pass the original player_input_text to the DM.
     thread = threading.Thread(target=threaded_api_call_and_ui_updates, args=(player_input_text,))
     thread.start()
 

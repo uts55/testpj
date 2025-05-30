@@ -235,6 +235,18 @@ class NPC:
             status=data['status'],
             hp=data.get('hp')
         )
+
+    def take_damage(self, amount: int):
+        if self.hp is not None: # Check if NPC has HP attribute
+            self.hp -= amount
+            if self.hp < 0:
+                self.hp = 0 # Prevent negative HP
+            logger.info(f"NPC {self.name} ({self.id}) took {amount} damage. HP is now {self.hp}.")
+            if self.hp == 0:
+                logger.info(f"NPC {self.name} ({self.id}) has been defeated.")
+                # Future: Add logic for handling NPC defeat (e.g., changing status, removing from game)
+        else:
+            logger.warning(f"NPC {self.name} ({self.id}) has no HP to take damage.")
     
     def change_status(self, new_status: str):
         old_status = self.status

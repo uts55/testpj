@@ -3,6 +3,7 @@
     "id": "npc_001",
     "name": "엘라라",
     "type": "npc",
+    "hp": 30,
     "current_location": "엘름 마을 촌장집",
     "description": "엘름 마을의 현명한 촌장.",
     "lore_fragments": [
