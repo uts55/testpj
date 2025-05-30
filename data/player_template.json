@@ -1,0 +1,70 @@
+{
+  "id": "player_1",
+  "name": "Valerius",
+  "player_class": "Wizard",
+  "level": 5,
+  "experience_points": 14000,
+  "ability_scores": {
+    "strength": 10,
+    "dexterity": 14,
+    "constitution": 12,
+    "intelligence": 18,
+    "wisdom": 15,
+    "charisma": 13
+  },
+  "combat_stats": {
+    "armor_class": 12,
+    "initiative_bonus": 2,
+    "speed": 30,
+    "spell_save_dc": 15,
+    "spell_attack_bonus": 7
+  },
+  "hit_points": {
+    "current": 25,
+    "maximum": 30,
+    "temporary": 0
+  },
+  "spell_slots": {
+    "level_1": { "current": 4, "maximum": 4 },
+    "level_2": { "current": 3, "maximum": 3 },
+    "level_3": { "current": 2, "maximum": 2 }
+  },
+  "inventory": ["item_1", "item_gold"],
+  "equipment": {
+    "weapon": "item_staff_of_power",
+    "armor": null,
+    "shield": null,
+    "helmet": "item_circlet_of_intellect",
+    "boots": "item_boots_of_elvenkind",
+    "gloves": null,
+    "amulet": "item_amulet_of_health",
+    "ring1": null,
+    "ring2": null,
+    "currency": {
+      "gold": 150,
+      "silver": 30,
+      "copper": 75
+    }
+  },
+  "skills": ["arcana", "history", "investigation"],
+  "status_effects": [],
+  "proficiencies": {
+    "armor": ["none"],
+    "weapons": ["daggers", "darts", "slings", "quarterstaffs", "light crossbows"],
+    "tools": ["alchemist's supplies"],
+    "saving_throws": ["intelligence", "wisdom"],
+    "skills": ["arcana", "history", "insight", "investigation", "medicine"]
+  },
+  "feats": ["elemental_adept_fire"],
+  "knowledge_fragments": ["lore_ancient_ruins", "lore_dragons"],
+  "current_location": "location_tower_wizard",
+  "background": "Sage",
+  "alignment": "Neutral Good",
+  "personality_traits": ["Curious", "Knowledge-seeking"],
+  "ideals": ["Knowledge is power"],
+  "bonds": ["My mentor's unfinished research"],
+  "flaws": ["Often lost in thought"],
+  "notes": "Met a mysterious stranger in the tavern.",
+  "active_quests": ["quest_find_lost_artifact"],
+  "completed_quests": ["quest_deliver_message"]
+}
