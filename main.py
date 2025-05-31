@@ -1,105 +1,176 @@
-from game_state import PlayerState, determine_initiative
-
-# --- Mock Objects for Demonstration ---
-class MockPlayer:
-    def __init__(self, id, hp, initiative_bonus):
-        self.id = id
-        self.current_hp = hp
-        self.combat_stats = {'initiative_bonus': initiative_bonus}
-
-class MockNPC:
-    def __init__(self, id, hp, initiative_bonus):
-        self.id = id
-        self.current_hp = hp # Assuming NPCs also use 'current_hp' for consistency
-        self.combat_stats = {'initiative_bonus': initiative_bonus}
-
-# --- Global PlayerState instance for demonstration ---
-# In a real application, this might be managed differently (e.g., part of a game class)
-# player_state_instance = PlayerState() # We'll create fresh instances in main for clarity
+from game_state import PlayerState, determine_initiative, Player, NPC, Character
 
 # --- Combat Flow Functions ---
 
-def start_combat(player: MockPlayer, npcs: list[MockNPC], current_player_state: PlayerState) -> str:
+def start_combat(player: Player, npcs: list[NPC], current_player_state: PlayerState) -> str:
     """
     Initializes combat, sets turn order, and notifies the DM.
     """
+    if not isinstance(player, Player):
+        return "Error: Player object is not of type Player."
+    if not all(isinstance(npc, NPC) for npc in npcs):
+        return "Error: Not all NPC objects are of type NPC."
+    if not isinstance(current_player_state, PlayerState):
+        return "Error: PlayerState object is not of type PlayerState."
+
     current_player_state.is_in_combat = True
+    all_participants: list[Character] = [player] + npcs
+    current_player_state.participants_in_combat = all_participants # Store actual objects
 
-    all_participants = [player] + npcs
-    # Ensure participants have 'id' and 'combat_stats' as expected by determine_initiative
-    # The mock objects are created with these, real objects would need to conform.
-    current_player_state.participants_in_combat = [p.id for p in all_participants]
-
-    current_player_state.turn_order = determine_initiative(all_participants)
+    current_player_state.turn_order = determine_initiative(all_participants) # Expects list of objects
 
     if not current_player_state.turn_order:
         current_player_state.is_in_combat = False
+        # Reset participants if combat fails to start
+        current_player_state.participants_in_combat = []
         return "Combat could not start: no participants or failed initiative determination."
 
     current_player_state.current_turn_character_id = current_player_state.turn_order[0]
 
-    turn_order_str = ", ".join(map(str, current_player_state.turn_order))
-    return f"Combat started! Turn order: {turn_order_str}. First up: {current_player_state.current_turn_character_id}."
+    # Get names for the turn order string
+    turn_order_names = []
+    for char_id in current_player_state.turn_order:
+        participant = next((p for p in all_participants if p.id == char_id), None)
+        if participant:
+            turn_order_names.append(participant.name)
+        else:
+            turn_order_names.append(f"Unknown({char_id})")
 
-def process_combat_turn(current_player_state: PlayerState) -> str:
+
+    turn_order_str = ", ".join(turn_order_names)
+    first_character_name = "Unknown"
+    first_char_obj = next((p for p in all_participants if p.id == current_player_state.current_turn_character_id), None)
+    if first_char_obj:
+        first_character_name = first_char_obj.name
+
+    return f"Combat started! Turn order: {turn_order_str}. First up: {first_character_name} ({current_player_state.current_turn_character_id})."
+
+def process_combat_turn(current_player_state: PlayerState, player_action: str = "") -> str:
     """
-    Processes the current character's turn and advances to the next.
+    Processes the current character's turn: handles action, attack, and advances to the next.
+    Returns a message for the DM or player.
     """
     if not current_player_state.is_in_combat or not current_player_state.turn_order:
         return "Cannot process turn: not in combat or turn order is empty."
 
     if not current_player_state.current_turn_character_id:
-        # This might happen if combat ended and state was cleared before this function was called
         return "Cannot process turn: current_turn_character_id is not set."
 
     char_id = current_player_state.current_turn_character_id
-    notification = f"{char_id}'s turn."
+    attacker = next((p for p in current_player_state.participants_in_combat if p.id == char_id), None)
 
-    # Placeholder for actual action selection and execution
-    # print(f"Action placeholder for {char_id}")
+    if attacker is None:
+        return f"Error: Attacker with ID {char_id} not found in participants list. Combat state corrupted."
 
-    # Advance turn
-    try:
-        current_turn_index = current_player_state.turn_order.index(char_id)
-        next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
-        current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
-    except ValueError:
-        # Should not happen if char_id is always from turn_order and turn_order is not modified externally mid-turn
-        return f"Error: Character {char_id} not found in turn order. Combat state might be corrupted."
-    except IndexError:
-        # Should not happen with modulo arithmetic if turn_order is not empty
-        return "Error: Problem advancing turn due to turn order indexing. Combat state might be corrupted."
+    if not attacker.is_alive():
+        # Skip turn if the current character is not alive (e.g. defeated by AoE before their turn)
+        # Advance turn
+        try:
+            current_turn_index = current_player_state.turn_order.index(char_id)
+            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
+            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
+            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
+            next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
+            return f"{attacker.name} is defeated and cannot take a turn. Advancing to {next_attacker_name}."
+        except (ValueError, IndexError) as e:
+            return f"Error advancing turn after defeated character: {e}. Combat state corrupted."
 
-    return notification
 
-def check_combat_end_condition(player: MockPlayer, npcs: list[MockNPC], current_player_state: PlayerState) -> tuple[bool, str]:
+    action_message = ""
+    turn_advanced = False
+
+    if attacker == current_player_state.player_character: # Player's turn
+        if not player_action:
+            return f"{attacker.name}'s turn. Type 'attack <target_name>' or 'pass'."
+
+        action_parts = player_action.lower().split(" ", 1)
+        command = action_parts[0]
+
+        if command == "attack":
+            if len(action_parts) < 2:
+                return "Invalid action. Usage: attack <target_name>"
+            target_name = action_parts[1]
+            target = next((p for p in current_player_state.participants_in_combat
+                           if p.name.lower() == target_name.lower() and p.is_alive()), None)
+            if target:
+                if target == attacker:
+                    action_message = f"{attacker.name} wisely decides not to attack themselves."
+                else:
+                    action_message = attacker.attack(target)
+            else:
+                action_message = f"Target '{target_name}' not found, is not alive, or is invalid."
+            turn_advanced = True # Attack action consumes the turn
+        elif command == "pass":
+            action_message = f"{attacker.name} passes their turn."
+            turn_advanced = True
+        else:
+            action_message = f"Invalid action: '{player_action}'. Type 'attack <target_name>' or 'pass'."
+            # For invalid actions, we don't advance the turn, player gets another try.
+            return action_message
+
+    else: # NPC's turn
+        # Simple AI: Attack the player character if alive
+        target = current_player_state.player_character
+        if target and target.is_alive():
+            action_message = attacker.attack(target)
+        elif target and not target.is_alive():
+            action_message = f"{attacker.name} sees the player {target.name} is defeated and looks for other targets (but finds none)."
+            # In a more complex scenario, NPC might choose another NPC or take other actions.
+        else: # Should not happen if player_character is always set in PlayerState
+             action_message = f"{attacker.name} is confused and has no target."
+        turn_advanced = True # NPC turn always results in an action or attempted action
+
+    # Advance turn if an action was taken or turn was passed
+    if turn_advanced:
+        try:
+            current_turn_index = current_player_state.turn_order.index(char_id)
+            # Ensure all participants in turn_order are still valid (alive) or skip them
+            # This simple advance just goes to next ID, assumes check_combat_end or next turn processing handles defeated chars
+            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
+            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
+
+            # Append next turn info to the message
+            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
+            if next_attacker_obj:
+                 action_message += f"\nNext up: {next_attacker_obj.name}."
+            else: # Should ideally not happen if turn_order IDs are valid
+                action_message += f"\nNext up: ID {current_player_state.current_turn_character_id} (name unknown)."
+
+        except ValueError:
+            return f"{action_message}\nError: Character {char_id} not found in turn order. Combat state might be corrupted."
+        except IndexError:
+            return f"{action_message}\nError: Problem advancing turn. Combat state might be corrupted."
+
+    return action_message
+
+def check_combat_end_condition(player: Player, npcs: list[NPC], current_player_state: PlayerState) -> tuple[bool, str]:
     """
     Checks if combat has ended due to player defeat or all NPCs being defeated.
     Resets combat state if an end condition is met.
     """
     if not current_player_state.is_in_combat:
-        # If called when not in combat, it means combat already ended or never started.
-        # Return True if it's already marked as not in combat, as an "end condition" was previously met.
-        return (not current_player_state.is_in_combat, "")
+        return (not current_player_state.is_in_combat, "") # Already ended
 
-    player_defeated = player.current_hp <= 0
-    # Ensure npcs list is not empty before checking all()
-    all_npcs_defeated = bool(npcs) and all(npc.current_hp <= 0 for npc in npcs)
+    if not isinstance(player, Player) or not all(isinstance(npc, NPC) for npc in npcs):
+        # This indicates a programming error if wrong types are passed.
+        return (False, "Error: Type mismatch in check_combat_end_condition arguments.")
 
+    player_defeated = not player.is_alive()
+    all_npcs_defeated = bool(npcs) and all(not npc.is_alive() for npc in npcs)
 
     end_condition_met = False
     notification = ""
 
     if player_defeated:
-        notification = f"Player {player.id} has been defeated! Combat ends."
+        notification = f"Player {player.name} ({player.id}) has been defeated! Combat ends."
         end_condition_met = True
     elif all_npcs_defeated:
-        notification = "All enemies defeated! Combat ends."
+        notification = f"All NPCs ({', '.join(npc.name for npc in npcs)}) defeated! Combat ends."
         end_condition_met = True
 
     if end_condition_met:
         current_player_state.is_in_combat = False
-        current_player_state.participants_in_combat = []
+        current_player_state.participants_in_combat = [] # Clear participants list
         current_player_state.current_turn_character_id = None
         current_player_state.turn_order = []
         return (True, notification)
@@ -141,13 +212,11 @@ class GeminiDM:
         return response
 
 # --- Global PlayerState and Mock Entities for main game loop ---
-main_player_state = PlayerState()
-hero = MockPlayer(id="Hero", hp=100, initiative_bonus=3)
-# Initialize with a couple of NPCs by default for testing "fight" command
-mock_npcs_in_encounter = [
-    MockNPC(id="Goblin_Alpha", hp=30, initiative_bonus=1),
-    MockNPC(id="Goblin_Beta", hp=25, initiative_bonus=0)
-]
+# These will be properly initialized in main() using the real classes
+hero: Player = None # Will be Player("Hero", ...)
+mock_npcs_in_encounter: list[NPC] = [] # Will be [NPC(...), NPC(...)]
+main_player_state: PlayerState = None # Will be PlayerState(hero)
+
 
 def main():
     print("Starting game...")
@@ -158,79 +227,101 @@ def main():
     # response = dm.send_message("Hello DM, the game is starting.", stream=True)
     # print(f"\nInitial DM response: {response}")
 
+    # Initialize global game objects (hero, NPCs, player_state)
+    # This needs to be done once, outside the loop, or when a new game starts.
+    # For now, we'll do it here.
+    global hero, mock_npcs_in_encounter, main_player_state
+    hero = Player(id="hero_1", name="Hero", max_hp=100,
+                  combat_stats={'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 3},
+                  base_damage_dice="1d8")
+
+    # Reset or initialize NPCs for encounters
+    # It's better to create new NPC instances for each fight or reset them fully.
+    def get_fresh_npcs():
+        return [
+            NPC(id="goblin_a", name="Goblin Alpha", max_hp=30,
+                combat_stats={'armor_class': 12, 'attack_bonus': 3, 'damage_bonus': 1, 'initiative_bonus': 1},
+                base_damage_dice="1d6", dialog="Grrr!"),
+            NPC(id="goblin_b", name="Goblin Beta", max_hp=25,
+                combat_stats={'armor_class': 10, 'attack_bonus': 2, 'damage_bonus': 0, 'initiative_bonus': 0},
+                base_damage_dice="1d4", dialog="Me hit you!")
+        ]
+    mock_npcs_in_encounter = get_fresh_npcs()
+
+    main_player_state = PlayerState(player_character=hero)
+
+
     while True:
-        player_input = input("You: ")
-        if player_input.lower() == "quit":
+        player_input_for_dm = "" # What the player types, to be sent to DM if not a combat command
+        player_action_for_combat = "" # Specific combat action for process_combat_turn
+
+        raw_player_input = input("You: ")
+        if raw_player_input.lower() == "quit":
             print("Exiting game.")
             break
 
-        dm_message_to_send = ""
-        combat_messages = []
+        dm_message_to_send = "" # This will be the primary message for the DM
+        ui_feedback = [] # Messages for the player's UI, not for DM (e.g., invalid command prompts)
 
         if main_player_state.is_in_combat:
             # --- COMBAT LOGIC ---
-            # Player input during combat could be "attack goblin_alpha", "hit hero", "next", etc.
-            # For now, any input progresses the turn, but we can add simple damage simulation.
+            # Player input during combat is an action for their turn.
+            player_action_for_combat = raw_player_input
 
-            # Simplified damage simulation for testing:
-            if player_input.lower().startswith("hit "):
-                parts = player_input.split(" ")
-                if len(parts) == 2:
-                    target_id = parts[1]
-                    damage = 10 # Fixed damage for simulation
-                    if target_id == hero.id:
-                        hero.current_hp -= damage
-                        main_player_state.take_damage(damage) # Assuming PlayerState also tracks player HP
-                        combat_messages.append(f"DEBUG: Hero takes {damage} damage. HP: {hero.current_hp}")
-                    else:
-                        target_npc = next((npc for npc in mock_npcs_in_encounter if npc.id.lower() == target_id.lower()), None)
-                        if target_npc:
-                            target_npc.current_hp -= damage
-                            combat_messages.append(f"DEBUG: {target_npc.id} takes {damage} damage. HP: {target_npc.current_hp}")
-                        else:
-                            combat_messages.append(f"DEBUG: Target {target_id} not found for 'hit' command.")
+            # Process the turn. This will handle player action or NPC AI.
+            # It returns a message that is usually for the DM (attack results, etc.)
+            # or a prompt for the player if more input is needed (e.g. "Your turn. Type 'attack...'")
+            turn_result_message = process_combat_turn(main_player_state, player_action_for_combat)
 
-            # Always process turn and check end condition
-            turn_notification = process_combat_turn(main_player_state)
-            combat_messages.append(turn_notification)
+            # Check if the message is a prompt for the player or a DM message
+            if "Type 'attack" in turn_result_message or "Invalid action" in turn_result_message or "Target '" in turn_result_message:
+                ui_feedback.append(turn_result_message)
+            else: # It's a DM message (attack, pass, NPC action)
+                dm_message_to_send = turn_result_message
 
+            # Check for combat end after processing the turn
             ended, end_notification = check_combat_end_condition(hero, mock_npcs_in_encounter, main_player_state)
             if ended:
-                combat_messages.append(end_notification)
+                if dm_message_to_send: # Append end notification to existing DM message
+                    dm_message_to_send += "\n" + end_notification
+                else: # Or set it as the DM message if no other action message this turn
+                    dm_message_to_send = end_notification
+                ui_feedback.append("\n--- Combat Over ---")
 
-            # Join messages with newline, filtering out any potential None or empty strings
-            dm_message_to_send = "\n".join(filter(None, combat_messages))
 
-        elif player_input.lower() == "fight":
+        elif raw_player_input.lower() == "fight":
             if not main_player_state.is_in_combat:
-                # (Re-)initialize NPCs for a new fight if desired, or use existing ones
-                # For this test, we'll re-use/re-initialize mock_npcs_in_encounter if they were defeated.
-                if all(npc.current_hp <= 0 for npc in mock_npcs_in_encounter):
-                    print("DEBUG: All NPCs were defeated. Resetting them for a new fight.")
-                    mock_npcs_in_encounter[0].current_hp = 30 # Reset HP
-                    mock_npcs_in_encounter[1].current_hp = 25 # Reset HP
-                if hero.current_hp <= 0:
-                    hero.current_hp = 100 # Revive hero for a new fight
-                    main_player_state.current_hp = 100 # Reset PlayerState HP
+                # Reset hero and NPCs for a new fight
+                hero.current_hp = hero.max_hp # Heal hero
+                hero.inventory = [] # Clear inventory for a fresh start if desired
+                # It's important that PlayerState's player_character IS hero, so this heals the one PlayerState uses.
+
+                mock_npcs_in_encounter = get_fresh_npcs() # Get fresh NPCs
+
+                # Ensure PlayerState is correctly re-initialized for combat if needed,
+                # or simply reset its combat-specific attributes.
+                # PlayerState already holds the 'hero' instance.
+                # start_combat will reset participants, turn order, etc.
 
                 start_message = start_combat(hero, mock_npcs_in_encounter, main_player_state)
                 dm_message_to_send = start_message
             else:
-                dm_message_to_send = "Already in combat!"
+                ui_feedback.append("Already in combat!")
         else:
             # --- NON-COMBAT LOGIC ---
-            dm_message_to_send = player_input
+            # Player input is a general message to the DM
+            dm_message_to_send = raw_player_input
 
 
+        # Print UI feedback first
+        if ui_feedback:
+            for msg in ui_feedback:
+                print(msg)
+
+        # Then send any message intended for the DM
         if dm_message_to_send:
-            # print(f"\nSending to DM: '{dm_message_to_send}'") # Debugging what's sent
             response = dm.send_message(dm_message_to_send, stream=True)
-            # print(f"DM: {response}") # Raw response if not streaming
-
-        # If combat ended this turn, print a clear "Combat Over" message after DM response
-        if not main_player_state.is_in_combat and any("Combat ends." in msg for msg in combat_messages):
-            print("\n--- Combat Over ---")
-
+            # print(f"DM: {response}") # Raw response if not streaming if needed for debug
 
 if __name__ == "__main__":
     # This replaces the old demonstration block
