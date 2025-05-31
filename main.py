@@ -368,14 +368,21 @@ def notify_dm_event(dm_manager, message: str):
 # Global type hint for app can now safely use GamePlayFrame as it's defined in both paths
 # (either imported from ui or defined as MockGamePlayFrame)
 
+from rag_manager import query_vector_db
+from config import EMBEDDING_MODEL_NAME, VECTOR_DB_PATH, COLLECTION_NAME
+from game_state import GameState # Added for game instance
+
 # --- Global PlayerState and Mock Entities for main game loop ---
 import data_loader # Import the data_loader module
+from data_loader import load_raw_data_from_sources # Specific import
+from config import RAG_DOCUMENT_SOURCES # Specific import for RAG sources
 
 hero: Player = None
 mock_npcs_in_encounter: list[NPC] = []
 main_player_state: PlayerState = None
 dm: GeminiDM = None # Global DM instance
 app: GamePlayFrame = None # This will be an instance of ui.GamePlayFrame or MockGamePlayFrame
+game: GameState = None # Global GameState instance
 
 def get_fresh_npcs() -> list[NPC]:
     """Loads NPCs from data files using the DataLoader."""
@@ -647,7 +654,66 @@ def process_player_input(input_text: str):
             dm_message_to_send = "Player decided to quit the game."
             return # Stop further processing
 
-        else: # Skill checks or general message
+        # --- READ / EXAMINE COMMAND ---
+        read_examine_match = re.match(r"^(?:read|examine)\s+(.+)$", raw_player_input, re.IGNORECASE)
+        if read_examine_match:
+            item_name_to_find = read_examine_match.group(1).strip().lower()
+            found_item_object = None
+
+            if hero and game and game.items: # Ensure hero, game, and game.items are available
+                for item_id in hero.inventory:
+                    item_obj = game.items.get(item_id)
+                    if item_obj and item_obj.name.lower() == item_name_to_find:
+                        found_item_object = item_obj
+                        break
+
+            if found_item_object:
+                item = found_item_object
+                dm_info_parts = []
+                narration_message_sent = False
+
+                if item.description:
+                    app.add_narration(f"You examine the {item.name}: {item.description}")
+                    dm_info_parts.append(f"Description: {item.description}")
+                    narration_message_sent = True
+
+                if item.lore_keywords:
+                    query_text = " ".join(item.lore_keywords)
+                    try:
+                        retrieved_docs = query_vector_db(query_text, VECTOR_DB_PATH, COLLECTION_NAME, EMBEDDING_MODEL_NAME, n_results=2)
+                        if retrieved_docs:
+                            dm_info_parts.append("Associated RAG Information:")
+                            for doc_idx, doc in enumerate(retrieved_docs):
+                                doc_text = doc.get('document_text', 'No text available.')
+                                doc_name = doc.get('metadata', {}).get('name', f'Unknown source {doc_idx+1}')
+                                dm_info_parts.append(f"- {doc_name}: {doc_text[:150]}{'...' if len(doc_text) > 150 else ''}")
+                        else:
+                            dm_info_parts.append("No specific details found via RAG for its keywords.")
+                    except Exception as e:
+                        dm_info_parts.append(f"Error querying RAG: {e}")
+                        print(f"Error during RAG query for '{item.name}': {e}") # Log to console
+
+                if not narration_message_sent and not item.lore_keywords: # No description and no keywords
+                    app.add_narration(f"You examine the {item.name}. There's nothing particularly noteworthy about it in terms of lore.")
+                    notify_dm_event(dm, f"Player examines {item.name}, but it's not a lore item or has no details.")
+                    dm_message_to_send = None
+                elif not narration_message_sent and item.lore_keywords: # No description but HAS keywords
+                     app.add_narration(f"You examine the {item.name}. It has no specific text, but you feel it might be important based on its nature.")
+                     # DM notification will be built from dm_info_parts
+
+                if dm_info_parts:
+                    dm_message = f"Player reads/examines {item.name}.\n" + "\n".join(dm_info_parts)
+                    notify_dm_event(dm, dm_message)
+                elif narration_message_sent and not item.lore_keywords: # Had description but no keywords to process further for DM
+                    notify_dm_event(dm, f"Player reads {item.name}. Description was: {item.description}")
+
+
+                dm_message_to_send = None # Command handled
+            else:
+                app.add_narration(f"You don't have a '{read_examine_match.group(1).strip()}' in your inventory.")
+                dm_message_to_send = None # Command handled (item not found)
+
+        else: # Skill checks or general message (original else block)
             skill_command_pattern = r"^(?:use|try to)\s+(\w+)\s+(?:on|to)\s+(.+?)\s+\(DC\s*(\d+)\)$"
             match = re.match(skill_command_pattern, raw_player_input, re.IGNORECASE)
             if match:
@@ -704,10 +770,15 @@ def dummy_exit():
             print("UI_MOCK_ACTION: exit_callback called (test mode), but app or _test_destroyed_flag not available for MockGamePlayFrame.")
 
 def main():
-    global hero, mock_npcs_in_encounter, main_player_state, dm, app
+    global hero, mock_npcs_in_encounter, main_player_state, dm, app, game # Added game
     print("Starting game...")
 
     dm = GeminiDM()
+    # Initialize GameState early, needs to be populated after data loading
+    # For now, just creating an instance. Data loading will be separate.
+    # This addresses the `game.items` access.
+    # Actual data loading into `game` instance needs to happen after player init
+    # and before game loop or any command that might need game.items.
 
     hero_player_data = {
         "id": "hero_1", "name": "Hero", "max_hp": 100,
@@ -720,7 +791,51 @@ def main():
     }
     hero = Player(player_data=hero_player_data)
     mock_npcs_in_encounter = get_fresh_npcs() # This now uses data_loader
-    main_player_state = PlayerState(player_character=hero)
+    main_player_state = PlayerState(player_character=hero) # PlayerState initialized
+
+    game = GameState(player_character=hero) # Initialize GameState with the player
+
+    # Load all raw game data using the imported function and config
+    print("Loading all game data for GameState initialization...")
+    all_game_raw_data = load_raw_data_from_sources(RAG_DOCUMENT_SOURCES)
+
+    # Initialize the game instance with this data
+    game.initialize_from_raw_data(all_game_raw_data)
+    print(f"GameState initialized. Items loaded: {len(game.items)}, NPCs: {len(game.npcs)}, Locations: {len(game.locations)}")
+    # The TODO is now addressed. game.items should be populated if data files exist.
+
+    # Add new lore items to inventory for testing the 'read' command
+    if "old_journal_001" in game.items:
+        hero.add_to_inventory("old_journal_001")
+        print(f"DEBUG: Added 'old_journal_001' to hero's inventory. Current inv: {hero.inventory}")
+    else:
+        print("DEBUG: 'old_journal_001' not found in game.items. Cannot add to inventory.")
+
+    if "ancient_tablet_fragment_001" in game.items:
+        hero.add_to_inventory("ancient_tablet_fragment_001")
+        print(f"DEBUG: Added 'ancient_tablet_fragment_001' to hero's inventory. Current inv: {hero.inventory}")
+    else:
+        print("DEBUG: 'ancient_tablet_fragment_001' not found in game.items. Cannot add to inventory.")
+
+    if "historical_fragment_eldoria_001" in game.items:
+        hero.add_to_inventory("historical_fragment_eldoria_001")
+        print(f"DEBUG: Added 'historical_fragment_eldoria_001' to hero's inventory. Current inv: {hero.inventory}")
+    else:
+        print("DEBUG: 'historical_fragment_eldoria_001' not found in game.items. Cannot add to inventory.")
+
+    # For testing a non-lore item, ensure one is in inventory (e.g. from initial setup)
+    # hero_player_data already includes "healing_potion_small" and equips "iron_sword"
+    # Let's ensure "iron_sword" is also in inventory if not equipped or for a generic read test
+    # hero.inventory initially might be empty if not set in hero_player_data or cleared.
+    # The Player class init for hero_player_data already puts "healing_potion_small" in inventory.
+    # And "iron_sword" is set in equipment.
+    # Let's add "iron_sword" to inventory if it's not there, just to be sure for testing "read iron_sword".
+    if "iron_sword" in game.items and "iron_sword" not in hero.inventory:
+        # Check if it's equipped; if so, unequip and add to inventory for this test, or just add.
+        # For simplicity, just add it. The read command doesn't care about equipped status.
+        hero.add_to_inventory("iron_sword")
+        print(f"DEBUG: Added 'iron_sword' to hero's inventory for testing 'read' on a non-lore item. Current inv: {hero.inventory}")
+
 
     # is_test_mode = (os.getenv("RUNNING_INTERACTIVE_TEST") == "true") # Already determined by is_test_mode_check_for_import
     global app # Ensure app is treated as global for assignment here

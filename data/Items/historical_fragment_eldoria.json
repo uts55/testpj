@@ -1,0 +1,9 @@
+{
+  "id": "historical_fragment_eldoria_001",
+  "name": "Eldorian Historical Fragment",
+  "item_type": "generic",
+  "description": "A shard of what appears to be a decree from the Solar Empire of Eldoria. It mentions 'arcane machinery' and the 'Sylvaneth Conclave' as adversaries during the early days of the War of the Ancients.",
+  "weight": 0.5,
+  "value": {"buy": 70, "sell": 15},
+  "lore_keywords": []
+}

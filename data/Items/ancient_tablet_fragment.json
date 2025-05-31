@@ -1,0 +1,9 @@
+{
+  "id": "ancient_tablet_fragment_001",
+  "name": "Ancient Tablet Fragment",
+  "item_type": "generic",
+  "description": "A heavy stone fragment covered in weathered, indecipherable glyphs. It feels ancient and resonates with a faint power. It seems to depict a great city sinking beneath waves.",
+  "weight": 2.0,
+  "value": {"buy": 150, "sell": 30},
+  "lore_keywords": ["Lost Civilization", "Atalan", "Sunken City", "Crystal Technology", "Azure Sea"]
+}

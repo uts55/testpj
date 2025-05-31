@@ -1,0 +1,9 @@
+{
+  "id": "old_journal_001",
+  "name": "Old Journal Page",
+  "item_type": "generic",
+  "description": "A brittle page torn from a journal. It reads: '...the twin celestial Tenebris carved the Spirit Veil, and through this act, the first whispers of magic entered Aethel. The Elemental Titans, children of this new age, then began their great shaping of the lands...'",
+  "weight": 0.1,
+  "value": {"buy": 50, "sell": 10},
+  "lore_keywords": ["Twin Celestials", "Tenebris", "Spirit Veil", "Elemental Titans", "Origin of Magic"]
+}
