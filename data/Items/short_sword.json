@@ -1,0 +1,8 @@
+{
+  "id": "short_sword",
+  "name": "Short Sword",
+  "type": "weapon",
+  "damage_dice": "1d6",
+  "attack_bonus": 1,
+  "damage_bonus": 0
+}
