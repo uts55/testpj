@@ -4,6 +4,7 @@ import logging # For logging warnings
 from magic import SPELLBOOK, Spell # Import necessary spellcasting components
 from gemini_dm import notify_dm # Import for DM notifications
 from quests import ALL_QUESTS # Import for accessing quest details
+from factions import Faction # Added import
 
 # Import necessary functions/classes from data_loader and config for the main block
 import json # For main block example printing
@@ -326,7 +327,7 @@ class Player(Character):
     def consume_spell_slot(self,spell_level:int)->bool:
         if self.has_spell_slot(spell_level): self.spell_slots[f"level_{spell_level}"]["current"]-=1; return True
         return False
-    def apply_rewards(self,rewards:dict)->list[str]:
+    def apply_rewards(self,rewards:dict, game_state: 'GameState')->list[str]:
         msgs=[]
         if "xp" in rewards and isinstance(rewards["xp"],int) and rewards["xp"]>0: self.experience_points+=rewards["xp"]; msgs.append(f"Gained {rewards['xp']} XP.")
         if "items" in rewards and isinstance(rewards["items"],list):
@@ -340,6 +341,20 @@ class Player(Character):
                     self.equipment["currency"][c_type]=self.equipment.get("currency",{}).get(c_type,0)+amt
                     msgs.append(f"Received {amt} {c_type}.")
                 else: logging.warning(f"Invalid currency rewards: {c_type},{amt}")
+
+        if "faction_rep_changes" in rewards and isinstance(rewards["faction_rep_changes"], list):
+            for rep_change in rewards["faction_rep_changes"]:
+                if isinstance(rep_change, dict):
+                    faction_id = rep_change.get("faction_id")
+                    amount = rep_change.get("amount")
+                    if faction_id and isinstance(amount, int):
+                        self.change_faction_reputation(faction_id, amount, game_state)
+                        # The change_faction_reputation method already logs and notifies DM
+                    else:
+                        logging.warning(f"Player {self.name}: Invalid faction reputation change data in rewards: {rep_change}")
+                else:
+                    logging.warning(f"Player {self.name}: Invalid entry in faction_rep_changes list: {rep_change}")
+
         if msgs: notify_dm(f"Rewards for {self.name}: {'. '.join(msgs)}.")
         return msgs
     def accept_quest(self, q_id:str, stage_id:str)->tuple[bool,str]:
@@ -391,12 +406,22 @@ class NPC(Character):
     def get_dialogue_node(self, key: str) -> dict | None: return self.dialogue_responses.get(key)
 
 class GameState:
+    player_character: Player
+    locations: dict[str, Location]
+    items: dict[str, Item]
+    npcs: dict[str, NPC]
+    factions: dict[str, Faction] # Added type hint for factions
+    game_objects: dict[str, dict]
+    rag_documents: dict[str, list[dict | str]]
+    # ... other attributes might be here or implicitly defined in __init__
+
     def __init__(self, player_character: Player):
         if not isinstance(player_character, Player): raise TypeError("player_character must be Player.")
         self.player_character = player_character
         self.locations: dict[str, Location] = {}
         self.items: dict[str, Item] = {}
         self.npcs: dict[str, NPC] = {}
+        self.factions: dict[str, Faction] = {} # Initialized factions
         self.game_objects: dict[str, dict] = {} # For raw GameObject data
         self.rag_documents: dict[str, list[dict | str]] = {} # For other raw data for RAG
 
@@ -453,10 +478,56 @@ class GameState:
                 self.npcs[npc_instance.id] = npc_instance
             # create_npc_from_data already logs errors
 
+    def load_factions(self, factions_raw_data: list[dict]):
+        for faction_data in factions_raw_data:
+            faction_id = faction_data.get("id")
+            if not faction_id:
+                logging.warning(f"Faction data missing 'id'. Skipping: {faction_data.get('name', 'Unknown Faction')}")
+                continue
+
+            try:
+                # Core faction data for the Faction object
+                faction_name = faction_data.get("name")
+                if not faction_name:
+                    logging.warning(f"Faction data for id '{faction_id}' missing 'name'. Skipping.")
+                    continue
+
+                # The Faction class expects: id, name, description, goals, relationships, members (optional)
+                faction_instance = Faction(
+                    id=faction_id,
+                    name=faction_name,
+                    description=faction_data.get("description", ""),
+                    goals=faction_data.get("goals", ""),
+                    relationships=faction_data.get("relationships", {}),
+                    members=faction_data.get("members") # Pass None if not present, Faction class handles default
+                )
+                self.factions[faction_instance.id] = faction_instance
+
+                # Handle RAG data: store it in self.rag_documents
+                # This keeps Faction object cleaner and RAG data centralized.
+                if "rag_data" in faction_data and isinstance(faction_data["rag_data"], dict):
+                    # Add faction_id to the rag_data for easier linking if needed
+                    rag_content = faction_data["rag_data"]
+                    rag_content["faction_id_source"] = faction_id # Link back to the faction object
+
+                    # Store under a specific key, e.g., 'Factions_RAG' or append to existing 'Factions' raw data.
+                    # For simplicity, let's create/append to a 'Factions_RAG' category.
+                    if 'Factions_RAG' not in self.rag_documents:
+                        self.rag_documents['Factions_RAG'] = []
+                    self.rag_documents['Factions_RAG'].append(rag_content)
+
+                logging.info(f"Faction '{faction_name}' (ID: {faction_id}) loaded.")
+
+            except KeyError as e:
+                logging.error(f"Error loading faction '{faction_id}': Missing key {e}. Data: {faction_data}")
+            except Exception as e:
+                logging.error(f"Error loading faction '{faction_id}': {e}. Data: {faction_data}")
+
     def initialize_from_raw_data(self, all_raw_data: dict[str, list[dict | str]]):
         self.load_items(all_raw_data.get('Items', []))
         self.load_locations(all_raw_data.get('Regions', []))
         self.load_npcs(all_raw_data.get('NPCs', []))
+        self.load_factions(all_raw_data.get('Factions', [])) # Added call
 
         # Load GameObjects as raw dicts
         raw_game_objects = all_raw_data.get('GameObjects', [])
@@ -621,10 +692,16 @@ if __name__ == '__main__':
     print(f"Items loaded: {len(game.items)}")
     print(f"Locations loaded: {len(game.locations)}")
     print(f"NPCs loaded: {len(game.npcs)}")
+    print(f"Factions loaded: {len(game.factions)}")
+    if game.factions:
+        first_faction_id = list(game.factions.keys())[0]
+        print(f"  Example Faction: {game.factions[first_faction_id].name}")
     print(f"GameObjects loaded: {len(game.game_objects)}")
     print(f"RAG document categories: {list(game.rag_documents.keys())}")
     for cat, docs in game.rag_documents.items():
         print(f"  - {cat}: {len(docs)} documents")
+    if 'Factions_RAG' in game.rag_documents:
+       print(f"  - Factions_RAG specific count: {len(game.rag_documents['Factions_RAG'])}")
 
     print(f"\nInitial Player Status: {game.get_status()}")
     print(f"Initial Equipment: {player.equipment}")

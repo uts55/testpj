@@ -1,0 +1,27 @@
+{
+    "id": "verdant_wardens",
+    "name": "The Verdant Wardens",
+    "description": "Guardians of the ancient forests and natural balance.",
+    "goals": "Protect the wilderness, preserve ancient knowledge, and guide lost travelers.",
+    "relationships": {
+        "crimson_hand": "enemy"
+    },
+    "members": ["npc_theron_ashwood"],
+    "rag_data": {
+        "history": "The Verdant Wardens were formed centuries ago after the Great Blight threatened to consume all life. They are a reclusive group, deeply connected to the spirits of nature.",
+        "detailed_goals": "Their primary goal is to prevent another Blight. They also seek to restore defiled lands, study the flora and fauna to unlock nature's secrets, and occasionally assist settlements that live in harmony with nature. They are wary of unchecked industrial expansion.",
+        "key_figures": [
+            {
+                "name": "Theron Ashwood",
+                "role": "Elder Warden",
+                "description": "A wise and ancient elf, leader of the Wardens. (Assumes npc_theron_ashwood is a valid NPC ID)"
+            },
+            {
+                "name": "Lyra Meadowlight",
+                "role": "Master Herbalist",
+                "description": "Expert in potions and natural remedies."
+            }
+        ],
+        "base_of_operations": "The Sunken Grove, a hidden sanctuary deep within the Eldoria Forest."
+    }
+}
