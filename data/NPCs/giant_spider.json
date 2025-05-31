@@ -1,0 +1,24 @@
+[
+  {
+    "id": "giant_spider",
+    "name": "Giant Spider",
+    "type": "monster",
+    "max_hp": 26,
+    "current_location": null,
+    "description": "A large, venomous spider. It moves quickly and can shoot webs to immobilize its prey.",
+    "combat_stats": {
+      "armor_class": 14,
+      "attack_bonus": 5,
+      "damage_bonus": 2,
+      "initiative_bonus": 3
+    },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+      {
+        "name": "Web Shot",
+        "description": "Ranged attack, DC 12 Dexterity saving throw or target is restrained."
+      }
+    ],
+    "vulnerabilities": ["fire"]
+  }
+]

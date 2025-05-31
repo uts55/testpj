@@ -1,0 +1,24 @@
+[
+  {
+    "id": "goblin_scout",
+    "name": "Goblin Scout",
+    "type": "monster",
+    "max_hp": 10,
+    "current_location": null,
+    "description": "A nimble goblin scout, good at hiding and ambushing.",
+    "combat_stats": {
+      "armor_class": 13,
+      "attack_bonus": 4,
+      "damage_bonus": 1,
+      "initiative_bonus": 2
+    },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+      {
+        "name": "Nimble Escape",
+        "description": "The goblin can take the Disengage or Hide action as a bonus action on each of its turns."
+      }
+    ],
+    "resistances": []
+  }
+]
