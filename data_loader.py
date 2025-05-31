@@ -12,10 +12,10 @@ def load_game_data(npc_dir: str = "data/NPCs", game_object_dir: str = "data/Game
     Returns:
         A dictionary with two keys:
         'npcs': A list of NPC data (each item is a dictionary parsed from JSON).
-        'game_objects': A list of GameObject data (similarly, dictionaries from JSON).
-        Returns empty lists for categories if directories don't exist or no files are found.
+        'game_objects': A dictionary of GameObject data, keyed by their 'id'.
+        Returns empty list for npcs and empty dict for game_objects if issues occur.
     """
-    data = {"npcs": [], "game_objects": []}
+    data = {"npcs": [], "game_objects": {}}
 
     # Load NPCs
     if os.path.exists(npc_dir) and os.path.isdir(npc_dir):
@@ -54,17 +54,27 @@ def load_game_data(npc_dir: str = "data/NPCs", game_object_dir: str = "data/Game
                 try:
                     with open(filepath, 'r') as f:
                         loaded_json_content = json.load(f)
+
+                        actual_game_object_dict = None
                         if isinstance(loaded_json_content, list):
                             if len(loaded_json_content) == 1 and isinstance(loaded_json_content[0], dict):
-                                data["game_objects"].append(loaded_json_content[0]) # Extract the single dict
-                            elif not loaded_json_content: # Empty list
-                                print(f"Warning: JSON file {filepath} contains an empty list, skipping.")
-                            else: # List with multiple items or non-dict items
-                                print(f"Warning: JSON file {filepath} contains a list with multiple items or non-dict items. Skipping.")
+                                actual_game_object_dict = loaded_json_content[0]
+                            elif not loaded_json_content:
+                                print(f"Warning: JSON file {filepath} contains an empty list. Skipping.")
+                            else:
+                                print(f"Warning: JSON file {filepath} contains a list with multiple items or non-dict items. Skipping object.")
                         elif isinstance(loaded_json_content, dict):
-                            data["game_objects"].append(loaded_json_content) # Append the dict directly
+                            actual_game_object_dict = loaded_json_content
                         else:
-                            print(f"Warning: JSON file {filepath} does not contain a dictionary or a list with a single dictionary. Skipping.")
+                            print(f"Warning: JSON file {filepath} does not contain a dictionary or a list of a single dictionary. Skipping.")
+
+                        if actual_game_object_dict:
+                            obj_id = actual_game_object_dict.get("id")
+                            if obj_id:
+                                data["game_objects"][obj_id] = actual_game_object_dict
+                            else:
+                                print(f"Warning: GameObject in file {filepath} is missing an 'id'. Skipping.")
+                        # No explicit else here, as warnings for non-dict/list content are handled above
                 except FileNotFoundError:
                     print(f"Warning: File not found {filepath}, skipping.")
                 except json.JSONDecodeError:
