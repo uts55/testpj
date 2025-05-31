@@ -432,55 +432,159 @@ def process_player_input(input_text: str):
                 app.display_dialogue(npc.name, "", []) # Clear buttons, enable input
                 return # Avoid further processing this turn
 
-            # Process player choice if input is numeric
+            # --- Dynamic Item List Display ---
+            if current_key == "buy_items_prompt":
+                sells_item_ids = getattr(npc, 'sells_item_ids', [])
+                dynamic_choices_for_buy = []
+                if sells_item_ids:
+                    for item_id in sells_item_ids:
+                        item_data = game_state.ITEM_DATABASE.get(item_id)
+                        if item_data:
+                            dynamic_choices_for_buy.append({
+                                "text": f"{item_data.get('name', item_id)} ({item_data.get('buy_price', 'N/A')} Gold)",
+                                "item_id": item_id, "action": "buy_selected_item"
+                            })
+                dynamic_choices_for_buy.append({"text": "그만 보겠습니다.", "next_key": "greetings_repeat", "action": "dialogue_navigation"})
+                app.display_dialogue(npc.name, node.get('npc_text'), dynamic_choices_for_buy)
+                return # Wait for player's item selection
+
+            elif current_key == "sell_items_prompt":
+                player_inventory = hero.inventory
+                dynamic_choices_for_sell = []
+                if player_inventory:
+                    for item_id in player_inventory:
+                        item_data = game_state.ITEM_DATABASE.get(item_id)
+                        if item_data and item_data.get("sell_price") is not None: # Only show sellable items
+                            dynamic_choices_for_sell.append({
+                                "text": f"{item_data.get('name', item_id)} ({item_data.get('sell_price', 'N/A')} Gold)",
+                                "item_id": item_id, "action": "sell_selected_item"
+                            })
+                dynamic_choices_for_sell.append({"text": "그만 보겠습니다.", "next_key": "greetings_repeat", "action": "dialogue_navigation"})
+                app.display_dialogue(npc.name, node.get('npc_text'), dynamic_choices_for_sell)
+                return # Wait for player's item selection
+
+            # --- Process player choice (numeric input) ---
             try:
                 choice_num = int(raw_player_input)
-                player_choices = node.get('player_choices', [])
-                if player_choices and 1 <= choice_num <= len(player_choices):
-                    selected_choice = player_choices[choice_num - 1]
-                    next_key = selected_choice['next_key']
 
-                    next_node_preview = npc.get_dialogue_node(next_key)
-                    if not next_node_preview: # Invalid next_key or node itself is missing
-                        app.add_narration(f"{npc.name} seems confused by that response. The conversation abruptly ends.")
-                        main_player_state.end_dialogue()
-                        app.display_dialogue(npc.name, "", [])
+                # Determine which list of choices to use
+                active_choices = []
+                if current_key == "buy_items_prompt":
+                    sells_item_ids = getattr(npc, 'sells_item_ids', [])
+                    if sells_item_ids:
+                        for item_id in sells_item_ids:
+                            item_data = game_state.ITEM_DATABASE.get(item_id)
+                            if item_data:
+                                active_choices.append({
+                                    "text": f"{item_data.get('name', item_id)} ({item_data.get('buy_price', 'N/A')} Gold)",
+                                    "item_id": item_id, "action": "buy_selected_item"
+                                })
+                    active_choices.append({"text": "그만 보겠습니다.", "next_key": "greetings_repeat", "action": "dialogue_navigation"})
+                elif current_key == "sell_items_prompt":
+                    player_inventory = hero.inventory
+                    if player_inventory:
+                        for item_id in player_inventory:
+                            item_data = game_state.ITEM_DATABASE.get(item_id)
+                            if item_data and item_data.get("sell_price") is not None:
+                                active_choices.append({
+                                    "text": f"{item_data.get('name', item_id)} ({item_data.get('sell_price', 'N/A')} Gold)",
+                                    "item_id": item_id, "action": "sell_selected_item"
+                                })
+                    active_choices.append({"text": "그만 보겠습니다.", "next_key": "greetings_repeat", "action": "dialogue_navigation"})
+                else: # Normal dialogue node
+                    active_choices = node.get('player_choices', [])
+
+                if active_choices and 1 <= choice_num <= len(active_choices):
+                    selected_choice = active_choices[choice_num - 1]
+                    action = selected_choice.get("action")
+
+                    if action == "buy_selected_item":
+                        item_id_to_buy = selected_choice["item_id"]
+                        success, message = game_state.player_buys_item(hero, npc, item_id_to_buy)
+                        app.add_narration(message)
+                        app.update_hp(f"{hero.current_hp}/{hero.max_hp}") # Refresh UI
+
+                        # Re-display buy prompt
+                        node_to_display = npc.get_dialogue_node("buy_items_prompt")
+                        sells_item_ids_refresh = getattr(npc, 'sells_item_ids', [])
+                        dynamic_choices_refresh = []
+                        if sells_item_ids_refresh:
+                            for item_id_refresh in sells_item_ids_refresh:
+                                item_data_refresh = game_state.ITEM_DATABASE.get(item_id_refresh)
+                                if item_data_refresh:
+                                    dynamic_choices_refresh.append({
+                                        "text": f"{item_data_refresh.get('name', item_id_refresh)} ({item_data_refresh.get('buy_price', 'N/A')} Gold)",
+                                        "item_id": item_id_refresh, "action": "buy_selected_item"
+                                    })
+                        dynamic_choices_refresh.append({"text": "그만 보겠습니다.", "next_key": "greetings_repeat", "action": "dialogue_navigation"})
+                        app.display_dialogue(npc.name, node_to_display.get('npc_text'), dynamic_choices_refresh)
                         return
 
-                    # If the next node has no further choices, or its key is "farewell" (convention)
-                    if not next_node_preview.get('player_choices', []) or next_key == "farewell":
-                        final_npc_text = next_node_preview.get('npc_text', "Goodbye.")
-                        app.add_narration(f"{npc.name}: {final_npc_text}")
-                        if not next_node_preview.get('player_choices', []):
-                             app.add_narration("(No further choices available.)")
-                        main_player_state.end_dialogue()
-                        app.display_dialogue(npc.name, "", []) # Clear buttons, enable input
-                    else: # Continue dialogue
-                        main_player_state.set_dialogue_key(next_key)
-                        # New node will be displayed by the logic below
-                elif player_choices: # Numeric input, but out of range
-                    app.add_narration("Invalid choice. Please click one of the options.")
-                # If not a number or no choices, input is not a choice for this node.
-            except ValueError:
-                if node.get('player_choices', []): # Choices were present, but input wasn't a number
-                    app.add_narration("Invalid input. Please click one of the available choices.")
+                    elif action == "sell_selected_item":
+                        item_id_to_sell = selected_choice["item_id"]
+                        success, message = game_state.player_sells_item(hero, npc, item_id_to_sell)
+                        app.add_narration(message)
+                        app.update_hp(f"{hero.current_hp}/{hero.max_hp}") # Refresh UI
 
-            # (Re-)Display current dialogue node if dialogue is still active
+                        # Re-display sell prompt
+                        node_to_display = npc.get_dialogue_node("sell_items_prompt")
+                        player_inventory_refresh = hero.inventory
+                        dynamic_choices_refresh = []
+                        if player_inventory_refresh:
+                            for item_id_refresh in player_inventory_refresh:
+                                item_data_refresh = game_state.ITEM_DATABASE.get(item_id_refresh)
+                                if item_data_refresh and item_data_refresh.get("sell_price") is not None:
+                                    dynamic_choices_refresh.append({
+                                        "text": f"{item_data_refresh.get('name', item_id_refresh)} ({item_data_refresh.get('sell_price', 'N/A')} Gold)",
+                                        "item_id": item_id_refresh, "action": "sell_selected_item"
+                                    })
+                        dynamic_choices_refresh.append({"text": "그만 보겠습니다.", "next_key": "greetings_repeat", "action": "dialogue_navigation"})
+                        app.display_dialogue(npc.name, node_to_display.get('npc_text'), dynamic_choices_refresh)
+                        return
+
+                    elif action == "dialogue_navigation" or action is None: # Default to dialogue navigation
+                        next_key = selected_choice['next_key']
+                        next_node_preview = npc.get_dialogue_node(next_key)
+                        if not next_node_preview:
+                            app.add_narration(f"{npc.name} seems confused. The conversation ends.")
+                            main_player_state.end_dialogue()
+                            app.display_dialogue(npc.name, "", [])
+                            return
+
+                        if not next_node_preview.get('player_choices', []) or next_key == "farewell":
+                            final_npc_text = next_node_preview.get('npc_text', "Goodbye.")
+                            app.add_narration(f"{npc.name}: {final_npc_text}")
+                            if not next_node_preview.get('player_choices', []):
+                                 app.add_narration("(No further choices available.)")
+                            main_player_state.end_dialogue()
+                            app.display_dialogue(npc.name, "", [])
+                        else:
+                            main_player_state.set_dialogue_key(next_key)
+                            # New node will be displayed by the logic below
+                elif active_choices:
+                    app.add_narration("Invalid choice. Please click one of the options.")
+            except ValueError:
+                if node.get('player_choices', []) and not (current_key == "buy_items_prompt" or current_key == "sell_items_prompt"):
+                     app.add_narration("Invalid input. Please click one of the available choices.")
+                # If in buy/sell prompt, non-numeric input is ignored until a valid choice is made or "go back"
+
+            # (Re-)Display current dialogue node if dialogue is still active (and not handled by buy/sell returns)
             if main_player_state.is_in_dialogue():
                 current_dialogue_key_to_display = main_player_state.current_dialogue_key
-                node_to_display = npc.get_dialogue_node(current_dialogue_key_to_display)
-                if not node_to_display: # Should be rare if logic above is correct
-                    app.add_narration(f"Error: Current dialogue node '{current_dialogue_key_to_display}' is missing. Ending.")
-                    main_player_state.end_dialogue()
-                    app.display_dialogue(npc.name, "", [])
-                else:
-                    npc_text_to_display = node_to_display.get('npc_text', "...") # Safe access
-                    choices_to_display = node_to_display.get('player_choices', [])
-                    app.display_dialogue(npc.name, npc_text_to_display, choices_to_display)
-                    if not choices_to_display and not main_player_state.current_dialogue_key == "farewell": # Auto-end if a node has no choices and isn't a known end key
-                        app.add_narration("(The conversation seems to have reached a natural end.)")
+                # Skip re-display if we are in buy/sell prompts as they handle their own display logic or return
+                if current_dialogue_key_to_display not in ["buy_items_prompt", "sell_items_prompt"]:
+                    node_to_display = npc.get_dialogue_node(current_dialogue_key_to_display)
+                    if not node_to_display:
+                        app.add_narration(f"Error: Current dialogue node '{current_dialogue_key_to_display}' missing. Ending.")
                         main_player_state.end_dialogue()
-                        # UI already updated by display_dialogue with no choices, input enabled.
+                        app.display_dialogue(npc.name, "", [])
+                    else:
+                        npc_text_to_display = node_to_display.get('npc_text', "...")
+                        choices_to_display = node_to_display.get('player_choices', [])
+                        app.display_dialogue(npc.name, npc_text_to_display, choices_to_display)
+                        if not choices_to_display and not main_player_state.current_dialogue_key == "farewell":
+                            app.add_narration("(The conversation seems to have reached a natural end.)")
+                            main_player_state.end_dialogue()
 
 
     # --- COMBAT LOGIC ---
