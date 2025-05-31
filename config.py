@@ -5,24 +5,39 @@ GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
 GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 
 # RAG Configuration
-EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
-VECTOR_DB_PATH = "./chroma_db"
-COLLECTION_NAME = "dnd_settings"
+EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2' # Standard sentence transformer model
+VECTOR_DB_PATH = "./chroma_db" # Path to store ChromaDB persistent data
+COLLECTION_NAME = "dnd_game_content" # Name of the collection in ChromaDB
+
 RAG_DOCUMENT_SOURCES = [
     './data/NPCs',
+    './data/Items', # Added Items
+    './data/Regions', # Was already present
     './data/GameObjects',
     './data/Lore',
     './data/History',
-    './data/Regions',
     './data/Factions',
     './data/Technology',
     './data/MagicSystems',
     './data/Races'
 ]
-RAG_DOCUMENT_FILTERS = {}
-RAG_TEXT_FIELDS = ['description', 'lore_fragments', 'dialogue_responses.artifact_info', 'knowledge_fragments', 'name', 'text_content']
 
-# Text Splitting Configuration
+# Fields to extract text from for RAG embedding.
+# 'dialogue_responses' will be handled specially in get_text_from_doc to extract npc_text from nodes.
+RAG_TEXT_FIELDS = [
+    'name',
+    'description',
+    'text_content', # Primarily for .txt files and specific JSON fields like in Lore/History
+    'dialogue_responses', # Special handling: extract 'npc_text' from dialogue nodes
+    # Consider adding other relevant fields from your specific JSON structures if needed:
+    # e.g., 'effects.description' if items had detailed effect descriptions,
+    # 'exits.description' if exits had descriptive text.
+    # For now, keeping it to common and clearly structured text fields.
+]
+
+RAG_DOCUMENT_FILTERS = {} # Placeholder for potential future filtering logic
+
+# Text Splitting Configuration (relevant if pre-splitting text before embedding, not used in current direct embedding)
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 100
 

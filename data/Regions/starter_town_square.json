@@ -1,0 +1,14 @@
+{
+    "id": "starter_town_square",
+    "name": "Town Square",
+    "description": "The bustling heart of the starting town. A fountain bubbles merrily in the center, surrounded by market stalls and various buildings. Paths lead off in all cardinal directions.",
+    "exits": {
+        "north": "starter_town_market_street",
+        "east": "starter_town_east_gate",
+        "south": "starter_town_inn",
+        "west": "starter_town_west_road"
+    },
+    "item_ids": [],
+    "npc_ids": ["npc_town_guard_01", "npc_merchant_jane"],
+    "game_object_ids": ["town_fountain"]
+}

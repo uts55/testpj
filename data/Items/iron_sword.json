@@ -1,0 +1,12 @@
+{
+    "id": "iron_sword",
+    "name": "Iron Sword",
+    "description": "A sturdy and reliable iron sword.",
+    "type": "weapon",
+    "weight": 3.0,
+    "value": {"buy": 25, "sell": 10},
+    "damage_dice": "1d8",
+    "attack_bonus": 0,
+    "damage_bonus": 0,
+    "weapon_type": "sword"
+}
