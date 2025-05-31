@@ -1,0 +1,28 @@
+{
+    "id": "crimson_hand",
+    "name": "The Crimson Hand",
+    "description": "A shadowy organization seeking power through forbidden artifacts and manipulation.",
+    "goals": "Acquire powerful artifacts, destabilize regional powers, and establish their own dominion.",
+    "relationships": {
+        "verdant_wardens": "enemy",
+        "merchants_guild": "neutral"
+    },
+    "members": ["npc_malakor_shadowclaw"],
+    "rag_data": {
+        "history": "The Crimson Hand emerged from the ashes of a fallen empire, its founders vowing to reclaim lost power by any means necessary. They operate in secret, their agents infiltrating various levels of society.",
+        "detailed_goals": "They actively seek out items of immense magical power, often plundering ancient sites or manipulating individuals to acquire them. They believe true strength lies in controlling these relics. They aim to sow discord among existing power structures to create opportunities for their own ascent.",
+        "key_figures": [
+            {
+                "name": "Malakor Shadowclaw",
+                "role": "Grand Master",
+                "description": "A charismatic but ruthless leader, whose origins are shrouded in mystery. (Assumes npc_malakor_shadowclaw is a valid NPC ID)"
+            },
+            {
+                "name": "Seraphina Vane",
+                "role": "Chief Infiltrator",
+                "description": "Master of disguise and espionage."
+            }
+        ],
+        "rumored_hideouts": "Secret chambers beneath major cities, forgotten dungeons."
+    }
+}

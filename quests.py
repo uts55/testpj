@@ -117,3 +117,44 @@ ALL_QUESTS = {
     q002.id: q002,
     q003.id: q003
 }
+
+# Quest for Verdant Wardens
+q_verdant_wardens_aid = Quest(
+    id="q_verdant_wardens_aid",
+    title="Whispers of Decay",
+    description="Theron Ashwood of the Verdant Wardens has sensed a growing corruption in the Whisperwood. He seeks an outsider's help to investigate a defiled grove and recover a sacred seed before its power is twisted for dark purposes.",
+    stages=[
+        {
+            "stage_id": "s1_speak_theron",
+            "description": "Speak with Theron Ashwood at the Sunken Grove to learn more about the corruption.",
+            "completion_condition": "dialogue_theron_vw_quest_start_complete",
+            "next_stage_id": "s2_investigate_grove",
+            "status_description": "Theron has asked you to investigate the Defiled Grove and retrieve a stolen sacred seed."
+        },
+        {
+            "stage_id": "s2_investigate_grove",
+            "description": "Travel to the Defiled Grove, overcome any corrupted guardians, and find the Stolen Sunseed.",
+            "completion_condition": "has_item:stolen_sunseed;defeated:corrupted_grove_guardian",
+            "next_stage_id": "s3_return_seed",
+            "status_description": "You have recovered the Stolen Sunseed from the Defiled Grove."
+        },
+        {
+            "stage_id": "s3_return_seed",
+            "description": "Return the Stolen Sunseed to Theron Ashwood.",
+            "completion_condition": "delivered_stolen_sunseed_to_theron",
+            "next_stage_id": None,
+            "status_description": "You returned the Stolen Sunseed to Theron. The Verdant Wardens are grateful."
+        }
+    ],
+    optional_objectives=[],
+    rewards={
+        'xp': 150,
+        'items': ['item_wardens_healing_draught'],
+        'currency': {'silver': 100},
+        'faction_rep_changes': [ # New reward type
+            {"faction_id": "verdant_wardens", "amount": 25}
+        ]
+    }
+)
+
+ALL_QUESTS[q_verdant_wardens_aid.id] = q_verdant_wardens_aid

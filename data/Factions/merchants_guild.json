@@ -1,0 +1,23 @@
+{
+    "id": "merchants_guild",
+    "name": "The Merchants' Guild",
+    "description": "A powerful consortium of traders, artisans, and financiers.",
+    "goals": "Expand trade routes, protect commercial interests, and accumulate wealth.",
+    "relationships": {
+        "crimson_hand": "neutral",
+        "verdant_wardens": "neutral"
+    },
+    "members": ["npc_jane_copperfield"],
+    "rag_data": {
+        "history": "Founded by a group of enterprising merchants, the Guild quickly grew into a significant economic force, standardizing trade practices and funding expeditions.",
+        "detailed_goals": "The Guild aims to control key markets and resources. They lobby local lords for favorable trade agreements, fund infrastructure projects like roads and bridges, and sometimes hire mercenaries to protect their caravans. They are generally pragmatic but can be ruthless when their profits are threatened.",
+        "key_figures": [
+            {
+                "name": "Jane Copperfield",
+                "role": "Guildmaster",
+                "description": "A shrewd and influential businesswoman, known for her negotiation skills. (Assumes 'npc_merchant_jane' can be used or a new NPC 'npc_jane_copperfield' is created)"
+            }
+        ],
+        "headquarters": "The Grand Exchange in the capital city."
+    }
+}
