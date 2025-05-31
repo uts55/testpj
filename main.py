@@ -1,138 +1,237 @@
+from game_state import PlayerState, determine_initiative
+
+# --- Mock Objects for Demonstration ---
+class MockPlayer:
+    def __init__(self, id, hp, initiative_bonus):
+        self.id = id
+        self.current_hp = hp
+        self.combat_stats = {'initiative_bonus': initiative_bonus}
+
+class MockNPC:
+    def __init__(self, id, hp, initiative_bonus):
+        self.id = id
+        self.current_hp = hp # Assuming NPCs also use 'current_hp' for consistency
+        self.combat_stats = {'initiative_bonus': initiative_bonus}
+
+# --- Global PlayerState instance for demonstration ---
+# In a real application, this might be managed differently (e.g., part of a game class)
+# player_state_instance = PlayerState() # We'll create fresh instances in main for clarity
+
+# --- Combat Flow Functions ---
+
+def start_combat(player: MockPlayer, npcs: list[MockNPC], current_player_state: PlayerState) -> str:
+    """
+    Initializes combat, sets turn order, and notifies the DM.
+    """
+    current_player_state.is_in_combat = True
+
+    all_participants = [player] + npcs
+    # Ensure participants have 'id' and 'combat_stats' as expected by determine_initiative
+    # The mock objects are created with these, real objects would need to conform.
+    current_player_state.participants_in_combat = [p.id for p in all_participants]
+
+    current_player_state.turn_order = determine_initiative(all_participants)
+
+    if not current_player_state.turn_order:
+        current_player_state.is_in_combat = False
+        return "Combat could not start: no participants or failed initiative determination."
+
+    current_player_state.current_turn_character_id = current_player_state.turn_order[0]
+
+    turn_order_str = ", ".join(map(str, current_player_state.turn_order))
+    return f"Combat started! Turn order: {turn_order_str}. First up: {current_player_state.current_turn_character_id}."
+
+def process_combat_turn(current_player_state: PlayerState) -> str:
+    """
+    Processes the current character's turn and advances to the next.
+    """
+    if not current_player_state.is_in_combat or not current_player_state.turn_order:
+        return "Cannot process turn: not in combat or turn order is empty."
+
+    if not current_player_state.current_turn_character_id:
+        # This might happen if combat ended and state was cleared before this function was called
+        return "Cannot process turn: current_turn_character_id is not set."
+
+    char_id = current_player_state.current_turn_character_id
+    notification = f"{char_id}'s turn."
+
+    # Placeholder for actual action selection and execution
+    # print(f"Action placeholder for {char_id}")
+
+    # Advance turn
+    try:
+        current_turn_index = current_player_state.turn_order.index(char_id)
+        next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
+        current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
+    except ValueError:
+        # Should not happen if char_id is always from turn_order and turn_order is not modified externally mid-turn
+        return f"Error: Character {char_id} not found in turn order. Combat state might be corrupted."
+    except IndexError:
+        # Should not happen with modulo arithmetic if turn_order is not empty
+        return "Error: Problem advancing turn due to turn order indexing. Combat state might be corrupted."
+
+    return notification
+
+def check_combat_end_condition(player: MockPlayer, npcs: list[MockNPC], current_player_state: PlayerState) -> tuple[bool, str]:
+    """
+    Checks if combat has ended due to player defeat or all NPCs being defeated.
+    Resets combat state if an end condition is met.
+    """
+    if not current_player_state.is_in_combat:
+        # If called when not in combat, it means combat already ended or never started.
+        # Return True if it's already marked as not in combat, as an "end condition" was previously met.
+        return (not current_player_state.is_in_combat, "")
+
+    player_defeated = player.current_hp <= 0
+    # Ensure npcs list is not empty before checking all()
+    all_npcs_defeated = bool(npcs) and all(npc.current_hp <= 0 for npc in npcs)
+
+
+    end_condition_met = False
+    notification = ""
+
+    if player_defeated:
+        notification = f"Player {player.id} has been defeated! Combat ends."
+        end_condition_met = True
+    elif all_npcs_defeated:
+        notification = "All enemies defeated! Combat ends."
+        end_condition_met = True
+
+    if end_condition_met:
+        current_player_state.is_in_combat = False
+        current_player_state.participants_in_combat = []
+        current_player_state.current_turn_character_id = None
+        current_player_state.turn_order = []
+        return (True, notification)
+
+    return (False, "")
+
+# import google.generativeai as genai # This will be needed eventually
 import os
-import logging
-from gemini_dm import GeminiDialogueManager # Assuming gemini_dm.py contains GeminiDialogueManager
 
-# Configure basic logging for the main application
-# Adjust level to DEBUG for more verbose output from GeminiDialogueManager if needed
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__) # Logger for main.py
-gem_dm_logger = logging.getLogger('gemini_dm') # Specifically get the logger from gemini_dm
-# Set gemini_dm logger level. If you want verbose logs from gemini_dm, set to logging.DEBUG
-# For normal operation, logging.INFO or logging.WARNING might be preferred.
-gem_dm_logger.setLevel(logging.INFO)
+# Placeholder for actual DM interaction
+class GeminiDM:
+    def __init__(self, model_name="gemini-1.5-flash-latest"):
+        # For now, we won't initialize the actual API
+        # genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        # self.model = genai.GenerativeModel(model_name)
+        # self.chat = self.model.start_chat(history=[])
+        print("GeminiDM initialized (mocked).")
 
-# --- Configuration ---
-DEFAULT_MODEL_NAME = "gemini-1.5-flash-latest" # A common default model, adjust if needed
-# More detailed system instruction
-DEFAULT_SYSTEM_INSTRUCTION = (
-    "You are an expert Dungeon Master for a fantasy text-based adventure game. "
-    "Your primary role is to create an immersive and engaging narrative experience. "
-    "Describe the environment, characters, and events in vivid detail. "
-    "Respond to player actions realistically within the game world's logic. "
-    "Introduce challenges, puzzles, and opportunities for role-playing. "
-    "When 'Relevant Information' is provided below the player's input, you MUST use it "
-    "to inform your response, making the game world consistent and dynamic. "
-    "If no specific 'Relevant Information' is provided, rely on your general knowledge and the established game context. "
-    "Maintain a consistent tone suitable for a fantasy adventure. "
-    "Format your responses clearly for console display. Use paragraphs for descriptions "
-    "and distinct lines for dialogue if NPCs are speaking."
-)
+    def send_message(self, message, stream=False):
+        # Adjusted to handle potential multi-line messages better for console readability
+        print(f"DM Received (stream={stream}):\n---\n{message}\n---")
+        # Mocked response based on input
+        if "hello" in message.lower():
+            response = "Hello there! How can I help you today?"
+        elif "fight" in message.lower() and not main_player_state.is_in_combat: # Check global state for this mock
+            response = "A wild goblin appears!" # This will be overridden by combat logic if it starts
+        elif main_player_state.is_in_combat:
+            response = f"DM acknowledges the turn events." # Generic ack for multi-line
+        else:
+            response = f"DM echoes: {message}"
 
-def load_api_key():
-    """
-    Loads the Gemini API key from the environment variable 'GEMINI_API_KEY'.
-    Logs critical error and informs the user if the key is not found.
-    Returns:
-        str: The API key if found, otherwise None.
-    """
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        logger.critical("GEMINI_API_KEY environment variable not found. This is mandatory.")
-        print("\n==================== CRITICAL ERROR ====================")
-        print("The GEMINI_API_KEY environment variable is not set.")
-        print("This key is essential for the AI Dungeon Master to function.")
-        print("Please set this environment variable and restart the game.")
-        print("Example (bash/zsh): export GEMINI_API_KEY='your_actual_api_key_here'")
-        print("Example (Windows CMD): set GEMINI_API_KEY=your_actual_api_key_here")
-        print("Example (PowerShell): $env:GEMINI_API_KEY='your_actual_api_key_here'")
-        print("========================================================")
-        return None
-    logger.info("GEMINI_API_KEY loaded successfully from environment variable.")
-    return api_key
+        print(f"DM Responds:\n---\n{response}\n---")
+        if stream:
+            # Streaming a multi-line response might look odd here, but for testing it's fine.
+            # Real streaming would handle chunks of the actual response.
+            for chunk in response.replace('\n', ' ').split(): # Replace newlines for stream test
+                print(chunk, end=" ", flush=True)
+            print()
+        return response
+
+# --- Global PlayerState and Mock Entities for main game loop ---
+main_player_state = PlayerState()
+hero = MockPlayer(id="Hero", hp=100, initiative_bonus=3)
+# Initialize with a couple of NPCs by default for testing "fight" command
+mock_npcs_in_encounter = [
+    MockNPC(id="Goblin_Alpha", hp=30, initiative_bonus=1),
+    MockNPC(id="Goblin_Beta", hp=25, initiative_bonus=0)
+]
 
 def main():
-    """
-    Main function to initialize and run the AI-powered text adventure game loop.
-    """
-    # Configure logging for this specific run
-    run_log_level = os.environ.get("GAME_LOG_LEVEL", "INFO").upper()
-    numeric_level = getattr(logging, run_log_level, logging.INFO)
-    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    print("Starting game...")
+    # dm = GeminiDM() # Initialize your actual DM here eventually
+    dm = GeminiDM() # Using the mock DM for now
 
-    logger.info(f"Starting the AI-Powered Text Adventure Game with log level {run_log_level}...")
-    print("\n========================================")
-    print(" Welcome to the AI-Powered Text Adventure!")
-    print("========================================")
-    print("You are about to embark on a journey crafted by an AI Dungeon Master.")
-    print("Describe your actions, explore the world, and make choices that shape your story.")
-    print("\nType 'quit' or 'exit' at any time to end your adventure.")
-    print("Let's begin...\n")
+    # Initial message to DM
+    # response = dm.send_message("Hello DM, the game is starting.", stream=True)
+    # print(f"\nInitial DM response: {response}")
 
-    api_key = load_api_key()
-    if not api_key:
-        # load_api_key() already prints detailed user message and logs critical error
-        return
+    while True:
+        player_input = input("You: ")
+        if player_input.lower() == "quit":
+            print("Exiting game.")
+            break
 
-    logger.info(f"Initializing GeminiDialogueManager with model: {DEFAULT_MODEL_NAME}")
-    try:
-        dm = GeminiDialogueManager(
-            api_key=api_key,
-            gemini_model_name=DEFAULT_MODEL_NAME,
-            system_instruction_text=DEFAULT_SYSTEM_INSTRUCTION,
-            max_history_items=20 # Keeps the last 10 pairs of user/model turns
-        )
-        logger.info("GeminiDialogueManager initialized successfully.")
-    except Exception as e:
-        logger.critical(f"Fatal error during GeminiDialogueManager initialization: {e}", exc_info=True)
-        print(f"\nError: Could not initialize the AI Dungeon Master. A critical error occurred: {e}")
-        print("Please ensure your API key is correct, the model name is valid, and there are no network issues.")
-        print("Check the logs for more detailed information. The game cannot continue.")
-        return
+        dm_message_to_send = ""
+        combat_messages = []
 
-    try:
-        while True:
-            player_input = input("\nWhat do you do? > ").strip()
+        if main_player_state.is_in_combat:
+            # --- COMBAT LOGIC ---
+            # Player input during combat could be "attack goblin_alpha", "hit hero", "next", etc.
+            # For now, any input progresses the turn, but we can add simple damage simulation.
 
-            if player_input.lower() in ["quit", "exit"]:
-                logger.info("Player initiated 'quit' command.")
-                print("\nThank you for playing! Adventure awaits another time. Goodbye.")
-                break
+            # Simplified damage simulation for testing:
+            if player_input.lower().startswith("hit "):
+                parts = player_input.split(" ")
+                if len(parts) == 2:
+                    target_id = parts[1]
+                    damage = 10 # Fixed damage for simulation
+                    if target_id == hero.id:
+                        hero.current_hp -= damage
+                        main_player_state.take_damage(damage) # Assuming PlayerState also tracks player HP
+                        combat_messages.append(f"DEBUG: Hero takes {damage} damage. HP: {hero.current_hp}")
+                    else:
+                        target_npc = next((npc for npc in mock_npcs_in_encounter if npc.id.lower() == target_id.lower()), None)
+                        if target_npc:
+                            target_npc.current_hp -= damage
+                            combat_messages.append(f"DEBUG: {target_npc.id} takes {damage} damage. HP: {target_npc.current_hp}")
+                        else:
+                            combat_messages.append(f"DEBUG: Target {target_id} not found for 'hit' command.")
 
-            if not player_input:
-                print("It seems you're lost in thought... Please type an action to continue your adventure.")
-                continue
+            # Always process turn and check end condition
+            turn_notification = process_combat_turn(main_player_state)
+            combat_messages.append(turn_notification)
 
-            logger.info(f"Player input received: '{player_input}'")
+            ended, end_notification = check_combat_end_condition(hero, mock_npcs_in_encounter, main_player_state)
+            if ended:
+                combat_messages.append(end_notification)
 
-            print("\nThe AI Dungeon Master is pondering your action...")
+            # Join messages with newline, filtering out any potential None or empty strings
+            dm_message_to_send = "\n".join(filter(None, combat_messages))
 
-            dm_response_full = dm.send_message(player_input, stream=True)
+        elif player_input.lower() == "fight":
+            if not main_player_state.is_in_combat:
+                # (Re-)initialize NPCs for a new fight if desired, or use existing ones
+                # For this test, we'll re-use/re-initialize mock_npcs_in_encounter if they were defeated.
+                if all(npc.current_hp <= 0 for npc in mock_npcs_in_encounter):
+                    print("DEBUG: All NPCs were defeated. Resetting them for a new fight.")
+                    mock_npcs_in_encounter[0].current_hp = 30 # Reset HP
+                    mock_npcs_in_encounter[1].current_hp = 25 # Reset HP
+                if hero.current_hp <= 0:
+                    hero.current_hp = 100 # Revive hero for a new fight
+                    main_player_state.current_hp = 100 # Reset PlayerState HP
 
-            logger.debug(f"DM full response string from send_message (main.py): '{dm_response_full[:300]}...'")
-
-            # Critical error checks from DM response. send_message itself might log these too.
-            if dm_response_full.startswith("Error: Model not initialized.") or \
-               dm_response_full.startswith("Error: The request was blocked by the API"):
-                logger.critical(f"Critical error received from GeminiDialogueManager: {dm_response_full}. Terminating game loop.")
-                print(f"\nA critical error occurred with the AI DM: {dm_response_full}")
-                print("This usually indicates a problem with the API configuration or service. The game cannot continue.")
-                break
-            elif "Error:" in dm_response_full and "API call failed after" in dm_response_full : # check for max retries error
-                logger.critical(f"Persistent API call failure: {dm_response_full}. Terminating game loop.")
-                print(f"\nThere was a persistent problem communicating with the AI DM: {dm_response_full}")
-                print("Please check your network connection and API key status. The game cannot continue.")
-                break
+                start_message = start_combat(hero, mock_npcs_in_encounter, main_player_state)
+                dm_message_to_send = start_message
+            else:
+                dm_message_to_send = "Already in combat!"
+        else:
+            # --- NON-COMBAT LOGIC ---
+            dm_message_to_send = player_input
 
 
-    except KeyboardInterrupt:
-        logger.info("Game loop interrupted by user (Ctrl+C).")
-        print("\n\nYour adventure has been paused by your command! Thank you for playing. Goodbye.")
-    except Exception as e:
-        logger.error(f"An unexpected critical error occurred in the main gameplay loop: {e}", exc_info=True)
-        print(f"\nAn unexpected critical error occurred: {e}. The adventure must unfortunately end. Please check the logs for details.")
-    finally:
-        logger.info("Game session ended. Performing cleanup if any.")
-        print("\nGame session concluded. Until next time, adventurer!")
+        if dm_message_to_send:
+            # print(f"\nSending to DM: '{dm_message_to_send}'") # Debugging what's sent
+            response = dm.send_message(dm_message_to_send, stream=True)
+            # print(f"DM: {response}") # Raw response if not streaming
+
+        # If combat ended this turn, print a clear "Combat Over" message after DM response
+        if not main_player_state.is_in_combat and any("Combat ends." in msg for msg in combat_messages):
+            print("\n--- Combat Over ---")
+
 
 if __name__ == "__main__":
+    # This replaces the old demonstration block
     main()
