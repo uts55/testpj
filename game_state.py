@@ -35,7 +35,7 @@ class Location:
 class Item:
     """ Base class for all items. JSON structure: (as previously defined) """
     def __init__(self, id: str, name: str, description: str, item_type: str,
-                 weight: float = 0.0, value: dict = None):
+                 weight: float = 0.0, value: dict = None, lore_keywords: list[str] = None):
         if not id or not isinstance(id, str): raise ValueError("Item ID must be a non-empty string.")
         if not name or not isinstance(name, str): raise ValueError("Item name must be a non-empty string.")
         self.id = id
@@ -44,14 +44,16 @@ class Item:
         self.item_type = item_type
         self.weight = weight
         self.value = value if value is not None else {"buy": 0, "sell": 0}
+        self.lore_keywords = lore_keywords if lore_keywords is not None else []
     def __repr__(self): return f"<Item(id='{self.id}', name='{self.name}', type='{self.item_type}')>"
 
 class Weapon(Item):
     """ Weapon item. JSON structure: (as previously defined) """
     def __init__(self, id: str, name: str, description: str,
                  damage_dice: str, attack_bonus: int = 0, damage_bonus: int = 0,
-                 weapon_type: str = "sword", weight: float = 0.0, value: dict = None):
-        super().__init__(id, name, description, "weapon", weight, value)
+                 weapon_type: str = "sword", weight: float = 0.0, value: dict = None,
+                 lore_keywords: list[str] = None):
+        super().__init__(id, name, description, "weapon", weight, value, lore_keywords)
         if not damage_dice or not isinstance(damage_dice, str): raise ValueError("Weapon damage_dice must be a non-empty string.")
         self.damage_dice = damage_dice
         self.attack_bonus = attack_bonus
@@ -63,8 +65,9 @@ class Armor(Item):
     """ Armor item. JSON structure: (as previously defined) """
     def __init__(self, id: str, name: str, description: str,
                  ac_bonus: int, armor_type: str = "medium",
-                 weight: float = 0.0, value: dict = None):
-        super().__init__(id, name, description, "armor", weight, value)
+                 weight: float = 0.0, value: dict = None,
+                 lore_keywords: list[str] = None):
+        super().__init__(id, name, description, "armor", weight, value, lore_keywords)
         if not isinstance(ac_bonus, int): raise ValueError("Armor ac_bonus must be an integer.")
         self.ac_bonus = ac_bonus
         self.armor_type = armor_type
@@ -73,8 +76,9 @@ class Armor(Item):
 class Consumable(Item):
     """ Consumable item. JSON structure: (as previously defined) """
     def __init__(self, id: str, name: str, description: str,
-                 effects: list[dict], weight: float = 0.0, value: dict = None):
-        super().__init__(id, name, description, "consumable", weight, value)
+                 effects: list[dict], weight: float = 0.0, value: dict = None,
+                 lore_keywords: list[str] = None):
+        super().__init__(id, name, description, "consumable", weight, value, lore_keywords)
         if not isinstance(effects, list): raise ValueError("Consumable effects must be a list.")
         self.effects = effects
     def __repr__(self): return f"<Consumable(id='{self.id}', name='{self.name}', effects_count='{len(self.effects)}')>"
@@ -82,8 +86,9 @@ class Consumable(Item):
 class KeyItem(Item):
     """ Key item. JSON structure: (as previously defined) """
     def __init__(self, id: str, name: str, description: str,
-                 unlocks: list[str] = None, weight: float = 0.0, value: dict = None):
-        super().__init__(id, name, description, "key_item", weight, value)
+                 unlocks: list[str] = None, weight: float = 0.0, value: dict = None,
+                 lore_keywords: list[str] = None):
+        super().__init__(id, name, description, "key_item", weight, value, lore_keywords)
         self.unlocks = unlocks if unlocks is not None else []
     def __repr__(self): return f"<KeyItem(id='{self.id}', name='{self.name}')>"
 
