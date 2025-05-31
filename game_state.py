@@ -1,6 +1,7 @@
 from utils import roll_dice, SKILL_ABILITY_MAP, PROFICIENCY_BONUS
 import random # random is still used by other parts of game_state.py like status effect application
 import logging # For logging warnings
+from magic import SPELLBOOK, Spell # Import necessary spellcasting components
 
 # Temporary Item Database (simulates loading from JSON)
 # In a real system, this would be loaded from data/Items/*.json
@@ -319,6 +320,9 @@ class Player(Character):
         if "skills" not in self.proficiencies_map: # Ensure 'skills' key exists
             self.proficiencies_map["skills"] = []
 
+        # Initialize spell_slots
+        self.spell_slots = player_data.get("spell_slots", {})
+
 
         self.equipment = {
             "weapon": None,
@@ -527,6 +531,32 @@ class Player(Character):
 
         return success, d20_roll, total_skill_value, detailed_breakdown
 
+    def has_spell_slot(self, spell_level: int) -> bool:
+        """
+        Checks if the player has an available spell slot for the given level.
+        """
+        slot_key = f"level_{spell_level}"
+        if slot_key in self.spell_slots:
+            return self.spell_slots[slot_key].get("current", 0) > 0
+        return False
+
+    def consume_spell_slot(self, spell_level: int) -> bool:
+        """
+        Consumes a spell slot of the given level if available.
+        Returns True if a slot was consumed, False otherwise.
+        """
+        slot_key = f"level_{spell_level}"
+        if self.has_spell_slot(spell_level):
+            if slot_key in self.spell_slots and "current" in self.spell_slots[slot_key]:
+                self.spell_slots[slot_key]["current"] -= 1
+                return True
+            else:
+                # This case should ideally not be reached if has_spell_slot was true
+                # and data structure is as expected.
+                logging.warning(f"Spell slot {slot_key} structure incorrect for {self.name}.")
+                return False
+        return False
+
     def remove_from_inventory(self, item_name: str) -> bool:
         """
         Removes an item from the player's inventory, if it exists.
@@ -551,6 +581,111 @@ class Player(Character):
             # Item not found in inventory
             # print(f"Item '{item_name}' not found in inventory.") # Debug
             return False
+
+    def cast_spell(self, spell_name: str, target: 'Character' = None) -> tuple[bool, str]:
+        """
+        Casts a spell by name, targeting another character or self.
+        Handles spell lookup, target validation, slot consumption, effect calculation, and application.
+        """
+        spell = SPELLBOOK.get(spell_name)
+        if not spell:
+            return False, f"Spell '{spell_name}' not found."
+
+        actual_target = None
+        if spell.target_type == "self":
+            actual_target = self
+        elif target is None:
+            return False, f"Spell '{spell_name}' requires a target."
+        elif not isinstance(target, Character): # Check if target is a Character instance
+            return False, "Invalid target type. Target must be a Character."
+        else:
+            actual_target = target
+
+        slot_message_part = ""
+        if spell.level > 0: # Assuming level 0 spells (cantrips) don't use slots
+            if not self.has_spell_slot(spell.level):
+                return False, f"No level {spell.level} spell slots available for '{spell_name}'."
+            if not self.consume_spell_slot(spell.level):
+                # This should ideally not happen if has_spell_slot passed.
+                logging.error(f"Failed to consume spell slot for '{spell_name}' for {self.name} despite check passing.")
+                return False, f"Failed to consume spell slot for '{spell_name}' (error)."
+            slot_message_part = f", consuming a level {spell.level} slot"
+
+        base_effect_value = 0
+        dice_roll_str = ""
+        if spell.dice_expression:
+            try:
+                parts = spell.dice_expression.lower().split('d')
+                num_dice = 1
+                dice_sides = 0
+                if len(parts) == 2:
+                    num_dice_str, dice_sides_str = parts
+                    if num_dice_str: # "1d6"
+                        num_dice = int(num_dice_str)
+                    else: # "d6"
+                        num_dice = 1
+                    dice_sides = int(dice_sides_str)
+                elif len(parts) == 1 and parts[0].isdigit(): # "6" interpreted as "1d6"
+                    num_dice = 1
+                    dice_sides = int(parts[0])
+                else:
+                    raise ValueError(f"Invalid dice expression format: {spell.dice_expression}")
+
+                if num_dice <= 0 or dice_sides <= 0:
+                    raise ValueError(f"Dice numbers must be positive: {spell.dice_expression}")
+
+                roll_result = roll_dice(sides=dice_sides, num_dice=num_dice)
+                base_effect_value += roll_result
+                dice_roll_str = f"{spell.dice_expression}({roll_result})"
+            except ValueError as e:
+                logging.error(f"Error parsing dice expression '{spell.dice_expression}' for spell '{spell_name}': {e}")
+                return False, f"Error processing spell '{spell_name}': Invalid dice expression."
+
+        ability_modifier_value = 0
+        mod_str = ""
+        if spell.stat_modifier_ability:
+            ability_modifier_value = self.get_ability_modifier(spell.stat_modifier_ability)
+            mod_str = f" + {spell.stat_modifier_ability[:3].upper()}({ability_modifier_value})"
+
+        total_effect_value = base_effect_value + ability_modifier_value
+        total_effect_value = max(0, total_effect_value) # Effects generally shouldn't be negative
+
+        effect_description = ""
+        if spell.effect_type == "heal":
+            actual_target.heal(total_effect_value)
+            effect_description = f"Healed {total_effect_value} HP."
+        elif spell.effect_type == "damage":
+            actual_target.take_damage(total_effect_value)
+            effect_description = f"Dealt {total_effect_value} {spell.name.lower().replace(' ', '_')} damage."
+        else:
+            effect_description = "Unknown spell effect."
+            logging.warning(f"Spell '{spell_name}' has an unknown effect_type: {spell.effect_type}")
+
+
+        target_name = actual_target.name if actual_target else "Unknown" # Should always have actual_target by now
+
+        # Construct calculation details, ensuring it's not empty if no dice or mod
+        calculation_details_parts = []
+        if dice_roll_str:
+            calculation_details_parts.append(dice_roll_str)
+        if mod_str:
+            # Ensure '+' is only added if dice_roll_str was present, or it's the first element.
+            # The mod_str already contains " + MOD(val)"
+            if not dice_roll_str : # if mod_str is first, remove its leading " + "
+                 mod_str = f"{spell.stat_modifier_ability[:3].upper()}({ability_modifier_value})"
+            calculation_details_parts.append(mod_str)
+
+        calculation_final_str = "".join(calculation_details_parts)
+        if calculation_final_str : # if there are calculation parts, add " = total"
+             calculation_final_str += f" = {total_effect_value}"
+        else: # No dice, no mod, but there might be a fixed base value (not in current Spell, but for future)
+             calculation_final_str = f"{total_effect_value}"
+
+
+        message = (f"{self.name} casts '{spell_name}' on {target_name}{slot_message_part}. "
+                   f"{effect_description} ({calculation_final_str})")
+
+        return True, message
 
 class NPC(Character):
     """
