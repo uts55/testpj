@@ -4,5 +4,7 @@
   "type": "weapon",
   "damage_dice": "1d6",
   "attack_bonus": 1,
-  "damage_bonus": 0
+  "damage_bonus": 0,
+  "buy_price": 10,
+  "sell_price": 5
 }

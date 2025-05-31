@@ -2,5 +2,7 @@
   "id": "wooden_shield",
   "name": "Wooden Shield",
   "type": "shield",
-  "ac_bonus": 1
+  "ac_bonus": 1,
+  "buy_price": 15,
+  "sell_price": 7
 }

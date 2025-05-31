@@ -10,23 +10,28 @@ from quests import ALL_QUESTS # Import for accessing quest details
 ITEM_DATABASE = {
     "short_sword": {
         "id": "short_sword", "name": "Short Sword", "type": "weapon",
-        "damage_dice": "1d6", "attack_bonus": 1, "damage_bonus": 0
+        "damage_dice": "1d6", "attack_bonus": 1, "damage_bonus": 0,
+        "buy_price": 10, "sell_price": 5
     },
     "long_sword": { # Added for more testing options
         "id": "long_sword", "name": "Long Sword", "type": "weapon",
-        "damage_dice": "1d8", "attack_bonus": 1, "damage_bonus": 1
+        "damage_dice": "1d8", "attack_bonus": 1, "damage_bonus": 1,
+        "buy_price": 20, "sell_price": 10
     },
     "leather_armor": {
         "id": "leather_armor", "name": "Leather Armor", "type": "armor",
-        "ac_bonus": 2
+        "ac_bonus": 2,
+        "buy_price": 50, "sell_price": 25
     },
     "wooden_shield": {
         "id": "wooden_shield", "name": "Wooden Shield", "type": "shield",
-        "ac_bonus": 1
+        "ac_bonus": 1,
+        "buy_price": 15, "sell_price": 7
     },
     "steel_shield": { # Added for more testing options
         "id": "steel_shield", "name": "Steel Shield", "type": "shield",
-        "ac_bonus": 2
+        "ac_bonus": 2,
+        "buy_price": 30, "sell_price": 15
     }
 }
 
@@ -777,6 +782,37 @@ class Player(Character):
             # print(f"Item '{item_name}' not found in inventory.") # Debug
             return False
 
+    def change_currency(self, gold_delta: int = 0, silver_delta: int = 0, copper_delta: int = 0) -> bool:
+        """
+        Changes the player's currency by the specified amounts.
+        Currently primarily handles gold. Returns False if unable to make change (e.g. insufficient funds).
+        """
+        if "currency" not in self.equipment:
+            self.equipment["currency"] = {}
+
+        # Initialize currency types if they don't exist
+        if "gold" not in self.equipment["currency"]:
+            self.equipment["currency"]["gold"] = 0
+        if "silver" not in self.equipment["currency"]:
+            self.equipment["currency"]["silver"] = 0
+        if "copper" not in self.equipment["currency"]:
+            self.equipment["currency"]["copper"] = 0
+
+        # For now, we'll simplify and mainly deal with gold for buying/selling
+        # A more complex system would handle conversions between currency types.
+
+        if gold_delta < 0: # Spending gold
+            if self.equipment["currency"]["gold"] < abs(gold_delta):
+                # Not enough gold
+                return False
+
+        self.equipment["currency"]["gold"] += gold_delta
+        # TODO: Implement silver and copper changes similarly if needed
+        # self.equipment["currency"]["silver"] += silver_delta
+        # self.equipment["currency"]["copper"] += copper_delta
+
+        return True
+
     def cast_spell(self, spell_name: str, target: 'Character' = None) -> tuple[bool, str]:
         """
         Casts a spell by name, targeting another character or self.
@@ -1055,6 +1091,93 @@ def determine_initiative(participants: list) -> list:
     initiative_rolls.sort(key=lambda x: x['initiative'], reverse=True)
 
     return [entry['id'] for entry in initiative_rolls]
+
+
+def player_buys_item(player: Player, npc: NPC, item_id: str) -> tuple[bool, str]:
+    """
+    Handles the logic for a player buying an item from an NPC.
+
+    Args:
+        player: The Player object buying the item.
+        npc: The NPC object selling the item (used for context).
+        item_id: The ID of the item to be bought.
+
+    Returns:
+        A tuple (success: bool, message: str).
+    """
+    item_data = ITEM_DATABASE.get(item_id)
+    if not item_data:
+        return False, f"아이템 ID '{item_id}'를 찾을 수 없습니다."
+
+    buy_price = item_data.get("buy_price")
+    if buy_price is None:
+        return False, f"아이템 '{item_data.get('name', item_id)}'의 구매 가격 정보가 없습니다."
+
+    # Assuming currency is primarily gold for now
+    player_gold = player.equipment.get("currency", {}).get("gold", 0)
+
+    if player_gold < buy_price:
+        return False, f"'{item_data.get('name', item_id)}'을(를) 구매하기 위한 골드가 부족합니다. 필요: {buy_price} 골드, 현재: {player_gold} 골드."
+
+    # Attempt to change currency
+    if not player.change_currency(gold_delta=-buy_price):
+        # This check is somewhat redundant if the above check passed, but good for safety
+        return False, f"통화 변경 중 오류가 발생했습니다."
+
+    player.add_to_inventory(item_id)
+
+    new_player_gold = player.equipment.get("currency", {}).get("gold", 0)
+    dm_message = f"플레이어가 {npc.name}에게서 {item_data.get('name', item_id)}을(를) {buy_price} 골드에 구매했습니다. 남은 골드: {new_player_gold} 골드."
+    notify_dm(dm_message) # Make sure notify_dm is imported from gemini_dm
+
+    return True, f"'{item_data.get('name', item_id)}'을(를) {buy_price} 골드에 구매했습니다."
+
+
+def player_sells_item(player: Player, npc: NPC, item_id: str) -> tuple[bool, str]:
+    """
+    Handles the logic for a player selling an item to an NPC.
+
+    Args:
+        player: The Player object selling the item.
+        npc: The NPC object buying the item (used for context).
+        item_id: The ID of the item to be sold from the player's inventory.
+
+    Returns:
+        A tuple (success: bool, message: str).
+    """
+    item_data = ITEM_DATABASE.get(item_id)
+    if not item_data:
+        # This case should ideally not happen if item_id comes from player's inventory
+        # and inventory only stores valid item_ids.
+        return False, f"아이템 ID '{item_id}'를 아이템 데이터베이스에서 찾을 수 없습니다."
+
+    sell_price = item_data.get("sell_price")
+    if sell_price is None:
+        return False, f"아이템 '{item_data.get('name', item_id)}'의 판매 가격 정보가 없습니다."
+
+    # Check if player has the item
+    if item_id not in player.inventory:
+        return False, f"플레이어의 인벤토리에 '{item_data.get('name', item_id)}' 아이템이 없습니다."
+
+    # Remove item from inventory first
+    if not player.remove_from_inventory(item_id):
+        # Should not happen if the check above passed
+        return False, f"'{item_data.get('name', item_id)}' 아이템을 인벤토리에서 제거하는 데 실패했습니다."
+
+    # Add currency to player
+    if not player.change_currency(gold_delta=sell_price):
+        # This should ideally not fail if just adding currency.
+        # If it does, it might indicate an issue with change_currency or currency structure.
+        # For now, attempt to add item back to inventory to reverse the state.
+        player.add_to_inventory(item_id) # Rollback inventory change
+        return False, f"'{item_data.get('name', item_id)}' 판매 후 통화 변경 중 오류가 발생했습니다."
+
+    new_player_gold = player.equipment.get("currency", {}).get("gold", 0)
+    dm_message = f"플레이어가 {npc.name}에게 {item_data.get('name', item_id)}을(를) {sell_price} 골드에 판매했습니다. 현재 골드: {new_player_gold} 골드."
+    notify_dm(dm_message)
+
+    return True, f"'{item_data.get('name', item_id)}'을(를) {sell_price} 골드에 판매했습니다."
+
 
 if __name__ == '__main__':
     # This block is for demonstration and basic testing when running game_state.py directly.

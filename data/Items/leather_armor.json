@@ -2,5 +2,7 @@
   "id": "leather_armor",
   "name": "Leather Armor",
   "type": "armor",
-  "ac_bonus": 2
+  "ac_bonus": 2,
+  "buy_price": 50,
+  "sell_price": 25
 }

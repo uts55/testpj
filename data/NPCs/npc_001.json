@@ -17,12 +17,15 @@
       "엘라라는 젊은 시절 뛰어난 마법사였다.",
       "고대 유물에 대해 잘 알고 있다."
     ],
+    "sells_item_ids": ["short_sword", "leather_armor", "wooden_shield"],
     "dialogue_responses": {
       "greetings": {
         "npc_text": "엘름 마을에 온 것을 환영하네. 무엇을 도와줄까?",
         "player_choices": [
           {"text": "마을에 대해 알려주세요.", "next_key": "about_village"},
           {"text": "고대 유물에 대해 아는 것이 있나요?", "next_key": "artifact_info_query"},
+          {"text": "물건을 사고 싶습니다.", "next_key": "buy_items_prompt"},
+          {"text": "물건을 팔고 싶습니다.", "next_key": "sell_items_prompt"},
           {"text": "별거 아닙니다. 안녕히 계세요.", "next_key": "farewell"}
         ]
       },
@@ -78,6 +81,18 @@
           {"text": "마을에 대해 알려주세요.", "next_key": "about_village"},
           {"text": "고대 유물에 대해 아는 것이 있나요?", "next_key": "artifact_info_query"},
           {"text": "아닙니다. 안녕히 계세요.", "next_key": "farewell"}
+        ]
+      },
+      "buy_items_prompt": {
+        "npc_text": "무엇을 구매하시겠어요? (아이템 목록 표시)",
+        "player_choices": [
+          {"text": "그만 보겠습니다.", "next_key": "greetings_repeat"}
+        ]
+      },
+      "sell_items_prompt": {
+        "npc_text": "무엇을 판매하시겠어요? (플레이어 인벤토리 표시)",
+        "player_choices": [
+          {"text": "그만 보겠습니다.", "next_key": "greetings_repeat"}
         ]
       }
     }
