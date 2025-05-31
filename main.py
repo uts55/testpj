@@ -1,3 +1,4 @@
+import re # For skill command parsing
 from game_state import PlayerState, determine_initiative, Player, NPC, Character
 
 # --- Combat Flow Functions ---
@@ -297,9 +298,34 @@ def main():
     # This needs to be done once, outside the loop, or when a new game starts.
     # For now, we'll do it here.
     global hero, mock_npcs_in_encounter, main_player_state
-    hero = Player(id="hero_1", name="Hero", max_hp=100,
-                  combat_stats={'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 3},
-                  base_damage_dice="1d8")
+
+    # Define the comprehensive player_data for the hero
+    hero_player_data = {
+        "id": "hero_1",
+        "name": "Hero",
+        "max_hp": 100,
+        "combat_stats": {'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 3},
+        "base_damage_dice": "1d8",
+        "ability_scores": {"strength": 16, "dexterity": 14, "constitution": 15, "intelligence": 10, "wisdom": 12, "charisma": 13},
+        "skills": ["athletics", "perception", "lockpicking", "persuasion", "stealth"], # Includes new skills
+        "proficiencies": {
+            "skills": ["athletics", "lockpicking", "stealth"], # Proficient in some new skills
+            # "armor": ["light", "medium"], # Example for other proficiency types
+            # "weapons": ["simple", "martial"]
+        },
+        "equipment": { # Optional: example equipment data
+            "weapon": "long_sword",
+            "armor": "leather_armor"
+            # "shield": "wooden_shield" # Example
+        }
+        # Other fields like 'inventory', 'status_effects' could also be here if loaded from a save.
+    }
+
+    # Instantiate the hero Player object using the player_data dictionary
+    # The Player constructor in game_state.py expects (player_data, equipment_data=None)
+    # equipment_data can be passed explicitly or be part of player_data under "equipment" key.
+    # The updated Player constructor handles taking equipment_data from player_data["equipment"] if the second arg is None.
+    hero = Player(player_data=hero_player_data, equipment_data=hero_player_data.get("equipment"))
 
     # Reset or initialize NPCs for encounters
     # It's better to create new NPC instances for each fight or reset them fully.
@@ -374,8 +400,35 @@ def main():
                 dm_message_to_send = start_message
             else:
                 ui_feedback.append("Already in combat!")
-        else:
-            # --- NON-COMBAT LOGIC ---
+        # Skill check command processing (non-combat)
+        # Format: "use <skill_name> on <target_description> (DC <dc_value>)"
+        # or "try to <skill_name> to <target_description> (DC <dc_value>)"
+        elif not main_player_state.is_in_combat: # Ensure not in combat for skill checks
+            skill_command_pattern = r"^(?:use|try to)\s+(\w+)\s+(?:on|to)\s+(.+?)\s+\(DC\s*(\d+)\)$"
+            match = re.match(skill_command_pattern, raw_player_input, re.IGNORECASE)
+            if match:
+                skill_name = match.group(1)
+                target_description = match.group(2)
+                dc_value = int(match.group(3))
+
+                # Perform the skill check using the hero object
+                # Ensure hero object and perform_skill_check method are available
+                if hero and hasattr(hero, 'perform_skill_check'):
+                    success, d20_roll, total_value, breakdown_str = hero.perform_skill_check(skill_name, dc_value)
+
+                    dm_message_to_send = (
+                        f"Player {hero.name} attempts to use {skill_name} {target_description} (DC {dc_value}).\n"
+                        f"Roll Details: {breakdown_str}.\n"
+                        f"Outcome: {'Success!' if success else 'Failure.'}"
+                    )
+                else:
+                    dm_message_to_send = f"Error: Hero object or skill check functionality is not available."
+                    ui_feedback.append("Error: Skill check could not be performed.") # Also provide UI feedback
+            else:
+                # If not a skill command, treat as a general message to the DM
+                dm_message_to_send = raw_player_input
+        else: # Should not be reached if logic is correct (combat handles its own, then fight, then skill, then general)
+            # --- NON-COMBAT LOGIC (fallback) ---
             # Player input is a general message to the DM
             dm_message_to_send = raw_player_input
 

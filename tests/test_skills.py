@@ -1,164 +1,171 @@
 import unittest
-from unittest.mock import patch
-import random # Required for tests even if random.randint is mocked for specific tests
+from unittest.mock import patch, MagicMock
+import sys
+import os
 
-from game_state import Player # Assuming Player is in game_state.py
-from utils import SKILL_ABILITY_MAP, PROFICIENCY_BONUS # Assuming these are in utils.py
+# Assuming the project structure is:
+# project_root/
+#   game_state.py
+#   utils.py
+#   tests/
+#     test_skills.py
+#     __init__.py
 
-class TestPlayerUseSkill(unittest.TestCase):
+# This adds the project_root to sys.path for imports if running tests from tests/ directory directly
+# For many test runners (like 'python -m unittest discover'), this might not be strictly necessary
+# if they handle path discovery, but it's a good safeguard.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-    def setUp(self):
-        # Basic player setup for most tests
-        # This player will be loaded from a simplified version of player_template.json
-        # or constructed directly with necessary attributes.
-        self.player_data = {
-            "id": "player_test_1",
-            "name": "TestPlayer",
-            "inventory": [],
-            "skills": ["investigation", "perception", "arcana"], # Player has these skills
-            "knowledge_fragments": [],
-            "current_location": "test_loc",
+from game_state import Player
+from utils import PROFICIENCY_BONUS, SKILL_ABILITY_MAP # SKILL_ABILITY_MAP is used by Player, not directly in test logic much here
+
+class TestPlayerSkills(unittest.TestCase):
+
+    def test_get_ability_modifier(self):
+        player_data_abilities = {
+            "id": "player_abs", "name": "AbilityTester", "max_hp": 10,
+            "combat_stats": {}, "base_damage_dice": "1d4", "equipment": {},
             "ability_scores": {
-                "strength": 10,
-                "dexterity": 12, # Mod +1
-                "constitution": 14, # Mod +2
-                "intelligence": 16, # Mod +3 (for Investigation, Arcana)
-                "wisdom": 8,       # Mod -1 (for Perception)
-                "charisma": 13     # Mod +1
+                "strength": 7,
+                "dexterity": 10,
+                "constitution": 14,
+                "intelligence": 15,
+                "wisdom": 8,
+                "charisma": 13
             },
-            "proficiencies": {
-                "skills": ["investigation", "arcana"] # Proficient in Investigation and Arcana
-            }
-            # Other fields can be omitted if not directly used by use_skill
+            "skills": [], "proficiencies": {"skills": []}
         }
-        self.player = Player.from_dict(self.player_data)
+        player = Player(player_data=player_data_abilities)
 
-    @patch('random.randint')
-    def test_use_skill_proficient(self, mock_randint):
-        # Test "investigation" which uses Intelligence (16 -> +3 mod)
-        # Player is proficient (+PROFICIENCY_BONUS)
-        mock_randint.return_value = 10  # Mocked d20 roll
+        self.assertEqual(player.get_ability_modifier("strength"), -2)  # (7 - 10) // 2
+        self.assertEqual(player.get_ability_modifier("dexterity"), 0)   # (10 - 10) // 2
+        self.assertEqual(player.get_ability_modifier("constitution"), 2) # (14 - 10) // 2
+        self.assertEqual(player.get_ability_modifier("intelligence"), 2) # (15 - 10) // 2
+        self.assertEqual(player.get_ability_modifier("wisdom"), -1)     # (8 - 10) // 2
+        self.assertEqual(player.get_ability_modifier("charisma"), 1)   # (13 - 10) // 2
 
-        expected_d20_roll = 10
-        expected_ability_modifier = (16 - 10) // 2  # +3
-        expected_proficiency_bonus = PROFICIENCY_BONUS
-        expected_total_roll = expected_d20_roll + expected_ability_modifier + expected_proficiency_bonus
+        # Test with a non-existent ability
+        # Expected to log a warning and return 0
+        # To check logs, we would need to configure logging and use self.assertLogs,
+        # but for this subtask, focusing on return value is primary.
+        self.assertEqual(player.get_ability_modifier("luck"), 0)
 
-        result = self.player.use_skill("investigation")
+        # Test with mixed case
+        self.assertEqual(player.get_ability_modifier("sTrEnGtH"), -2)
 
-        self.assertEqual(result["skill"], "investigation")
-        self.assertEqual(result["d20_roll"], expected_d20_roll)
-        self.assertEqual(result["ability_key"], "intelligence")
-        self.assertEqual(result["ability_score"], 16)
-        self.assertEqual(result["ability_modifier"], expected_ability_modifier)
-        self.assertTrue(result["is_proficient"])
-        self.assertEqual(result["applied_proficiency_bonus"], expected_proficiency_bonus)
-        self.assertEqual(result["total_roll"], expected_total_roll)
-        self.assertIn(f"Result: {expected_total_roll}", result["description"])
-        mock_randint.assert_called_once_with(1, 20)
+    # Patching 'game_state.roll_dice' because Player class in game_state.py imports roll_dice from utils
+    # and calls it as 'roll_dice()'. So we patch where it's looked up (in game_state module scope).
+    @patch('game_state.roll_dice')
+    def test_perform_skill_check(self, mock_roll_dice: MagicMock):
+        player_data_for_skills = {
+            "id": "skill_test_player", "name": "Skill Tester", "max_hp": 10,
+            "combat_stats": {}, "base_damage_dice": "1d4", "equipment": {},
+            "ability_scores": {"dexterity": 16, "charisma": 14, "strength": 10, "wisdom": 12},
+            "skills": ["lockpicking", "persuasion", "athletics", "perception", "unknown_skill_in_list"],
+            "proficiencies": {
+                "skills": ["lockpicking", "athletics"] # Proficient in lockpicking (DEX) and athletics (STR)
+            }
+        }
+        player = Player(player_data=player_data_for_skills)
 
-    @patch('random.randint')
-    def test_use_skill_not_proficient(self, mock_randint):
-        # Test "perception" which uses Wisdom (8 -> -1 mod)
-        # Player is NOT proficient (no proficiency bonus)
-        mock_randint.return_value = 15  # Mocked d20 roll
+        # Scenario 1: Proficient Skill Success
+        # Lockpicking (DEX 16 -> +3 mod), Proficient (+PROFICIENCY_BONUS)
+        # DC = 15. Mock roll = 10. Total = 10 (roll) + 3 (DEX) + PROFICIENCY_BONUS
+        mock_roll_dice.return_value = 10
+        expected_total_s1 = 10 + 3 + PROFICIENCY_BONUS
+        dc_s1 = 15
+        success, d20_roll, total_value, breakdown_str = player.perform_skill_check("lockpicking", dc_s1)
 
-        expected_d20_roll = 15
-        expected_ability_modifier = (8 - 10) // 2  # -1
-        expected_proficiency_bonus = 0 # Not proficient
-        expected_total_roll = expected_d20_roll + expected_ability_modifier + expected_proficiency_bonus
+        self.assertEqual(d20_roll, 10)
+        self.assertEqual(total_value, expected_total_s1)
+        self.assertEqual(success, expected_total_s1 >= dc_s1)
+        self.assertIn(f"d20(10)", breakdown_str)
+        self.assertIn(f"DEXTERITY_MOD(3)", breakdown_str) # Relies on SKILL_ABILITY_MAP
+        self.assertIn(f"PROF_BONUS({PROFICIENCY_BONUS})", breakdown_str)
+        self.assertIn(f"= {expected_total_s1}", breakdown_str)
+        self.assertIn(f"vs DC({dc_s1})", breakdown_str)
 
-        result = self.player.use_skill("perception")
+        # Scenario 2: Non-Proficient Skill Failure
+        # Persuasion (CHA 14 -> +2 mod), Not Proficient
+        # DC = 18. Mock roll = 8. Total = 8 (roll) + 2 (CHA)
+        mock_roll_dice.return_value = 8
+        expected_total_s2 = 8 + 2
+        dc_s2 = 18
+        success, d20_roll, total_value, breakdown_str = player.perform_skill_check("persuasion", dc_s2)
 
-        self.assertEqual(result["skill"], "perception")
-        self.assertEqual(result["d20_roll"], expected_d20_roll)
-        self.assertEqual(result["ability_key"], "wisdom")
-        self.assertEqual(result["ability_score"], 8)
-        self.assertEqual(result["ability_modifier"], expected_ability_modifier)
-        self.assertFalse(result["is_proficient"])
-        self.assertEqual(result["applied_proficiency_bonus"], expected_proficiency_bonus)
-        self.assertEqual(result["total_roll"], expected_total_roll)
-        self.assertIn(f"Result: {expected_total_roll}", result["description"])
-        mock_randint.assert_called_once_with(1, 20)
+        self.assertEqual(d20_roll, 8)
+        self.assertEqual(total_value, expected_total_s2)
+        self.assertEqual(success, expected_total_s2 >= dc_s2) # Should be False
+        self.assertFalse(success)
+        self.assertIn(f"d20(8)", breakdown_str)
+        self.assertIn(f"CHARISMA_MOD(2)", breakdown_str) # Relies on SKILL_ABILITY_MAP
+        self.assertIn(f"PROF_BONUS(0)", breakdown_str)
+        self.assertIn(f"= {expected_total_s2}", breakdown_str)
+        self.assertIn(f"vs DC({dc_s2})", breakdown_str)
 
-    def test_use_skill_unknown_skill_in_map(self):
-        # Test a skill that's not in SKILL_ABILITY_MAP
-        result = self.player.use_skill("baking") # Assuming 'baking' is not in SKILL_ABILITY_MAP
+        # Scenario 3: Skill not in SKILL_ABILITY_MAP (uses "unknown_skill_in_list" which is in player's skills but not in SKILL_ABILITY_MAP)
+        # DC = 10. Mock roll = 10. Total = 10 (roll) + 0 (no ability) + 0 (not proficient by this name)
+        mock_roll_dice.return_value = 10
+        expected_total_s3 = 10
+        dc_s3 = 10
+        # Note: "unknown_skill_in_list" is not in SKILL_ABILITY_MAP, so no ability mod.
+        # It's also not in proficiencies by that name.
+        success, d20_roll, total_value, breakdown_str = player.perform_skill_check("unknown_skill_in_list", dc_s3)
 
-        self.assertIn("error", result)
-        self.assertEqual(result["skill"], "baking")
-        self.assertTrue("not a recognized skill" in result.get("error", "").lower() or \
-                        "not a recognized skill" in result.get("description", "").lower())
+        self.assertEqual(d20_roll, 10)
+        self.assertEqual(total_value, expected_total_s3)
+        self.assertEqual(success, expected_total_s3 >= dc_s3) # Should be True
+        self.assertTrue(success)
+        self.assertIn(f"d20(10)", breakdown_str)
+        self.assertIn(f"N/A_MOD(N/A)", breakdown_str) # No ability associated
+        self.assertIn(f"PROF_BONUS(0)", breakdown_str)
+        self.assertIn(f"= {expected_total_s3}", breakdown_str)
 
-    def test_use_skill_missing_ability_score(self):
-        # Temporarily remove an ability score the player should have for a known skill
-        original_intelligence = self.player.ability_scores.pop("intelligence", None)
+        # Scenario 4: Edge case - Total equals DC
+        # Athletics (STR 10 -> +0 mod), Proficient (+PROFICIENCY_BONUS)
+        # DC = 12. Mock roll needs to be 12 - PROFICIENCY_BONUS. Total = (12 - PROFICIENCY_BONUS) + 0 + PROFICIENCY_BONUS = 12.
+        roll_for_boundary = 12 - PROFICIENCY_BONUS
+        mock_roll_dice.return_value = roll_for_boundary
+        expected_total_s4 = roll_for_boundary + 0 + PROFICIENCY_BONUS
+        dc_s4 = 12
+        success, d20_roll, total_value, breakdown_str = player.perform_skill_check("athletics", dc_s4)
 
-        result = self.player.use_skill("arcana") # Arcana uses Intelligence
+        self.assertEqual(d20_roll, roll_for_boundary)
+        self.assertEqual(total_value, expected_total_s4) # Should be dc_s4
+        self.assertEqual(total_value, dc_s4)
+        self.assertEqual(success, expected_total_s4 >= dc_s4) # Should be True
+        self.assertTrue(success)
+        self.assertIn(f"d20({roll_for_boundary})", breakdown_str)
+        self.assertIn(f"STRENGTH_MOD(0)", breakdown_str)
+        self.assertIn(f"PROF_BONUS({PROFICIENCY_BONUS})", breakdown_str)
+        self.assertIn(f"= {expected_total_s4}", breakdown_str)
 
-        self.assertEqual(result["skill"], "arcana")
-        # The current implementation defaults to ability score 10 if missing, and logs a warning.
-        # Let's test this default behavior.
-        # d20 roll will be random here as we are not mocking it for this specific test path,
-        # or we can mock it if we want to predict the total_roll.
-        # For simplicity, we'll just check that it used the default ability score for modifier calculation.
+        # Scenario 5: Skill uses an ability score not present in the player's ability_scores
+        # Perception (WIS), but let's test with a player who doesn't have Wisdom defined.
+        player_data_no_wisdom = {
+            "id": "player_no_wis", "name": "NoWisdomTester", "max_hp": 10,
+            "combat_stats": {}, "base_damage_dice": "1d4", "equipment": {},
+            "ability_scores": {"dexterity": 10}, # No wisdom
+            "skills": ["perception"], # Has perception skill
+            "proficiencies": {"skills": []} # Not proficient
+        }
+        player_no_wisdom = Player(player_data=player_data_no_wisdom)
+        mock_roll_dice.return_value = 11
+        expected_total_s5 = 11 + 0 + 0 # Roll + 0 (WIS mod because missing) + 0 (not proficient)
+        dc_s5 = 10
+        success, d20_roll, total_value, breakdown_str = player_no_wisdom.perform_skill_check("perception", dc_s5)
 
-        expected_default_ability_score = 10
-        expected_ability_modifier_default = (expected_default_ability_score - 10) // 2 # Should be 0
+        self.assertEqual(d20_roll, 11)
+        self.assertEqual(total_value, expected_total_s5)
+        self.assertTrue(success)
+        self.assertIn(f"d20(11)", breakdown_str)
+        self.assertIn(f"WISDOM_MOD(0)", breakdown_str) # Modifier defaults to 0 if ability not found
+        self.assertIn(f"PROF_BONUS(0)", breakdown_str)
+        self.assertIn(f"= {expected_total_s5}", breakdown_str)
 
-        self.assertEqual(result["ability_key"], "intelligence")
-        self.assertEqual(result["ability_score"], expected_default_ability_score) # Check it used the default
-        self.assertEqual(result["ability_modifier"], expected_ability_modifier_default)
-        # Player is proficient in Arcana
-        self.assertTrue(result["is_proficient"])
-        self.assertEqual(result["applied_proficiency_bonus"], PROFICIENCY_BONUS)
-
-        # Restore ability score for other tests
-        if original_intelligence is not None:
-            self.player.ability_scores["intelligence"] = original_intelligence
-
-    @patch('random.randint')
-    def test_use_skill_case_insensitivity(self, mock_randint):
-        # Test "INVESTIGATION" (uppercase) which uses Intelligence (16 -> +3 mod)
-        # Player is proficient (+PROFICIENCY_BONUS)
-        mock_randint.return_value = 5
-
-        expected_d20_roll = 5
-        expected_ability_modifier = (16 - 10) // 2  # +3
-        expected_proficiency_bonus = PROFICIENCY_BONUS
-        expected_total_roll = expected_d20_roll + expected_ability_modifier + expected_proficiency_bonus
-
-        result = self.player.use_skill("INVESTIGATION") # Uppercase skill name
-
-        self.assertEqual(result["skill"], "INVESTIGATION") # Should probably return original case or consistent case
-        self.assertEqual(result["d20_roll"], expected_d20_roll)
-        self.assertEqual(result["ability_key"], "intelligence")
-        self.assertEqual(result["total_roll"], expected_total_roll)
-        mock_randint.assert_called_once_with(1, 20)
-
-    def test_player_does_not_have_skill_but_in_map(self):
-        # Player object's `skills` list: ["investigation", "perception", "arcana"]
-        # "history" is in SKILL_ABILITY_MAP but not in player's `self.skills`
-        # The current `use_skill` implementation doesn't check `self.skills`.
-        # It only checks if the skill is in SKILL_ABILITY_MAP and if proficient in self.proficiencies.
-        # This test is more about documenting current behavior.
-        with patch('random.randint', return_value=12) as mock_rand:
-            result = self.player.use_skill("history") # History uses Intelligence (16 -> +3)
-                                                     # Player is NOT proficient in History
-
-            expected_d20_roll = 12
-            expected_ability_modifier = (16 - 10) // 2  # +3
-            expected_proficiency_bonus = 0 # Not proficient
-            expected_total_roll = expected_d20_roll + expected_ability_modifier + expected_proficiency_bonus
-
-            self.assertEqual(result["skill"], "history")
-            self.assertEqual(result["d20_roll"], expected_d20_roll)
-            self.assertEqual(result["ability_key"], "intelligence")
-            self.assertEqual(result["ability_score"], 16)
-            self.assertEqual(result["ability_modifier"], expected_ability_modifier)
-            self.assertFalse(result["is_proficient"]) # Not in self.player_data["proficiencies"]["skills"]
-            self.assertEqual(result["applied_proficiency_bonus"], expected_proficiency_bonus)
-            self.assertEqual(result["total_roll"], expected_total_roll)
 
 if __name__ == '__main__':
-    unittest.main(argv=['first-arg-is-ignored'], exit=False)
+    unittest.main()
