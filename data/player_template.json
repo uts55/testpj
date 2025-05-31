@@ -68,7 +68,7 @@ player_data_str = """
   "bonds": ["My mentor's unfinished research"],
   "flaws": ["Often lost in thought"],
   "notes": "Met a mysterious stranger in the tavern.",
-  "active_quests": ["quest_find_lost_artifact"],
+  "active_quests": {},
   "completed_quests": ["quest_deliver_message"]
 }
 """
