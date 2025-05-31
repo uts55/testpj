@@ -59,7 +59,38 @@ class Character:
         self.current_hp = max_hp  # Characters start at full health
         self.combat_stats = combat_stats
         self.base_damage_dice = base_damage_dice
-        # self.status_effects = [] # Future placeholder for buffs/debuffs
+        self.status_effects = []
+
+    def add_status_effect(self, effect_name: str, duration: int, potency: int):
+        """Adds or updates a status effect."""
+        for effect in self.status_effects:
+            if effect['name'] == effect_name:
+                effect['duration'] = duration
+                effect['potency'] = potency
+                return f"{self.name}'s {effect_name} has been refreshed to {duration} turns."
+        self.status_effects.append({'name': effect_name, 'duration': duration, 'potency': potency})
+        return f"{self.name} is now {effect_name} for {duration} turns."
+
+    def remove_status_effect(self, effect_name: str):
+        """Removes a status effect by name."""
+        self.status_effects = [effect for effect in self.status_effects if effect['name'] != effect_name]
+
+    def tick_status_effects(self) -> list[str]:
+        """Applies effects of active status conditions and decrements their duration."""
+        messages = []
+        for effect in list(self.status_effects): # Iterate over a copy
+            if effect['name'] == 'poison':
+                self.take_damage(effect['potency'])
+                messages.append(f"{self.name} took {effect['potency']} damage from poison.")
+                if not self.is_alive():
+                    messages.append(f"{self.name} succumbed to poison.")
+                    break  # Stop processing effects if character dies
+
+            effect['duration'] -= 1
+            if effect['duration'] <= 0:
+                self.remove_status_effect(effect['name']) # Use the new method
+                messages.append(f"{self.name} is no longer {effect['name']}.")
+        return messages
 
     def take_damage(self, amount: int):
         """
@@ -166,22 +197,62 @@ class Character:
 
             try:
                 parts = current_damage_dice_str.lower().split('d')
-                if len(parts) == 2: # Format "XdY" or "dY"
+                if len(parts) == 2:
                     num_dice_str, dice_sides_str = parts
-                    num_dice = int(num_dice_str) if num_dice_str else 1 # Handles "dY" as "1dY"
-                    dice_sides = int(dice_sides_str)
-                elif len(parts) == 1 and parts[0].isdigit():
-                    # This case might be ambiguous for "XdY".
-                    # For now, assume if it's just a number, it's "1d<number>" e.g. "4" becomes "1d4"
-                    # This path should ideally not be taken if format is "XdY" or "dY".
-                    raise ValueError(f"Invalid damage_dice format for {self.name}: '{current_damage_dice_str}'. Expected XdY or dY (e.g., 1d4, d6).")
-                else: # Malformed
-                    raise ValueError(f"Invalid damage_dice format for {self.name}: '{current_damage_dice_str}'. Expected XdY or dY (e.g., 1d4, d6).")
+                    if not dice_sides_str: # Handles "1d"
+                        raise ValueError("Dice sides component is missing.")
+                    if not num_dice_str and not dice_sides_str: # Handles "d"
+                         raise ValueError("Both number of dice and dice sides components are missing.")
+                    if not num_dice_str and dice_sides_str: # Handles "d6"
+                        num_dice = 1
+                        dice_sides = int(dice_sides_str)
+                    else: # Handles "1d6"
+                        num_dice = int(num_dice_str)
+                        dice_sides = int(dice_sides_str)
+                elif len(parts) == 1 and parts[0].isdigit(): # Handles "4" as "1d4" - this is a specific interpretation.
+                    # This interpretation might be too lenient. For strict "XdY" or "dY", this block could be removed.
+                    # However, the test "test_attack_invalid_dice_format_raises_error_player"
+                    # implies "invalid_dice" should fail, which it would if this "elif" is not met.
+                    # The problem might be that "invalid_dice" does not trigger int() conversion error,
+                    # but goes to the final "else".
+                    # Let's keep the existing behavior for "4" becoming "1d4" for now as it was intended.
+                    # The main issue is likely the broad "else" not being specific enough.
+                    # The original code's "elif len(parts) == 1 and parts[0].isdigit():" path to raise error was incorrect.
+                    # It should have been for "invalid_dice" type strings.
+                    num_dice = 1
+                    dice_sides = int(parts[0])
+                    current_damage_dice_str = f"1d{dice_sides}" # Normalize for output message
+                    # This specific conversion for "4" to "1d4" might be better handled by ensuring
+                    # input dice strings are always "XdY" or "dY" upstream.
+                    # For now, to pass the spirit of the original code's intent for this case:
+                    # This part is problematic if parts[0] is not a digit.
+                    # Let's refine the overall structure.
 
-                if num_dice <=0 or dice_sides <= 0:
+                # Refined structure:
+                # Ensure parts are what we expect for XdY or dY
+                if len(parts) != 2:
+                    # Check for the "4" becoming "1d4" case, if it's a single number
+                    if len(parts) == 1 and parts[0].isdigit():
+                        num_dice = 1
+                        dice_sides = int(parts[0])
+                        current_damage_dice_str = f"1d{dice_sides}" # For message consistency
+                    else: # Truly malformed
+                        raise ValueError(f"Invalid format. Expected XdY or dY.")
+                else: # len(parts) == 2
+                    num_dice_str, dice_sides_str = parts
+                    if not dice_sides_str: # e.g. "1d"
+                        raise ValueError("Dice sides component is missing.")
+                    if not num_dice_str: # e.g. "d6"
+                        num_dice = 1
+                    else:
+                        num_dice = int(num_dice_str)
+                    dice_sides = int(dice_sides_str)
+
+
+                if num_dice <= 0 or dice_sides <= 0:
                     raise ValueError(f"Number of dice and sides must be positive. Got: {num_dice}d{dice_sides}")
 
-            except ValueError as e:
+            except ValueError as e: # Catches int() conversion errors or explicit raises
                 raise ValueError(f"Error parsing damage dice '{current_damage_dice_str}' for {self.name}: {e}")
 
 
@@ -193,7 +264,20 @@ class Character:
 
             dm_message += f" Deals {num_dice}d{dice_sides}({damage_roll}) + DMG Bonus({current_damage_bonus}) = {total_damage} damage."
             dm_message += f" {target.name} HP: {target.current_hp}/{target.max_hp}."
-            if not target.is_alive():
+
+            # Apply poison on 10% chance if target is still alive
+            if target.is_alive(): # Only apply poison if the target survived the initial damage
+                if random.randint(1, 100) <= 10: # 10% chance
+                    # The add_status_effect method now returns a message.
+                    # However, the attack method constructs its own dm_message.
+                    # For now, we'll let the existing poison message logic in attack() handle it.
+                    # If add_status_effect's message were needed here, we'd capture it:
+                    # poison_msg = target.add_status_effect(effect_name='poison', duration=3, potency=2)
+                    # if poison_msg: dm_message += f" {poison_msg}" # Or integrate it more smoothly
+                    target.add_status_effect(effect_name='poison', duration=3, potency=2) # Keep original logic for now
+                    dm_message += f" {target.name} has been poisoned!" # Original message for poison
+
+            if not target.is_alive(): # Check again in case poison was instantly lethal (not with current setup, but good practice)
                 dm_message += f" {target.name} has been defeated!"
         else:
             # MISS!

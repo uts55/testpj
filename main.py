@@ -45,9 +45,9 @@ def start_combat(player: Player, npcs: list[NPC], current_player_state: PlayerSt
 
     return f"Combat started! Turn order: {turn_order_str}. First up: {first_character_name} ({current_player_state.current_turn_character_id})."
 
-def process_combat_turn(current_player_state: PlayerState, player_action: str = "") -> str:
+def process_combat_turn(dm_manager, current_player_state: PlayerState, player_action: str = "") -> str:
     """
-    Processes the current character's turn: handles action, attack, and advances to the next.
+    Processes the current character's turn: handles status effects, action, attack, and advances to the next.
     Returns a message for the DM or player.
     """
     if not current_player_state.is_in_combat or not current_player_state.turn_order:
@@ -60,10 +60,33 @@ def process_combat_turn(current_player_state: PlayerState, player_action: str = 
     attacker = next((p for p in current_player_state.participants_in_combat if p.id == char_id), None)
 
     if attacker is None:
-        return f"Error: Attacker with ID {char_id} not found in participants list. Combat state corrupted."
+        # This should ideally not happen if char_id is always valid.
+        # If it does, try to advance turn to prevent getting stuck.
+        try:
+            current_turn_index = current_player_state.turn_order.index(char_id) # This will fail if char_id is bad
+            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
+            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
+            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
+            next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
+            return f"Error: Attacker with ID {char_id} not found. Advancing to {next_attacker_name} to prevent stall."
+        except (ValueError, IndexError) as e:
+            # If advancing also fails, combat state is critically corrupted.
+            current_player_state.is_in_combat = False # Attempt to stop combat
+            return f"Critical Error: Attacker {char_id} not found and cannot advance turn: {e}. Combat stopped."
+
+    notification_parts = [] # Accumulate messages for the turn
+
+    # --- Status Effects Tick ---
+    status_effect_messages = attacker.tick_status_effects()
+    if status_effect_messages:
+        for effect_msg in status_effect_messages:
+            notify_dm_event(dm_manager, effect_msg) # Send each status effect message individually
+        notification_parts.extend(status_effect_messages)
+        # is_attacker_alive_after_effects = attacker.is_alive() # This variable is not used later, can be removed if not needed
 
     if not attacker.is_alive():
-        # Skip turn if the current character is not alive (e.g. defeated by AoE before their turn)
+        # Character died from status effects (e.g., poison)
+        # notification_parts already contains death messages from tick_status_effects
         # Advance turn
         try:
             current_turn_index = current_player_state.turn_order.index(char_id)
@@ -71,16 +94,36 @@ def process_combat_turn(current_player_state: PlayerState, player_action: str = 
             current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
             next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
             next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
-            return f"{attacker.name} is defeated and cannot take a turn. Advancing to {next_attacker_name}."
+            notification_parts.append(f"{attacker.name} cannot take further actions this turn. Advancing to {next_attacker_name}.")
+            return "\n".join(notification_parts)
         except (ValueError, IndexError) as e:
-            return f"Error advancing turn after defeated character: {e}. Combat state corrupted."
+            # If advancing fails, combat state is critically corrupted.
+            current_player_state.is_in_combat = False # Attempt to stop combat
+            notification_parts.append(f"Error advancing turn after character succumbed to status effects: {e}. Combat stopped.")
+            return "\n".join(notification_parts)
 
+    # Original check for already defeated characters (e.g. by AoE before their turn)
+    # This might be redundant if status effects kill them, but good as a fallback.
+    if not attacker.is_alive(): # Re-check, though tick_status_effects should handle this.
+        try:
+            current_turn_index = current_player_state.turn_order.index(char_id)
+            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
+            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
+            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
+            next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
+            notification_parts.append(f"{attacker.name} was already defeated. Advancing to {next_attacker_name}.")
+            return "\n".join(notification_parts)
+        except (ValueError, IndexError) as e:
+            current_player_state.is_in_combat = False
+            notification_parts.append(f"Error advancing turn for already defeated character: {e}. Combat stopped.")
+            return "\n".join(notification_parts)
 
-    action_message = ""
+    action_message_segment = "" # Specific message for the action taken this turn
     turn_advanced = False
 
     if attacker == current_player_state.player_character: # Player's turn
         if not player_action:
+            # This is a prompt FOR the player, not a DM message.
             return f"{attacker.name}'s turn. Type 'attack <target_name>' or 'pass'."
 
         action_parts = player_action.lower().split(" ", 1)
@@ -88,60 +131,70 @@ def process_combat_turn(current_player_state: PlayerState, player_action: str = 
 
         if command == "attack":
             if len(action_parts) < 2:
+                # This is UI feedback, not a DM message.
                 return "Invalid action. Usage: attack <target_name>"
             target_name = action_parts[1]
             target = next((p for p in current_player_state.participants_in_combat
                            if p.name.lower() == target_name.lower() and p.is_alive()), None)
             if target:
                 if target == attacker:
-                    action_message = f"{attacker.name} wisely decides not to attack themselves."
+                    action_message_segment = f"{attacker.name} wisely decides not to attack themselves."
                 else:
-                    action_message = attacker.attack(target)
+                    attack_notification = attacker.attack(target) # This is a DM message part
+                    action_message_segment = attack_notification # Store for player feedback
+                    if attack_notification and "attacks" in attack_notification: # Check if it's an actual attack message
+                        notify_dm_event(dm_manager, attack_notification)
             else:
-                action_message = f"Target '{target_name}' not found, is not alive, or is invalid."
+                # This is UI feedback if target is not found.
+                return f"Target '{target_name}' not found, is not alive, or is invalid."
             turn_advanced = True # Attack action consumes the turn
         elif command == "pass":
-            action_message = f"{attacker.name} passes their turn."
+            action_message_segment = f"{attacker.name} passes their turn." # DM message part
             turn_advanced = True
         else:
-            action_message = f"Invalid action: '{player_action}'. Type 'attack <target_name>' or 'pass'."
+            # This is UI feedback for invalid command.
+            return f"Invalid action: '{player_action}'. Type 'attack <target_name>' or 'pass'."
             # For invalid actions, we don't advance the turn, player gets another try.
-            return action_message
 
     else: # NPC's turn
         # Simple AI: Attack the player character if alive
         target = current_player_state.player_character
         if target and target.is_alive():
-            action_message = attacker.attack(target)
+            attack_notification = attacker.attack(target) # DM message part
+            action_message_segment = attack_notification # Store for player feedback
+            if attack_notification and "attacks" in attack_notification: # Check if it's an actual attack message
+                 notify_dm_event(dm_manager, attack_notification)
         elif target and not target.is_alive():
-            action_message = f"{attacker.name} sees the player {target.name} is defeated and looks for other targets (but finds none)."
+            action_message_segment = f"{attacker.name} sees the player {target.name} is defeated and looks for other targets (but finds none)." # DM message part
             # In a more complex scenario, NPC might choose another NPC or take other actions.
         else: # Should not happen if player_character is always set in PlayerState
-             action_message = f"{attacker.name} is confused and has no target."
+             action_message_segment = f"{attacker.name} is confused and has no target." # DM message part
         turn_advanced = True # NPC turn always results in an action or attempted action
+
+    if action_message_segment:
+        notification_parts.append(action_message_segment)
 
     # Advance turn if an action was taken or turn was passed
     if turn_advanced:
         try:
             current_turn_index = current_player_state.turn_order.index(char_id)
-            # Ensure all participants in turn_order are still valid (alive) or skip them
-            # This simple advance just goes to next ID, assumes check_combat_end or next turn processing handles defeated chars
             next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
             current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
 
-            # Append next turn info to the message
             next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
             if next_attacker_obj:
-                 action_message += f"\nNext up: {next_attacker_obj.name}."
+                 notification_parts.append(f"Next up: {next_attacker_obj.name}.")
             else: # Should ideally not happen if turn_order IDs are valid
-                action_message += f"\nNext up: ID {current_player_state.current_turn_character_id} (name unknown)."
+                notification_parts.append(f"Next up: ID {current_player_state.current_turn_character_id} (name unknown).")
 
         except ValueError:
-            return f"{action_message}\nError: Character {char_id} not found in turn order. Combat state might be corrupted."
+            notification_parts.append(f"Error: Character {char_id} not found in turn order. Combat state might be corrupted.")
+            current_player_state.is_in_combat = False # Attempt to stop combat
         except IndexError:
-            return f"{action_message}\nError: Problem advancing turn. Combat state might be corrupted."
+            notification_parts.append(f"Error: Problem advancing turn. Combat state might be corrupted.")
+            current_player_state.is_in_combat = False # Attempt to stop combat
 
-    return action_message
+    return "\n".join(notification_parts)
 
 def check_combat_end_condition(player: Player, npcs: list[NPC], current_player_state: PlayerState) -> tuple[bool, str]:
     """
@@ -211,6 +264,19 @@ class GeminiDM:
             print()
         return response
 
+def notify_dm_event(dm_manager, message: str):
+    """Sends a formatted game event message to the DM."""
+    if not message: # Do not send empty messages
+        return
+    try:
+        # Make sure dm_manager is not None and has send_message
+        if dm_manager and hasattr(dm_manager, 'send_message'):
+            dm_manager.send_message(f"Game Event: {message}", stream=False)
+        else:
+            print(f"LOG: DM Manager not available. Event: {message}") # Fallback log
+    except Exception as e:
+        print(f"LOG: Error sending DM notification: {e}. Event: {message}") # Fallback log
+
 # --- Global PlayerState and Mock Entities for main game loop ---
 # These will be properly initialized in main() using the real classes
 hero: Player = None # Will be Player("Hero", ...)
@@ -271,7 +337,8 @@ def main():
             # Process the turn. This will handle player action or NPC AI.
             # It returns a message that is usually for the DM (attack results, etc.)
             # or a prompt for the player if more input is needed (e.g. "Your turn. Type 'attack...'")
-            turn_result_message = process_combat_turn(main_player_state, player_action_for_combat)
+            # Pass the dm instance to process_combat_turn
+            turn_result_message = process_combat_turn(dm, main_player_state, player_action_for_combat)
 
             # Check if the message is a prompt for the player or a DM message
             if "Type 'attack" in turn_result_message or "Invalid action" in turn_result_message or "Target '" in turn_result_message:
