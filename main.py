@@ -1,4 +1,4 @@
-import re # For skill command parsing
+import re # For skill command parsing and cast command
 from game_state import PlayerState, determine_initiative, Player, NPC, Character
 
 # --- Combat Flow Functions ---
@@ -125,7 +125,7 @@ def process_combat_turn(dm_manager, current_player_state: PlayerState, player_ac
     if attacker == current_player_state.player_character: # Player's turn
         if not player_action:
             # This is a prompt FOR the player, not a DM message.
-            return f"{attacker.name}'s turn. Type 'attack <target_name>' or 'pass'."
+            return f"{attacker.name}'s turn. Type 'attack <target_name>', 'cast <spell_name> [on <target_name>]', or 'pass'."
 
         action_parts = player_action.lower().split(" ", 1)
         command = action_parts[0]
@@ -149,12 +149,54 @@ def process_combat_turn(dm_manager, current_player_state: PlayerState, player_ac
                 # This is UI feedback if target is not found.
                 return f"Target '{target_name}' not found, is not alive, or is invalid."
             turn_advanced = True # Attack action consumes the turn
+        elif command == "cast":
+            if len(action_parts) < 2:
+                return "Invalid command. Usage: cast <spell_name> [on <target_name>]"
+
+            spell_and_target_str = action_parts[1]
+            # spell_name_str needs to be extracted carefully.
+            # Target name is optional and follows " on ".
+            # Spell names can have spaces.
+
+            match = re.match(r"(.+?)(?:\s+on\s+(.+))?$", spell_and_target_str, re.IGNORECASE)
+
+            if not match:
+                # This regex should almost always match if action_parts[1] is not empty.
+                # This case might occur if spell_and_target_str is empty or malformed in an unexpected way.
+                return "Invalid cast command format. Usage: cast <spell_name> [on <target_name>]"
+
+            spell_name_str = match.group(1).strip().title() # .title() to match SPELLBOOK keys
+            target_name = None
+            if match.group(2):
+                target_name = match.group(2).strip()
+
+            target_object = None
+            if target_name:
+                # Find the target in participants_in_combat
+                target = next((p for p in current_player_state.participants_in_combat
+                               if p.name.lower() == target_name.lower() and p.is_alive()), None)
+                if not target:
+                    return f"Target '{target_name}' not found or is not alive."
+                target_object = target
+
+            # Attacker is the player character, who has the cast_spell method
+            success, message = attacker.cast_spell(spell_name_str, target_object)
+
+            if success:
+                notify_dm_event(dm_manager, message) # Send full spell outcome to DM
+                action_message_segment = message # This will be part of player UI feedback
+                turn_advanced = True
+            else:
+                return message # Return error message from cast_spell (e.g., "Spell not found", "No slots")
+                # No turn advancement on failed cast due to bad input/unavailable resources
+
         elif command == "pass":
-            action_message_segment = f"{attacker.name} passes their turn." # DM message part
+            action_message_segment = f"{attacker.name} passes their turn."
+            notify_dm_event(dm_manager, action_message_segment) # Notify DM about passing
             turn_advanced = True
         else:
             # This is UI feedback for invalid command.
-            return f"Invalid action: '{player_action}'. Type 'attack <target_name>' or 'pass'."
+            return f"Invalid action: '{player_action}'. Type 'attack <target_name>', 'cast <spell_name> [on <target_name>]', or 'pass'."
             # For invalid actions, we don't advance the turn, player gets another try.
 
     else: # NPC's turn
