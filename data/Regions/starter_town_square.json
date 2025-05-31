@@ -9,6 +9,6 @@
         "west": "starter_town_west_road"
     },
     "item_ids": [],
-    "npc_ids": ["npc_town_guard_01", "npc_merchant_jane"],
+    "npc_ids": ["npc_town_guard_01", "npc_merchant_jane", "goblin_scout"],
     "game_object_ids": ["town_fountain"]
 }

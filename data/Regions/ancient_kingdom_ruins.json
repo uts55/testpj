@@ -1,0 +1,12 @@
+{
+  "id": "ancient_kingdom_ruins",
+  "name": "Ancient Kingdom Ruins",
+  "description": "The crumbling remains of a once-great kingdom. Broken walls and overgrown paths hint at a forgotten history. A sense of ancient power and desolation hangs in the air.",
+  "exits": {
+    "north": "elderwood_forest",
+    "south": "ruined_courtyard"
+  },
+  "item_ids": [],
+  "npc_ids": ["stone_golem"],
+  "game_object_ids": ["ruined_archway", "weathered_statue"]
+}

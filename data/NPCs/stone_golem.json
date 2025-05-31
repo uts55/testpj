@@ -1,0 +1,25 @@
+[
+  {
+    "id": "stone_golem",
+    "name": "Stone Golem",
+    "type": "monster",
+    "max_hp": 100,
+    "current_location": null,
+    "description": "A massive golem made of stone. It is slow but hits hard and is resistant to many forms of damage.",
+    "combat_stats": {
+      "armor_class": 17,
+      "attack_bonus": 7,
+      "damage_bonus": 5,
+      "initiative_bonus": -1
+    },
+    "base_damage_dice": "2d10",
+    "special_abilities": [
+      {
+        "name": "Magic Resistance",
+        "description": "The golem has advantage on saving throws against spells and other magical effects."
+      }
+    ],
+    "resistances": ["bludgeoning", "piercing", "slashing_from_nonmagical_weapons"],
+    "vulnerabilities": []
+  }
+]

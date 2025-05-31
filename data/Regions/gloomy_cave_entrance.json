@@ -7,6 +7,6 @@
         "inward": "gloomy_cave_passage1"
     },
     "item_ids": ["iron_sword"],
-    "npc_ids": [],
+    "npc_ids": ["giant_spider"],
     "game_object_ids": []
 }
