@@ -2,6 +2,8 @@ from utils import roll_dice, SKILL_ABILITY_MAP, PROFICIENCY_BONUS
 import random # random is still used by other parts of game_state.py like status effect application
 import logging # For logging warnings
 from magic import SPELLBOOK, Spell # Import necessary spellcasting components
+from gemini_dm import notify_dm # Import for DM notifications
+from quests import ALL_QUESTS # Import for accessing quest details
 
 # Temporary Item Database (simulates loading from JSON)
 # In a real system, this would be loaded from data/Items/*.json
@@ -323,25 +325,218 @@ class Player(Character):
         # Initialize spell_slots
         self.spell_slots = player_data.get("spell_slots", {})
 
+        # Initialize experience points
+        self.experience_points = player_data.get("experience_points", 0)
 
-        self.equipment = {
-            "weapon": None,
-            "armor": None,
-            "shield": None,
-            # Future slots: "helmet", "boots", etc.
-        }
-        self.inventory = []
+        # Initialize inventory
+        self.inventory = player_data.get("inventory", [])
+
+        # Initialize equipment and currency
+        self.equipment = player_data.get("equipment", {})
+        if "currency" not in self.equipment:
+            self.equipment["currency"] = {}
+
+        # Ensure default equipment slots if not present in player_data
+        # (though equip_item would handle individual slots if they are part of actual_equipment_data)
+        # This is more about ensuring the self.equipment dictionary has these keys if we expect them.
+        # However, the current equip_item logic relies on actual_equipment_data having these slots.
+        # For now, let's assume player_data["equipment"] or equipment_data argument correctly defines available slots.
+        # The original code example initialized self.equipment with specific slots set to None.
+        # Let's reconcile this: load from player_data, but ensure our standard slots are present if not loaded.
+        # A better approach might be to define expected slots and fill from player_data.
+        # For this task, focusing on `currency` and general equipment loading as per player_data.
+        # The previous code was:
+        # self.equipment = {
+        #     "weapon": None,
+        #     "armor": None,
+        #     "shield": None,
+        # }
+        # This will be overwritten by player_data.get("equipment", {}), which is fine.
+        # The main point is to ensure "currency" is there.
+
         # Store base AC, useful if armor is unequipped
         # This combat_stats is the one extracted from player_data
         self.base_armor_class = combat_stats.get('armor_class', 10)
 
-        # Process equipment_data if provided (or could be nested in player_data)
-        actual_equipment_data = equipment_data if equipment_data is not None else player_data.get("equipment")
-        if actual_equipment_data:
-            for slot, item_id in actual_equipment_data.items():
-                if item_id: # Ensure item_id is not None or empty
+        # Quest-related attributes
+        self.active_quests = player_data.get("active_quests", {})
+        self.completed_quests = player_data.get("completed_quests", [])
+
+        # Process equipment_data for equipping items (this overrides slots if they are in actual_equipment_data)
+        # This part needs to be careful not to wipe out other equipment details if actual_equipment_data is sparse
+        # The original equip_item is fine, it only sets specified slots.
+        # The self.equipment is already populated from player_data.get("equipment", {})
+        # So, actual_equipment_data is redundant if it's just player_data.get("equipment")
+        # Let's assume equipment_data param is for specific items to equip *on top* of what's in player_data["equipment"]
+        # or if player_data["equipment"] is purely for non-slot items like currency.
+        # Given the original structure, player_data.get("equipment") contains slot item_ids.
+        # The provided `equipment_data` parameter in `__init__` seems to be an alternative way to pass equipment.
+        # We should stick to loading from `player_data.get("equipment")` primarily for consistency.
+        # The `equip_item` method is then used to actually "activate" these by loading item stats if needed,
+        # but `self.equipment` already holds the IDs.
+        # The `equip_item` calls here might be redundant if `self.equipment` is already correctly loaded with item IDs.
+        # However, the original `equip_item` also prints warnings/errors, so it serves a validation purpose.
+        # Let's refine the equipment loading:
+        # 1. Load self.equipment from player_data.
+        # 2. Ensure "currency" sub-dictionary exists.
+        # 3. The loop for equip_item should iterate over the items defined in self.equipment (slots like weapon, armor).
+        #    This seems to be what the original code intended with `actual_equipment_data = ... player_data.get("equipment")`
+
+        # Re-evaluating the equipment logic:
+        # The existing `self.equipment = player_data.get("equipment", {})` correctly loads all equipment, including currency.
+        # The subsequent loop `for slot, item_id in actual_equipment_data.items(): self.equip_item(item_id, slot)`
+        # is essentially trying to re-equip items that are already listed in `self.equipment`.
+        # `self.equip_item` itself sets `self.equipment[slot] = item_id`.
+        # This is okay, but the primary loading is `self.equipment = player_data.get("equipment", {})`.
+        # The `equip_item` calls are more for validation and potentially applying stats if it did more than just assign IDs.
+        # For now, the existing structure is acceptable, with the "currency" check added.
+
+        # The original code had a separate equipment_data parameter. If that's used, it might override.
+        # If equipment_data is None, it falls back to player_data.get("equipment").
+        # This logic seems fine. The key is that self.equipment is now correctly initialized from player_data.
+
+        loaded_equipment = player_data.get("equipment") # This is what actual_equipment_data becomes if equipment_data is None
+        if loaded_equipment: # if player_data had "equipment"
+             # The equip_item calls are for items in slots like "weapon", "armor", "shield"
+             # Currency is not a "slot" in this context, it's just data within self.equipment
+            for slot, item_id in loaded_equipment.items():
+                if item_id and slot != "currency": # Ensure item_id is not None and slot is not 'currency'
+                    self.equip_item(item_id, slot) # This method validates and sets self.equipment[slot]
+
+
+    def apply_rewards(self, rewards_dict: dict) -> list[str]:
+        """Applies rewards to the player and returns a list of messages."""
+        messages = []
+
+        # Experience Points
+        xp_reward = rewards_dict.get("xp")
+        if isinstance(xp_reward, int) and xp_reward > 0:
+            self.experience_points += xp_reward
+            messages.append(f"Gained {xp_reward} XP.")
+
+        # Items
+        items_reward = rewards_dict.get("items")
+        if isinstance(items_reward, list):
+            for item_id in items_reward:
+                if isinstance(item_id, str):
+                    self.add_to_inventory(item_id) # Assuming add_to_inventory handles actual item addition
+                    messages.append(f"Obtained item: {item_id}.")
+                else:
+                    logging.warning(f"Invalid item_id type in rewards: {item_id}")
+
+        # Currency
+        currency_reward = rewards_dict.get("currency")
+        if isinstance(currency_reward, dict):
+            if "currency" not in self.equipment: # Should have been initialized, but as a safeguard
+                self.equipment["currency"] = {}
+
+            for currency_type, amount in currency_reward.items():
+                if isinstance(currency_type, str) and isinstance(amount, int) and amount > 0:
+                    current_amount = self.equipment["currency"].get(currency_type, 0)
+                    self.equipment["currency"][currency_type] = current_amount + amount
+                    messages.append(f"Received {amount} {currency_type}.")
+                else:
+                    logging.warning(f"Invalid currency type or amount in rewards: {currency_type}, {amount}")
+
+        if messages:
+            notify_dm(f"Rewards received by {self.name}: {'. '.join(messages)}.")
+        return messages
+        # This part has been slightly refactored above to integrate with the new self.equipment initialization.
+        # The loop for equip_item now iterates over items found in player_data.get("equipment")
+        # if equipment_data parameter is None.
+        # If equipment_data is provided, it's used instead.
+
+        # The original logic was:
+        # actual_equipment_data = equipment_data if equipment_data is not None else player_data.get("equipment")
+        # if actual_equipment_data:
+        #     for slot, item_id in actual_equipment_data.items():
+        #         if item_id: # Ensure item_id is not None or empty
+        #             self.equip_item(item_id, slot)
+        # This is largely preserved by the change above where `loaded_equipment` is used.
+        # If `equipment_data` is passed to __init__, it should take precedence.
+
+        final_equipment_source = player_data.get("equipment", {})
+        if equipment_data is not None: # If equipment_data is explicitly passed, it overrides player_data's equipment for equipping purposes.
+            final_equipment_source = equipment_data
+
+        if final_equipment_source:
+            for slot, item_id in final_equipment_source.items():
+                if item_id and slot != "currency": # Ensure item_id is not None and slot is not 'currency'
+                     # self.equip_item will update self.equipment[slot]
                     self.equip_item(item_id, slot)
 
+
+    def accept_quest(self, quest_id: str, initial_stage_id: str) -> tuple[bool, str]:
+        """Adds a quest to active_quests if not already active or completed."""
+        if quest_id in self.active_quests:
+            return False, f"Quest '{quest_id}' is already active."
+        if quest_id in self.completed_quests:
+            return False, f"Quest '{quest_id}' has already been completed."
+
+        self.active_quests[quest_id] = {
+            "current_stage_id": initial_stage_id,
+            "completed_optional_objectives": []
+        }
+        # Notification
+        quest_obj = ALL_QUESTS.get(quest_id)
+        status_description = "The adventure begins!" # Default
+        if quest_obj:
+            initial_stage = next((s for s in quest_obj.stages if s["stage_id"] == initial_stage_id), None)
+            if initial_stage and initial_stage.get("status_description"):
+                status_description = initial_stage["status_description"]
+        notify_dm(f"Quest '{quest_id}' ({quest_obj.title if quest_obj else ''}) accepted by {self.name}. Initial stage: {initial_stage_id}. {status_description}")
+        return True, f"Quest '{quest_id}' accepted."
+
+    def advance_quest_stage(self, quest_id: str, new_stage_id: str) -> tuple[bool, str]:
+        """Updates the current stage of an active quest."""
+        if quest_id in self.active_quests:
+            self.active_quests[quest_id]["current_stage_id"] = new_stage_id
+            # Notification
+            quest_obj = ALL_QUESTS.get(quest_id)
+            status_description = f"Player {self.name} advanced to stage '{new_stage_id}'." # Default
+            if quest_obj:
+                new_stage = next((s for s in quest_obj.stages if s["stage_id"] == new_stage_id), None)
+                if new_stage and new_stage.get("status_description"):
+                    status_description = new_stage["status_description"]
+            notify_dm(f"Quest '{quest_id}' ({quest_obj.title if quest_obj else ''}) for {self.name} advanced. New stage: {new_stage_id}. {status_description}")
+            return True, f"Quest '{quest_id}' advanced to stage '{new_stage_id}'."
+        return False, f"Quest '{quest_id}' not active."
+
+    def complete_optional_objective(self, quest_id: str, optional_objective_id: str) -> tuple[bool, str]:
+        """Marks an optional objective as completed for an active quest."""
+        if quest_id in self.active_quests:
+            if optional_objective_id not in self.active_quests[quest_id]["completed_optional_objectives"]:
+                self.active_quests[quest_id]["completed_optional_objectives"].append(optional_objective_id)
+                # Notification
+                quest_obj = ALL_QUESTS.get(quest_id)
+                status_description = f"Player {self.name} completed optional objective '{optional_objective_id}'." # Default
+                if quest_obj:
+                    opt_obj = next((o for o in quest_obj.optional_objectives if o["objective_id"] == optional_objective_id), None)
+                    if opt_obj and opt_obj.get("status_description"):
+                        status_description = opt_obj["status_description"]
+                notify_dm(f"Optional objective '{optional_objective_id}' for quest '{quest_id}' ({quest_obj.title if quest_obj else ''}) completed by {self.name}. {status_description}")
+                return True, f"Optional objective '{optional_objective_id}' for quest '{quest_id}' completed."
+            return False, f"Optional objective '{optional_objective_id}' already completed."
+        return False, f"Quest '{quest_id}' not active."
+
+    def complete_quest(self, quest_id: str) -> tuple[bool, str]:
+        """Moves a quest from active to completed."""
+        if quest_id in self.active_quests:
+            del self.active_quests[quest_id]
+            if quest_id not in self.completed_quests:
+                self.completed_quests.append(quest_id)
+            # Notification
+            quest_obj = ALL_QUESTS.get(quest_id)
+            # Ideally, a specific completion description from the Quest object, or final stage.
+            # For now, a generic message or use quest's main description if available.
+            status_description = "The quest has been successfully completed!"
+            if quest_obj and quest_obj.description: # Using quest's main description as a placeholder for overall completion status
+                 status_description = f"Player {self.name} has successfully completed the quest: {quest_obj.title}! {quest_obj.description}"
+            else:
+                 status_description = f"Quest '{quest_id}' has been successfully completed by {self.name}!"
+            notify_dm(status_description)
+            return True, f"Quest '{quest_id}' completed."
+        return False, f"Quest '{quest_id}' not active or already completed."
 
     def _load_item_data(self, item_id: str) -> dict:
         """Helper to fetch item data from the global ITEM_DATABASE."""
