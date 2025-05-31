@@ -1,4 +1,6 @@
-import random
+from utils import roll_dice, SKILL_ABILITY_MAP, PROFICIENCY_BONUS
+import random # random is still used by other parts of game_state.py like status effect application
+import logging # For logging warnings
 
 # Temporary Item Database (simulates loading from JSON)
 # In a real system, this would be loaded from data/Items/*.json
@@ -289,21 +291,35 @@ class Character:
 class Player(Character):
     """
     Represents the player character, inheriting from Character.
-    Includes player-specific attributes like equipment.
+    Includes player-specific attributes like equipment, abilities, and skills.
     """
-    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str, equipment_data: dict = None): # Added equipment_data
+    def __init__(self, player_data: dict, equipment_data: dict = None):
         """
         Initializes a new Player character.
 
         Args:
-            id: Unique identifier for the player.
-            name: Display name of the player.
-            max_hp: Maximum health points.
-            combat_stats: Dictionary of combat-related statistics.
-            base_damage_dice: String representation of base damage dice.
-            equipment_data: Optional dictionary of item IDs to equip.
+            player_data: Dictionary containing all player attributes including:
+                         id, name, max_hp, combat_stats, base_damage_dice,
+                         ability_scores, skills, and proficiencies.
+            equipment_data: Optional dictionary of item IDs to equip. This could
+                            alternatively be part of player_data itself.
         """
-        super().__init__(id, name, max_hp, combat_stats, base_damage_dice)
+        # Extract core attributes for Character initialization from player_data
+        player_id = player_data.get("id", "default_player_id")
+        player_name = player_data.get("name", "Player")
+        max_hp = player_data.get("max_hp", 10)  # Default to 10 if not provided
+        combat_stats = player_data.get("combat_stats", {}) # Default to empty dict
+        base_damage_dice = player_data.get("base_damage_dice", "1d4") # Default to 1d4
+
+        super().__init__(player_id, player_name, max_hp, combat_stats, base_damage_dice)
+
+        self.ability_scores = player_data.get("ability_scores", {})
+        self.skills_list = player_data.get("skills", []) # List of all skills the player possesses
+        self.proficiencies_map = player_data.get("proficiencies", {"skills": []}) # Map of proficiencies, e.g., {"skills": ["stealth", "arcana"]}
+        if "skills" not in self.proficiencies_map: # Ensure 'skills' key exists
+            self.proficiencies_map["skills"] = []
+
+
         self.equipment = {
             "weapon": None,
             "armor": None,
@@ -312,13 +328,14 @@ class Player(Character):
         }
         self.inventory = []
         # Store base AC, useful if armor is unequipped
+        # This combat_stats is the one extracted from player_data
         self.base_armor_class = combat_stats.get('armor_class', 10)
 
-        if equipment_data:
-            for slot, item_id in equipment_data.items():
+        # Process equipment_data if provided (or could be nested in player_data)
+        actual_equipment_data = equipment_data if equipment_data is not None else player_data.get("equipment")
+        if actual_equipment_data:
+            for slot, item_id in actual_equipment_data.items():
                 if item_id: # Ensure item_id is not None or empty
-                    # We assume equip_item handles checks for valid slot and item_id.
-                    # It will print warnings if item/slot is invalid.
                     self.equip_item(item_id, slot)
 
 
@@ -440,6 +457,75 @@ class Player(Character):
 
         self.inventory.append(item_name)
         # print(f"Added '{item_name}' to inventory. Current inventory: {self.inventory}") # Debug
+
+    def get_ability_modifier(self, ability_name: str) -> int:
+        """
+        Calculates the modifier for a given ability score.
+
+        Args:
+            ability_name: The name of the ability (e.g., "strength", "dexterity").
+
+        Returns:
+            The calculated ability modifier. Returns 0 if ability name is invalid or score not found.
+        """
+        ability_name_lower = ability_name.lower()
+        score = self.ability_scores.get(ability_name_lower)
+
+        if score is None or not isinstance(score, int):
+            logging.warning(f"Ability '{ability_name_lower}' not found or invalid for player {self.name}. Defaulting modifier to 0.")
+            return 0
+
+        return (score - 10) // 2
+
+    def perform_skill_check(self, skill_name: str, dc: int) -> tuple[bool, int, int, str]:
+        """
+        Performs a skill check for the player.
+
+        Args:
+            skill_name: The name of the skill being checked (e.g., "stealth", "persuasion").
+            dc: The difficulty class of the skill check.
+
+        Returns:
+            A tuple containing:
+            - success (bool): True if the check succeeded, False otherwise.
+            - d20_roll (int): The raw value rolled on the d20.
+            - total_skill_value (int): The total value of the skill check after modifiers.
+            - detailed_breakdown (str): A string detailing the calculation.
+        """
+        skill_name_norm = skill_name.lower()
+
+        d20_roll = roll_dice(sides=20)
+
+        ability_name = SKILL_ABILITY_MAP.get(skill_name_norm)
+        ability_modifier = 0
+        ability_mod_str = "N/A"
+
+        if ability_name:
+            ability_modifier = self.get_ability_modifier(ability_name)
+            ability_mod_str = str(ability_modifier)
+        else:
+            logging.warning(f"Skill '{skill_name_norm}' not found in SKILL_ABILITY_MAP. No ability modifier applied for player {self.name}.")
+
+        current_proficiency_bonus = 0
+        prof_bonus_str = "0"
+        # Ensure self.proficiencies_map and its 'skills' key are valid
+        proficient_skills = self.proficiencies_map.get('skills', [])
+        if not isinstance(proficient_skills, list): # Defensive check
+            logging.warning(f"Player {self.name} has invalid proficiencies_map['skills']. Expected list, got {type(proficient_skills)}. Assuming no skill proficiencies.")
+            proficient_skills = []
+
+        if skill_name_norm in proficient_skills:
+            current_proficiency_bonus = PROFICIENCY_BONUS
+            prof_bonus_str = str(current_proficiency_bonus)
+
+        total_skill_value = d20_roll + ability_modifier + current_proficiency_bonus
+        success = total_skill_value >= dc
+
+        detailed_breakdown = (f"d20({d20_roll}) + "
+                              f"{ability_name.upper() if ability_name else 'N/A'}_MOD({ability_mod_str}) + "
+                              f"PROF_BONUS({prof_bonus_str}) = {total_skill_value} vs DC({dc})")
+
+        return success, d20_roll, total_skill_value, detailed_breakdown
 
     def remove_from_inventory(self, item_name: str) -> bool:
         """
@@ -570,32 +656,7 @@ class PlayerState:
         inventory_str = ', '.join(pc.inventory) if pc.inventory else "empty"
         return f"Player: {pc.name}, HP: {pc.current_hp}/{pc.max_hp}, Inventory: [{inventory_str}]"
 
-def roll_dice(sides: int, num_dice: int = 1) -> int:
-    """
-    Simulates rolling one or more dice with a specified number of sides.
-
-    Args:
-        sides: The number of sides on each die (e.g., 6 for a d6).
-        num_dice: The number of dice to roll. Defaults to 1.
-
-    Returns:
-        The sum of the rolls from all dice.
-
-    Raises:
-        TypeError: If sides or num_dice are not integers.
-        ValueError: If sides or num_dice are not positive.
-    """
-    if not isinstance(sides, int) or not isinstance(num_dice, int):
-        raise TypeError("Sides and num_dice must be integers.")
-    if sides <= 0:
-        raise ValueError("Number of sides must be positive.")
-    if num_dice <= 0:
-        raise ValueError("Number of dice to roll must be positive.")
-
-    total_roll = 0
-    for _ in range(num_dice):
-        total_roll += random.randint(1, sides)
-    return total_roll
+# roll_dice function removed from here, will use the one from utils.py
 
 def determine_initiative(participants: list) -> list:
     """
@@ -630,190 +691,121 @@ def determine_initiative(participants: list) -> list:
     return [entry['id'] for entry in initiative_rolls]
 
 if __name__ == '__main__':
-    # The __main__ block in game_state.py is primarily for basic, isolated tests.
-    # It has been updated to reflect recent changes to Player and PlayerState constructors.
+    # This block is for demonstration and basic testing when running game_state.py directly.
+    # It shows how to use the classes and functions defined in this file.
 
-    print("\n--- Player and PlayerState Demonstration (with Equipment) ---")
+    # --- Player and Equipment/Combat Demonstration ---
+    # This section demonstrates creating a Player, equipping items, and basic combat.
+    # Note: The Player class constructor was updated to primarily use player_data.
+    print("\n--- Player, Equipment, and Combat Demonstration ---")
     try:
-        demo_combat_stats = {'initiative_bonus': 2, 'armor_class': 12, 'attack_bonus': 3, 'damage_bonus': 1}
-        demo_equipment = {
-           "weapon": "long_sword", # Using long_sword for more impact
-           "armor": "leather_armor",
-           "shield": "wooden_shield",
-           "helmet": "item_circlet_of_intellect" # This will be ignored by current equip_item
+        # Player data for the demonstration hero
+        hero_main_data = {
+            "id": "hero_main", "name": "MainHero", "max_hp": 75,
+            "combat_stats": {'armor_class': 12, 'attack_bonus': 4, 'damage_bonus': 2, 'initiative_bonus': 3},
+            "base_damage_dice": "1d6", # Base for when unarmed or if weapon lacks dice
+            "ability_scores": {"strength": 15, "dexterity": 14, "constitution": 13, "intelligence": 10, "wisdom": 12, "charisma": 8},
+            "skills": ["athletics", "perception", "stealth"],
+            "proficiencies": {"skills": ["athletics", "stealth"]},
+            "equipment": {
+                "weapon": "long_sword",
+                "armor": "leather_armor",
+                "shield": "wooden_shield"
+            }
         }
+        # Equipment_data is passed via player_data["equipment"] as per new constructor handling
+        hero_for_main_demo = Player(player_data=hero_main_data)
 
-        player_for_state = Player(id="p1", name="TestPlayer", max_hp=50,
-                                  combat_stats=demo_combat_stats,
-                                  base_damage_dice="1d4", # Base, but weapon should override
-                                  equipment_data=demo_equipment)
+        print(f"\nPlayer '{hero_for_main_demo.name}' created.")
+        print(f"Base AC (from combat_stats): {hero_for_main_demo.base_armor_class}") # Should be 12
+        print(f"Effective AC (with equipment): {hero_for_main_demo.get_effective_armor_class()}") # 12 + 2 (leather) + 1 (shield) = 15
+        weapon_stats = hero_for_main_demo.get_equipped_weapon_stats()
+        print(f"Equipped Weapon: {hero_for_main_demo.equipment.get('weapon')} -> Stats: {weapon_stats}")
 
-        print(f"\nPlayer '{player_for_state.name}' created.")
-        print(f"Base AC: {player_for_state.base_armor_class}")
-        print(f"Equipped Weapon: {player_for_state.equipment.get('weapon')} -> Stats: {player_for_state.get_equipped_weapon_stats()}")
-        print(f"Equipped Armor: {player_for_state.equipment.get('armor')} -> AC Bonus: {player_for_state._load_item_data(player_for_state.equipment.get('armor')).get('ac_bonus', 0) if player_for_state.equipment.get('armor') else 0}")
-        print(f"Equipped Shield: {player_for_state.equipment.get('shield')} -> AC Bonus: {player_for_state._load_item_data(player_for_state.equipment.get('shield')).get('ac_bonus', 0) if player_for_state.equipment.get('shield') else 0}")
-        print(f"Total AC Bonus from Armor/Shield: {player_for_state.get_equipped_armor_ac_bonus()}")
-        print(f"Effective Armor Class: {player_for_state.get_effective_armor_class()}")
+        # NPC for combat demo
+        npc_enemy = NPC(id="goblin_chief", name="Goblin Chief", max_hp=40,
+                        combat_stats={'armor_class': 14, 'attack_bonus': 3, 'damage_bonus': 1},
+                        base_damage_dice="1d8")
+        print(f"Created NPC: {npc_enemy.name} (AC: {npc_enemy.combat_stats['armor_class']}, HP: {npc_enemy.current_hp})")
 
-        player_state_demo = PlayerState(player_character=player_for_state)
-        print(f"\nPlayerState Initial Status: {player_state_demo.get_status()}")
-
-        player_state_demo.take_damage(10)
-        print(f"After taking 10 damage: {player_state_demo.get_status()}")
-
-        player_state_demo.heal(5)
-        print(f"After healing 5 HP: {player_state_demo.get_status()}")
-
-        print("\nInventory Management (via PlayerState):")
-        player_state_demo.add_to_inventory("health_potion")
-        print(f"Added health_potion: {player_state_demo.get_status()}")
-
-        if player_state_demo.remove_from_inventory("health_potion"):
-            print("Removed 'health_potion'.")
-        else:
-            print("'health_potion' not found to remove.")
-        print(f"After removal: {player_state_demo.get_status()}")
-
-        # Test attack (Player attacking a simple NPC)
-        print("\n--- Combat Demonstration ---")
-        npc_goblin = NPC(id="goblin1", name="Goblin Grunt", max_hp=15,
-                         combat_stats={'armor_class': 13, 'attack_bonus': 2, 'damage_bonus': 0},
-                         base_damage_dice="1d6")
-        print(f"Created NPC: {npc_goblin.name} (AC: {npc_goblin.combat_stats['armor_class']}, HP: {npc_goblin.current_hp})")
-
-        attack_message = player_for_state.attack(npc_goblin)
-        print(attack_message)
-
-        # Goblin attacks player
-        if npc_goblin.is_alive():
-            attack_message_npc = npc_goblin.attack(player_for_state)
-            print(attack_message_npc)
-
+        # Combat
+        attack_msg_hero = hero_for_main_demo.attack(npc_enemy)
+        print(attack_msg_hero)
+        if npc_enemy.is_alive():
+            attack_msg_npc = npc_enemy.attack(hero_for_main_demo)
+            print(attack_msg_npc)
 
     except Exception as e:
-        print(f"Error during __main__ demonstration: {e}")
+        print(f"Error during Player/Combat demonstration: {e}")
 
-
-    print("\n--- Dice Rolling Demonstration ---")
-    print(f"Rolling 1d6: {roll_dice(sides=6)}")
-    print(f"Rolling 1d20: {roll_dice(sides=20)}")
-    print(f"Rolling 3d6 (sum): {roll_dice(sides=6, num_dice=3)}")
-    print(f"Rolling 2d10 (sum): {roll_dice(sides=10, num_dice=2)}")
-
-    print("\nTesting Dice Rolling Edge Cases:")
+    # --- PlayerState and Skill Check Demonstration ---
+    # This section focuses on PlayerState and the newer skill check mechanisms.
+    print("\n--- PlayerState and Skill Check Demonstration ---")
     try:
-        roll_dice(sides=0)
-    except ValueError as e:
-        print(f"Caught expected error for 0 sides: {e}")
-    try:
-        roll_dice(sides=6, num_dice=0)
-    except ValueError as e:
-        print(f"Caught expected error for 0 dice: {e}")
-    try:
-        roll_dice(sides="abc")
-    except TypeError as e:
-        print(f"Caught expected error for non-integer sides: {e}")
-    try:
-        roll_dice(sides=6, num_dice="two")
-    except TypeError as e:
-        print(f"Caught expected error for non-integer num_dice: {e}")
+        player_skill_demo_data = {
+            "id": "skill_hero", "name": "SkillDemoHero",
+            "ability_scores": {"strength": 12, "dexterity": 18, "charisma": 15, "intelligence": 11, "wisdom": 9},
+            "skills": ["athletics", "stealth", "persuasion", "investigation", "insight", "nonexistent_skill"],
+            "proficiencies": {"skills": ["stealth", "persuasion"]}, # Proficient in Stealth (DEX) & Persuasion (CHA)
+            "max_hp": 50, # Required by Player constructor via player_data
+            "combat_stats": {'armor_class': 10, 'attack_bonus': 1, 'damage_bonus': 0, 'initiative_bonus':4}, # Required
+            "base_damage_dice": "1d4" # Required
+        }
+        skill_demo_player = Player(player_data=player_skill_demo_data)
 
-    print("\n--- End of Demonstration ---")
+        print(f"\nSkill Demo Player '{skill_demo_player.name}' created.")
+        print(f"Abilities: {skill_demo_player.ability_scores}")
+        print(f"Skills List: {skill_demo_player.skills_list}")
+        print(f"Proficiencies: {skill_demo_player.proficiencies_map.get('skills')}")
 
-    # The __main__ block in game_state.py is primarily for basic, isolated tests of PlayerState
-    # and dice rolling. It doesn't fully cover Character or Player interactions which are
-    # better suited for dedicated test files like test_combat.py or test_game_state.py.
-    # We will remove or comment out the PlayerState specific parts if they cause issues
-    # due to constructor changes for Player that PlayerState might not be aware of in this old __main__.
+        print("\nSkill Check Examples:")
+        # Stealth (Proficient, DEX 18 -> +4) vs DC 15
+        # Expected: d20 + 4 (DEX) + PROFICIENCY_BONUS (2)
+        success, _, total, breakdown = skill_demo_player.perform_skill_check("stealth", 15)
+        print(f"Stealth Check (DC 15): {'Success' if success else 'Failure'} - Total: {total}. Breakdown: {breakdown}")
 
-    # For now, let's try to adapt the PlayerState instantiation for the demo,
-    # or simplify the demo if it becomes too complex.
-    # The Player class now requires more arguments.
-    # Let's create a default Player for the demo.
-    print("\n--- PlayerState Demonstration (adapted for new Player constructor) ---")
-    try:
-        # Create a default player for the PlayerState demonstration
-        demo_player_combat_stats = {'initiative_bonus': 1, 'armor_class': 10, 'attack_bonus': 1, 'damage_bonus': 0}
-        demo_player = Player(id="DemoHero", name="DemoHero", max_hp=100,
-                             combat_stats=demo_player_combat_stats, base_damage_dice="1d4")
+        # Athletics (Not Proficient, STR 12 -> +1) vs DC 10
+        # Expected: d20 + 1 (STR) + 0
+        success, _, total, breakdown = skill_demo_player.perform_skill_check("athletics", 10)
+        print(f"Athletics Check (DC 10): {'Success' if success else 'Failure'} - Total: {total}. Breakdown: {breakdown}")
 
-        # The old PlayerState demo used initial_hp, max_hp directly.
-        # Now PlayerState takes a Player object.
-        # The old PlayerState demo also had methods like take_damage, heal, add_to_inventory, remove_from_inventory, get_status
-        # which now delegate to the Player object.
+        # Nonexistent Skill (No ability, No proficiency) vs DC 5
+        # Expected: d20 + 0 + 0
+        success, _, total, breakdown = skill_demo_player.perform_skill_check("nonexistent_skill", 5)
+        print(f"Nonexistent Skill Check (DC 5): {'Success' if success else 'Failure'} - Total: {total}. Breakdown: {breakdown}")
 
-        player_state_demo = PlayerState(player_character=demo_player)
-        print(f"Initial Status: {player_state_demo.get_status()}")
-
-        player_state_demo.take_damage(30)
-        print(f"After taking 30 damage: {player_state_demo.get_status()}")
-
-        player_state_demo.take_damage(100)
-        print(f"After taking 100 more damage: {player_state_demo.get_status()}")
-
-        player_state_demo.heal(50)
-        print(f"After healing 50 HP: {player_state_demo.get_status()}")
-
-        player_state_demo.heal(100)
-        print(f"After healing 100 more HP: {player_state_demo.get_status()}")
-
-        print("\nInventory Management (via PlayerState):")
-        player_state_demo.add_to_inventory("health_potion") # Note: item_name is just a string for inventory
-        print(f"Added health_potion: {player_state_demo.get_status()}")
-
-        if player_state_demo.remove_from_inventory("health_potion"):
-            print("Removed 'health_potion'.")
-        else:
-            print("'health_potion' not found to remove.")
-        print(f"After removal attempt: {player_state_demo.get_status()}")
+        # PlayerState with this player
+        ps_demo = PlayerState(player_character=skill_demo_player)
+        print(f"\nPlayerState Initial Status: {ps_demo.get_status()}")
+        ps_demo.take_damage(10)
+        print(f"After 10 damage: {ps_demo.get_status()}")
+        ps_demo.heal(5)
+        print(f"After 5 healing: {ps_demo.get_status()}")
 
     except Exception as e:
-        print(f"Error during PlayerState demonstration: {e}")
+        print(f"Error during PlayerState/Skill demonstration: {e}")
 
+    # --- Dice Rolling and Initiative Demonstration ---
+    print("\n--- Dice Rolling and Initiative Demonstration ---")
+    try:
+        print(f"Rolling 1d6: {roll_dice(sides=6)}")
+        print(f"Rolling 3d8: {roll_dice(sides=8, num_dice=3)}")
 
-    print("\n--- Dice Rolling Demonstration ---")
-    # Mock participants
-    # In a real scenario, these would be objects with 'id' and 'combat_stats' attributes.
-    # For this test, we'll use simple mock objects (dictionaries that behave like objects).
-    class MockParticipant: # Keep MockParticipant for determine_initiative demo
-        def __init__(self, id, initiative_bonus):
-            self.id = id
-            self.combat_stats = {'initiative_bonus': initiative_bonus}
+        # Mock participants for initiative
+        class MockParticipant:
+            def __init__(self, id_val, init_bonus):
+                self.id = id_val
+                self.combat_stats = {'initiative_bonus': init_bonus}
 
-    print("\n--- Determine Initiative Demonstration ---") # Moved this line up to group with its content
-    participants1 = [
-        MockParticipant(id="Alice", initiative_bonus=2),
-        MockParticipant(id="Bob", initiative_bonus=-1),
-        MockParticipant(id="Charlie", initiative_bonus=5),
-        MockParticipant(id="David", initiative_bonus=2), # Tie with Alice
-    ]
+        participants = [
+            MockParticipant(id_val="Alice", init_bonus=3),
+            MockParticipant(id_val="Bob", init_bonus=1),
+            MockParticipant(id_val="Charlie", init_bonus=3), # Tie with Alice
+        ]
+        turn_order = determine_initiative(participants)
+        print(f"Turn order for {[p.id for p in participants]}: {turn_order}")
 
-    participants2 = [] # Empty list
+    except Exception as e:
+        print(f"Error during Dice/Initiative demonstration: {e}")
 
-    participants3 = [
-        MockParticipant(id="Eve", initiative_bonus=0),
-    ]
-
-    # Note: Since initiative involves random rolls, the exact order can vary for ties
-    # or close scores. We're primarily checking that it runs and returns IDs.
-    print(f"Participants 1: {[p.id for p in participants1]}") #This will cause error if p.id does not exist
-    turn_order1 = determine_initiative(participants1)
-    print(f"Turn order 1: {turn_order1}")
-    if participants1: # Add check to prevent error if participants1 is empty
-        assert len(turn_order1) == len(participants1)
-        assert all(isinstance(pid, str) for pid in turn_order1) # Assuming IDs are strings
-
-    print(f"\nParticipants 2 (empty): {[p.id for p in participants2]}")
-    turn_order2 = determine_initiative(participants2)
-    print(f"Turn order 2: {turn_order2}")
-    assert len(turn_order2) == 0
-
-    print(f"\nParticipants 3 (single): {[p.id for p in participants3]}")
-    turn_order3 = determine_initiative(participants3)
-    print(f"Turn order 3: {turn_order3}")
-    if participants3: # Add check here as well
-        assert len(turn_order3) == 1
-        assert turn_order3[0] == "Eve"
-
-    print("\n--- End of Initiative Demonstration ---")
+    print("\n--- End of All Demonstrations ---")

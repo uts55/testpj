@@ -76,12 +76,12 @@ player_data_str = """
 player_data = json.loads(player_data_str)
 
 # Update the 'skills' field
-player_data["skills"] = ["arcana", "history", "investigation", "perception", "insight", "medicine"]
+player_data["skills"] = ["arcana", "history", "investigation", "perception", "insight", "medicine", "lockpicking", "persuasion", "stealth"]
 
 # Update the 'proficiencies.skills' field
 if "proficiencies" not in player_data:
     player_data["proficiencies"] = {}
-player_data["proficiencies"]["skills"] = ["arcana", "history", "insight", "investigation", "medicine"]
+player_data["proficiencies"]["skills"] = ["arcana", "history", "insight", "investigation", "medicine", "lockpicking", "persuasion", "stealth"]
 
 # Serialize back to JSON with pretty print
 output_json = json.dumps(player_data, indent=2)
