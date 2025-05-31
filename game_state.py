@@ -691,7 +691,7 @@ class NPC(Character):
     """
     Represents a Non-Player Character, inheriting from Character.
     """
-    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str, dialog: str = None):
+    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str, dialogue_responses: dict = None):
         """
         Initializes a new NPC.
 
@@ -701,10 +701,24 @@ class NPC(Character):
             max_hp: Maximum health points.
             combat_stats: Dictionary of combat-related statistics.
             base_damage_dice: String representation of base damage dice.
-            dialog: Optional dialog string or structure for the NPC.
+            dialogue_responses: Optional dictionary containing the NPC's dialogue tree.
         """
         super().__init__(id, name, max_hp, combat_stats, base_damage_dice)
-        self.dialog = dialog # NPCs might have specific dialog lines
+        self.dialogue_responses = dialogue_responses # NPCs might have specific dialog lines
+
+    def get_dialogue_node(self, key: str) -> dict | None:
+        """
+        Retrieves a dialogue node from the NPC's dialogue_responses.
+
+        Args:
+            key: The key for the desired dialogue node (e.g., "greetings").
+
+        Returns:
+            The dialogue node dictionary if found, otherwise None.
+        """
+        if self.dialogue_responses is None:
+            return None
+        return self.dialogue_responses.get(key)
 
     # TODO: NPC-specific behaviors, like AI decision-making in combat, dialog trees, etc.
 
@@ -734,7 +748,29 @@ class PlayerState:
         self.turn_order = [] # List of character IDs in turn order
         self.is_in_combat = False
 
+        # Dialogue state attributes
+        self.current_dialogue_npc_id: str | None = None
+        self.current_dialogue_key: str | None = None
+
         # print(f"PlayerState initialized for {self.player_character.name}.") # Debug
+
+    def start_dialogue(self, npc_id: str, initial_key: str = "greetings"):
+        """Starts a dialogue session with an NPC."""
+        self.current_dialogue_npc_id = npc_id
+        self.current_dialogue_key = initial_key
+
+    def end_dialogue(self):
+        """Ends the current dialogue session."""
+        self.current_dialogue_npc_id = None
+        self.current_dialogue_key = None
+
+    def is_in_dialogue(self) -> bool:
+        """Checks if the player is currently in a dialogue."""
+        return self.current_dialogue_npc_id is not None
+
+    def set_dialogue_key(self, key: str):
+        """Sets the current dialogue key to advance the conversation."""
+        self.current_dialogue_key = key
 
     def take_damage(self, amount: int):
         """

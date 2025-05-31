@@ -76,31 +76,107 @@ def load_game_data(npc_dir: str = "data/NPCs", game_object_dir: str = "data/Game
 
     return data
 
+# It's assumed that the NPC class is imported here if it's not already.
+# from game_state import NPC # This line would be needed if NPC class is used directly here.
+# For now, we'll add it conceptually. If game_state.py is not accessible here,
+# this function might live in a different file or NPC class needs to be passed.
+# Let's assume for the task that we can import NPC.
+from game_state import NPC # Added for NPC class usage
+
+def create_npc_from_data(npc_data: dict) -> NPC | None:
+    """
+    Creates an NPC instance from a dictionary of NPC data.
+
+    Args:
+        npc_data: A dictionary containing the NPC's attributes.
+                  Expected keys include 'id', 'name', 'max_hp', 'combat_stats',
+                  'base_damage_dice', and optionally 'dialogue_responses'.
+
+    Returns:
+        An NPC object if creation is successful, None otherwise.
+    """
+    try:
+        return NPC(
+            id=npc_data['id'],
+            name=npc_data['name'],
+            max_hp=npc_data['max_hp'],
+            combat_stats=npc_data['combat_stats'],
+            base_damage_dice=npc_data['base_damage_dice'],
+            # Pass dialogue_responses, defaults to None if not present
+            dialogue_responses=npc_data.get("dialogue_responses")
+        )
+    except KeyError as e:
+        print(f"Warning: Missing essential key '{e}' in NPC data for '{npc_data.get('name', 'Unknown NPC')}'. Skipping NPC creation.")
+        return None
+    except Exception as e:
+        print(f"Warning: Error creating NPC from data for '{npc_data.get('name', 'Unknown NPC')}': {e}. Skipping.")
+        return None
+
+def load_npcs_from_directory(npc_dir_path: str = "data/NPCs") -> list[NPC]:
+    """
+    Loads all NPCs from a directory, instantiating them into NPC objects.
+
+    Args:
+        npc_dir_path: The directory path containing NPC JSON files.
+
+    Returns:
+        A list of NPC objects.
+    """
+    raw_data = load_game_data(npc_dir=npc_dir_path, game_object_dir="data/NonExistentPath") # Only load NPCs
+
+    npcs_list = []
+    for npc_data_item in raw_data.get("npcs", []):
+        npc_instance = create_npc_from_data(npc_data_item)
+        if npc_instance:
+            npcs_list.append(npc_instance)
+    return npcs_list
+
+
 if __name__ == '__main__':
     # Example usage:
     print("--- Running data_loader.py example usage ---")
 
-    print("\nLoading game data from default directories...")
+    # Example for load_game_data (original functionality)
+    print("\nLoading raw game data from default directories...")
     game_data = load_game_data()
-
-    print(f"\nLoaded {len(game_data['npcs'])} NPCs:")
+    print(f"Loaded {len(game_data['npcs'])} raw NPC data entries.")
     if game_data['npcs']:
-        for npc in game_data['npcs']:
-            print(f"  - {npc.get('name', 'Unnamed NPC')} (Description: {npc.get('description', 'N/A')[:30]}...)")
-    else:
-        print("  No NPCs loaded.")
+        for npc_raw in game_data['npcs']:
+            print(f"  - Raw: {npc_raw.get('name', 'Unnamed NPC')} (Dialogue present: {'dialogue_responses' in npc_raw})")
 
-    print(f"\nLoaded {len(game_data['game_objects'])} GameObjects:")
-    if game_data['game_objects']:
-        for obj in game_data['game_objects']:
-            print(f"  - {obj.get('name', 'Unnamed Object')} (Description: {obj.get('description', 'N/A')[:30]}...)")
-    else:
-        print("  No GameObjects loaded.")
+    print(f"\nLoaded {len(game_data['game_objects'])} raw GameObject data entries.")
+    # ... (rest of game_object printing)
 
-    print("\n--- Testing with non-existent directories ---")
+    # Example for new load_npcs_from_directory
+    print("\n--- Loading and Instantiating NPCs ---")
+    instantiated_npcs = load_npcs_from_directory()
+    print(f"Successfully instantiated {len(instantiated_npcs)} NPC objects:")
+    for npc_obj in instantiated_npcs:
+        print(f"  - Object: {npc_obj.name} (ID: {npc_obj.id}), HP: {npc_obj.max_hp}")
+        if npc_obj.dialogue_responses:
+            print(f"    Dialogue Keys: {list(npc_obj.dialogue_responses.keys())}")
+        else:
+            print("    No dialogue responses.")
+
+    # Test with a specific NPC that should have dialogue (npc_001.json - Ellara)
+    ellara_npc = next((n for n in instantiated_npcs if n.id == "npc_001"), None)
+    if ellara_npc:
+        print(f"\nTesting Ellara (npc_001) dialogue loading:")
+        greeting_node = ellara_npc.get_dialogue_node("greetings")
+        if greeting_node:
+            print(f"  Greeting NPC Text: {greeting_node.get('npc_text')}")
+            print(f"  Greeting Player Choices: {len(greeting_node.get('player_choices', []))}")
+        else:
+            print("  Could not get 'greetings' node for Ellara.")
+    else:
+        print("\nEllara (npc_001) not found among instantiated NPCs.")
+
+
+    print("\n--- Testing with non-existent directories (for raw data loading) ---")
     non_existent_data = load_game_data(npc_dir="data/NonExistentNPCs", game_object_dir="data/NonExistentObjects")
-    print(f"NPCs loaded from non-existent dirs: {len(non_existent_data['npcs'])}")
-    print(f"GameObjects loaded from non-existent dirs: {len(non_existent_data['game_objects'])}")
+    print(f"Raw NPCs loaded from non-existent dirs: {len(non_existent_data['npcs'])}")
+    print(f"Raw GameObjects loaded from non-existent dirs: {len(non_existent_data['game_objects'])}")
 
     # The malformed.json file in data/NPCs/ should have triggered a warning during the default loading.
+    # And also during the instantiation attempt by load_npcs_from_directory.
     print("\n--- data_loader.py example usage complete ---")
