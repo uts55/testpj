@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from game_state import PlayerState, determine_initiative, roll_dice, Player, NPC, Character
+from game_state import PlayerState, determine_initiative, roll_dice, Player, NPC, Character, ITEM_DATABASE # Added ITEM_DATABASE
 from main import start_combat, process_combat_turn, check_combat_end_condition
 
 
@@ -48,7 +48,7 @@ class TestCombatFlow(unittest.TestCase):
     def setUp(self):
         self.player = Player(id="Hero", name="Hero", max_hp=100,
                              combat_stats={'initiative_bonus': 3, 'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2},
-                             base_damage_dice="1d8")
+                             base_damage_dice="1d8", equipment_data=None) # Added equipment_data
         self.npc1 = NPC(id="GoblinA", name="GoblinA", max_hp=50,
                         combat_stats={'initiative_bonus': 1, 'armor_class': 12, 'attack_bonus': 3, 'damage_bonus': 1},
                         base_damage_dice="1d6")
@@ -153,141 +153,244 @@ class TestCombatFlow(unittest.TestCase):
 
 class TestAttackMethod(unittest.TestCase):
     def setUp(self):
-        self.player_attacker = Player(
-            id="P1", name="Hero", max_hp=50,
-            combat_stats={'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 0},
-            base_damage_dice="1d6"
-            # equipment={'weapon': {'name': 'Epic Sword', 'damage_dice': '1d100'}} # Player attack currently uses base_damage_dice
+        self.player_attacker_unarmed = Player(
+            id="P_Unarmed", name="Unarmed Hero", max_hp=50,
+            combat_stats={'armor_class': 10, 'attack_bonus': 2, 'damage_bonus': 1, 'initiative_bonus': 0}, # Base AC 10
+            base_damage_dice="1d4", # Fallback, but get_equipped_weapon_stats should override
+            equipment_data=None # No equipment
+        )
+        self.player_attacker_sword = Player(
+            id="P_Sword", name="Sword Hero", max_hp=50,
+            combat_stats={'armor_class': 10, 'attack_bonus': 2, 'damage_bonus': 1, 'initiative_bonus': 0}, # Base AC 10
+            base_damage_dice="1d4",
+            equipment_data={"weapon": "short_sword"} # Equip short_sword (1d6, +1 ATK, +0 DMG)
+        )
+        self.player_attacker_longsword_armor_shield = Player(
+            id="P_FullGear", name="Geared Hero", max_hp=60,
+            combat_stats={'armor_class': 10, 'attack_bonus': 3, 'damage_bonus': 2, 'initiative_bonus': 1}, # Base AC 10
+            base_damage_dice="1d4",
+            equipment_data={
+                "weapon": "long_sword",      # 1d8, +1 ATK, +1 DMG
+                "armor": "leather_armor",   # +2 AC
+                "shield": "wooden_shield"   # +1 AC
+            }
         )
         self.npc_target = NPC(
             id="N1", name="Goblin", max_hp=30,
             combat_stats={'armor_class': 13, 'attack_bonus': 3, 'damage_bonus': 1, 'initiative_bonus': 0},
             base_damage_dice="1d4"
         )
-        self.npc_attacker = NPC(
+        self.npc_attacker = NPC( # Used for attacking players
             id="N2", name="Orc", max_hp=60,
             combat_stats={'armor_class': 14, 'attack_bonus': 4, 'damage_bonus': 3, 'initiative_bonus': 0},
-            base_damage_dice="1d10"
+            base_damage_dice="1d10" # Orc uses a 1d10 weapon
         )
 
     @patch('game_state.roll_dice')
-    def test_player_attack_hits_uses_base_damage_dice(self, mock_roll_dice):
-        # Attack roll: 15 (total 15 + 5 = 20 vs AC 13 -> HIT)
-        # Damage roll (1d6 for player's base_damage_dice): 4
+    def test_player_attack_unarmed(self, mock_roll_dice):
+        # Unarmed Hero attacks Goblin. Base ATK Bonus: 2, Base DMG Bonus: 1. Unarmed: 1d4, +0 ATK, +0 DMG
+        # Total ATK Bonus: 2+0=2. Total DMG Bonus: 1+0=1.
+        # Attack roll: 15 (total 15 + 2 = 17 vs AC 13 -> HIT)
+        # Damage roll (1d4 for unarmed): 3
+        mock_roll_dice.side_effect = [15, 3]
+
+        initial_target_hp = self.npc_target.current_hp
+        # Expected damage: 3 (roll) + 1 (player base) + 0 (unarmed) = 4
+        expected_damage = 3 + self.player_attacker_unarmed.combat_stats['damage_bonus'] + 0
+
+        result_message = self.player_attacker_unarmed.attack(self.npc_target)
+
+        self.assertIn("Unarmed Hero attacks Goblin.", result_message)
+        self.assertIn(f"d20(15) + ATK Bonus(2) = 17 vs AC({self.npc_target.combat_stats['armor_class']}). HIT!", result_message)
+        self.assertIn(f"Deals 1d4(3) + DMG Bonus(1) = {expected_damage} damage.", result_message)
+        self.assertEqual(self.npc_target.current_hp, initial_target_hp - expected_damage)
+
+    @patch('game_state.roll_dice')
+    def test_player_attack_with_weapon_short_sword(self, mock_roll_dice):
+        # Sword Hero (Short Sword: 1d6, +1 ATK, +0 DMG) attacks Goblin.
+        # Player Base ATK Bonus: 2, Base DMG Bonus: 1.
+        # Effective ATK Bonus: 2 (base) + 1 (sword) = 3.
+        # Effective DMG Bonus: 1 (base) + 0 (sword) = 1.
+        # Attack roll: 15 (total 15 + 3 = 18 vs AC 13 -> HIT)
+        # Damage roll (1d6 for short_sword): 4
         mock_roll_dice.side_effect = [15, 4]
 
         initial_target_hp = self.npc_target.current_hp
-        expected_damage = 4 (roll) + self.player_attacker.combat_stats['damage_bonus'] # 4 + 2 = 6
+        # Expected damage: 4 (roll) + 1 (player base) + 0 (sword) = 5
+        expected_damage = 4 + self.player_attacker_sword.combat_stats['damage_bonus'] + ITEM_DATABASE["short_sword"]["damage_bonus"]
 
-        result_message = self.player_attacker.attack(self.npc_target)
+        # Calculate effective bonuses for the message
+        effective_atk_bonus = self.player_attacker_sword.combat_stats['attack_bonus'] + ITEM_DATABASE["short_sword"]["attack_bonus"]
+        effective_dmg_bonus = self.player_attacker_sword.combat_stats['damage_bonus'] + ITEM_DATABASE["short_sword"]["damage_bonus"]
 
-        self.assertIn("Hero attacks Goblin.", result_message)
-        self.assertIn("d20(15) + ATK Bonus(5) = 20 vs AC(13). HIT!", result_message)
-        self.assertIn(f"Deals 1d6(4) + DMG Bonus(2) = {expected_damage} damage.", result_message)
+        result_message = self.player_attacker_sword.attack(self.npc_target)
+
+        self.assertIn("Sword Hero attacks Goblin.", result_message)
+        self.assertIn(f"d20(15) + ATK Bonus({effective_atk_bonus}) = 18 vs AC({self.npc_target.combat_stats['armor_class']}). HIT!", result_message)
+        self.assertIn(f"Deals 1d6(4) + DMG Bonus({effective_dmg_bonus}) = {expected_damage} damage.", result_message)
         self.assertEqual(self.npc_target.current_hp, initial_target_hp - expected_damage)
         self.assertIn(f"Goblin HP: {self.npc_target.current_hp}/{self.npc_target.max_hp}", result_message)
 
+    def test_player_effective_ac_with_equipment(self):
+        # P_FullGear: base AC 10. leather_armor (+2 AC), wooden_shield (+1 AC)
+        # Expected AC = 10 + 2 + 1 = 13
+        expected_ac = self.player_attacker_longsword_armor_shield.base_armor_class + \
+                      ITEM_DATABASE["leather_armor"]["ac_bonus"] + \
+                      ITEM_DATABASE["wooden_shield"]["ac_bonus"]
+        self.assertEqual(self.player_attacker_longsword_armor_shield.get_effective_armor_class(), expected_ac)
+
+        # Test unarmed player AC (no equipment)
+        # P_Unarmed: base AC 10. No armor/shield.
+        self.assertEqual(self.player_attacker_unarmed.get_effective_armor_class(), self.player_attacker_unarmed.base_armor_class)
+
     @patch('game_state.roll_dice')
-    def test_attack_misses(self, mock_roll_dice):
-        # Attack roll: 5 (total 5 + 5 = 10 vs AC 13 -> MISS)
-        mock_roll_dice.return_value = 5
+    def test_npc_attack_player_with_equipment(self, mock_roll_dice):
+        # Orc (ATK Bonus 4) attacks Geared Hero (AC 13 from base 10 + leather + shield)
+        # Attack roll: 10 (total 10 + 4 = 14 vs AC 13 -> HIT)
+        # Damage roll (1d10 for Orc): 7
+        mock_roll_dice.side_effect = [10, 7]
 
-        initial_target_hp = self.npc_target.current_hp
-        result_message = self.player_attacker.attack(self.npc_target)
+        target_player = self.player_attacker_longsword_armor_shield
+        initial_player_hp = target_player.current_hp
+        expected_ac = target_player.get_effective_armor_class() # Should be 13
 
-        self.assertIn("Hero attacks Goblin.", result_message)
-        self.assertIn("d20(5) + ATK Bonus(5) = 10 vs AC(13). MISS!", result_message)
-        self.assertEqual(self.npc_target.current_hp, initial_target_hp) # HP unchanged
+        # Orc's damage: 7 (roll) + 3 (Orc's damage_bonus) = 10
+        expected_damage = 7 + self.npc_attacker.combat_stats['damage_bonus']
+
+        result_message = self.npc_attacker.attack(target_player)
+
+        self.assertIn(f"Orc attacks Geared Hero.", result_message)
+        self.assertIn(f"d20(10) + ATK Bonus({self.npc_attacker.combat_stats['attack_bonus']}) = 14 vs AC({expected_ac}). HIT!", result_message)
+        self.assertIn(f"Deals 1d10(7) + DMG Bonus({self.npc_attacker.combat_stats['damage_bonus']}) = {expected_damage} damage.", result_message)
+        self.assertEqual(target_player.current_hp, initial_player_hp - expected_damage)
+        self.assertIn(f"Geared Hero HP: {target_player.current_hp}/{target_player.max_hp}", result_message)
 
     @patch('game_state.roll_dice')
-    def test_npc_attack_hits(self, mock_roll_dice):
-        # NPC (Orc) attacks Player (Hero)
-        # Attack roll: 16 (total 16 + 4 = 20 vs AC 15 -> HIT)
+    def test_attack_misses_player_with_high_ac(self, mock_roll_dice):
+        # Sword Hero (ATK Bonus 3) attacks Geared Hero (AC 13)
+        # Sword Hero ATK Bonus: 2(base) + 1(short_sword) = 3
+        # Attack roll: 5 (total 5 + 3 = 8 vs AC 13 -> MISS)
+        mock_roll_dice.return_value = 5 # Only one roll needed for a miss
+
+        target_player = self.player_attacker_longsword_armor_shield
+        initial_target_hp = target_player.current_hp
+        expected_ac = target_player.get_effective_armor_class()
+        attacker_effective_atk_bonus = self.player_attacker_sword.combat_stats['attack_bonus'] + ITEM_DATABASE["short_sword"]["attack_bonus"]
+
+
+        result_message = self.player_attacker_sword.attack(target_player)
+
+        self.assertIn("Sword Hero attacks Geared Hero.", result_message)
+        self.assertIn(f"d20(5) + ATK Bonus({attacker_effective_atk_bonus}) = 8 vs AC({expected_ac}). MISS!", result_message)
+        self.assertEqual(target_player.current_hp, initial_target_hp) # HP unchanged
+
+
+    @patch('game_state.roll_dice')
+    def test_npc_attack_hits_unarmored_player(self, mock_roll_dice):
+        # NPC (Orc) attacks Player (Unarmed Hero, AC 10)
+        # Attack roll: 16 (total 16 + 4 = 20 vs AC 10 -> HIT)
         # Damage roll (1d10 for Orc's base_damage_dice): 7
         mock_roll_dice.side_effect = [16, 7]
 
-        initial_player_hp = self.player_attacker.current_hp # Target is player_attacker here
-        expected_damage = 7 (roll) + self.npc_attacker.combat_stats['damage_bonus'] # 7 + 3 = 10
+        target_player = self.player_attacker_unarmed # Target is player_attacker_unarmed
+        initial_player_hp = target_player.current_hp
+        expected_ac = target_player.get_effective_armor_class() # Should be 10
+        expected_damage = 7 + self.npc_attacker.combat_stats['damage_bonus'] # 7 + 3 = 10
 
-        result_message = self.npc_attacker.attack(self.player_attacker)
+        result_message = self.npc_attacker.attack(target_player)
 
-        self.assertIn("Orc attacks Hero.", result_message)
-        self.assertIn("d20(16) + ATK Bonus(4) = 20 vs AC(15). HIT!", result_message)
+        self.assertIn("Orc attacks Unarmed Hero.", result_message)
+        self.assertIn(f"d20(16) + ATK Bonus(4) = 20 vs AC({expected_ac}). HIT!", result_message)
         self.assertIn(f"Deals 1d10(7) + DMG Bonus(3) = {expected_damage} damage.", result_message)
-        self.assertEqual(self.player_attacker.current_hp, initial_player_hp - expected_damage)
-        self.assertIn(f"Hero HP: {self.player_attacker.current_hp}/{self.player_attacker.max_hp}", result_message)
+        self.assertEqual(target_player.current_hp, initial_player_hp - expected_damage)
+        self.assertIn(f"Unarmed Hero HP: {target_player.current_hp}/{target_player.max_hp}", result_message)
 
     @patch('game_state.roll_dice')
-    def test_attack_damage_parsing_XdY(self, mock_roll_dice):
+    def test_attack_damage_parsing_XdY_npc_attacker(self, mock_roll_dice): # Renamed to be specific
         self.npc_attacker.base_damage_dice = "2d6"
-        # Attack roll: 18 (HIT)
+        # Attack roll: 18 (HIT vs Unarmed Hero AC 10)
         # Damage rolls (2d6): 3, 5
-        mock_roll_dice.side_effect = [18, 3, 5]
+        mock_roll_dice.side_effect = [18, 3, 5] # d20 roll, then two d6 rolls
 
-        initial_player_hp = self.player_attacker.current_hp
+        target_player = self.player_attacker_unarmed
+        initial_player_hp = target_player.current_hp
         damage_roll_sum = 3 + 5
         expected_damage = damage_roll_sum + self.npc_attacker.combat_stats['damage_bonus'] # 8 + 3 = 11
 
-        result_message = self.npc_attacker.attack(self.player_attacker)
+        result_message = self.npc_attacker.attack(target_player)
 
         self.assertIn("HIT!", result_message)
         self.assertIn(f"Deals 2d6({damage_roll_sum}) + DMG Bonus(3) = {expected_damage} damage.", result_message)
-        self.assertEqual(self.player_attacker.current_hp, initial_player_hp - expected_damage)
+        self.assertEqual(target_player.current_hp, initial_player_hp - expected_damage)
 
     @patch('game_state.roll_dice')
-    def test_attack_damage_parsing_dY_format(self, mock_roll_dice):
+    def test_attack_damage_parsing_dY_format_npc_attacker(self, mock_roll_dice): # Renamed
         self.npc_attacker.base_damage_dice = "d8" # Should be treated as 1d8
-        # Attack roll: 17 (HIT)
+        # Attack roll: 17 (HIT vs Unarmed Hero AC 10)
         # Damage roll (1d8): 6
         mock_roll_dice.side_effect = [17, 6]
 
-        initial_player_hp = self.player_attacker.current_hp
+        target_player = self.player_attacker_unarmed
+        initial_player_hp = target_player.current_hp
         expected_damage = 6 + self.npc_attacker.combat_stats['damage_bonus'] # 6 + 3 = 9
 
-        result_message = self.npc_attacker.attack(self.player_attacker)
+        result_message = self.npc_attacker.attack(target_player)
 
         self.assertIn("HIT!", result_message)
         self.assertIn(f"Deals 1d8(6) + DMG Bonus(3) = {expected_damage} damage.", result_message) # Verifies "1d8"
-        self.assertEqual(self.player_attacker.current_hp, initial_player_hp - expected_damage)
+        self.assertEqual(target_player.current_hp, initial_player_hp - expected_damage)
 
     @patch('game_state.roll_dice')
-    def test_attack_target_defeated(self, mock_roll_dice):
+    def test_player_attack_target_defeated_with_weapon(self, mock_roll_dice): # Modified
         self.npc_target.current_hp = 5 # Target has low HP
+        # Sword Hero attacks Goblin. ATK Bonus 3 (2 base + 1 sword). DMG Bonus 1 (1 base + 0 sword)
         # Attack roll: 20 (HIT)
-        # Damage roll (1d6 for player): 6
+        # Damage roll (1d6 for short_sword): 6
         mock_roll_dice.side_effect = [20, 6]
 
-        expected_damage = 6 + self.player_attacker.combat_stats['damage_bonus'] # 6 + 2 = 8
+        attacker = self.player_attacker_sword
+        effective_atk_bonus = attacker.combat_stats['attack_bonus'] + ITEM_DATABASE["short_sword"]["attack_bonus"]
+        effective_dmg_bonus = attacker.combat_stats['damage_bonus'] + ITEM_DATABASE["short_sword"]["damage_bonus"]
+        expected_damage = 6 + effective_dmg_bonus # 6 + 1 = 7
 
-        result_message = self.player_attacker.attack(self.npc_target)
+        result_message = attacker.attack(self.npc_target)
 
         self.assertIn("HIT!", result_message)
-        self.assertIn(f"Deals 1d6(6) + DMG Bonus(2) = {expected_damage} damage.", result_message)
+        self.assertIn(f"Deals 1d6(6) + DMG Bonus({effective_dmg_bonus}) = {expected_damage} damage.", result_message)
         self.assertEqual(self.npc_target.current_hp, 0) # HP should be 0
         self.assertFalse(self.npc_target.is_alive())
         self.assertIn(f"{self.npc_target.name} HP: 0/{self.npc_target.max_hp}.", result_message)
         self.assertIn(f"{self.npc_target.name} has been defeated!", result_message)
 
-    def test_attack_invalid_dice_format_raises_error(self):
-        self.player_attacker.base_damage_dice = "invalid_dice"
-        with self.assertRaisesRegex(ValueError, "Invalid base_damage_dice format for Hero: 'invalid_dice'. Expected XdY or dY"):
-            self.player_attacker.attack(self.npc_target)
+    def test_attack_invalid_dice_format_raises_error_player(self): # Modified to use specific player
+        attacker = self.player_attacker_unarmed # Using unarmed for simplicity
+        attacker.base_damage_dice = "invalid_dice" # This would be used if no weapon equipped that overrides
+        # However, player get_equipped_weapon_stats() returns "1d4" for unarmed, so base_damage_dice is not used by player.
+        # This test is more relevant for NPC or if player had no weapon AND get_equipped_weapon_stats returned self.base_damage_dice
 
-        self.player_attacker.base_damage_dice = "1d" # Missing sides
-        with self.assertRaisesRegex(ValueError, "Error parsing damage dice '1d' for Hero: invalid literal for int\(\) with base 10: ''"):
-             self.player_attacker.attack(self.npc_target)
+        # To test this for player, we'd need to ensure get_equipped_weapon_stats uses base_damage_dice
+        # Or, we test this path via an NPC. For player, it's harder to trigger this specific error for base_damage_dice
+        # if they are unarmed, as it defaults to "1d4" from get_equipped_weapon_stats.
+        # Let's assume this is for an NPC to test Character's direct use of base_damage_dice.
+        self.npc_attacker.base_damage_dice = "invalid_dice"
+        with self.assertRaisesRegex(ValueError, "Invalid damage_dice format for Orc: 'invalid_dice'. Expected XdY or dY"):
+            self.npc_attacker.attack(self.player_attacker_unarmed)
 
-        self.player_attacker.base_damage_dice = "d" # Missing sides
-        with self.assertRaisesRegex(ValueError, "Error parsing damage dice 'd' for Hero: invalid literal for int\(\) with base 10: ''"):
-             self.player_attacker.attack(self.npc_target)
+        self.npc_attacker.base_damage_dice = "1d"
+        with self.assertRaisesRegex(ValueError, "Error parsing damage dice '1d' for Orc: invalid literal for int\(\) with base 10: ''"):
+             self.npc_attacker.attack(self.player_attacker_unarmed)
 
-        self.player_attacker.base_damage_dice = "0d6" # Zero dice
-        with self.assertRaisesRegex(ValueError, "Error parsing damage dice '0d6' for Hero: Number of dice and sides must be positive. Got: 0d6"):
-             self.player_attacker.attack(self.npc_target)
+        self.npc_attacker.base_damage_dice = "d"
+        with self.assertRaisesRegex(ValueError, "Error parsing damage dice 'd' for Orc: invalid literal for int\(\) with base 10: ''"):
+            self.npc_attacker.attack(self.player_attacker_unarmed)
 
-        self.player_attacker.base_damage_dice = "1d0" # Zero sides
-        with self.assertRaisesRegex(ValueError, "Error parsing damage dice '1d0' for Hero: Number of dice and sides must be positive. Got: 1d0"):
-             self.player_attacker.attack(self.npc_target)
+        self.npc_attacker.base_damage_dice = "0d6"
+        with self.assertRaisesRegex(ValueError, "Error parsing damage dice '0d6' for Orc: Number of dice and sides must be positive. Got: 0d6"):
+            self.npc_attacker.attack(self.player_attacker_unarmed)
+
+        self.npc_attacker.base_damage_dice = "1d0"
+        with self.assertRaisesRegex(ValueError, "Error parsing damage dice '1d0' for Orc: Number of dice and sides must be positive. Got: 1d0"):
+            self.npc_attacker.attack(self.player_attacker_unarmed)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,30 @@
 import random
 
+# Temporary Item Database (simulates loading from JSON)
+# In a real system, this would be loaded from data/Items/*.json
+ITEM_DATABASE = {
+    "short_sword": {
+        "id": "short_sword", "name": "Short Sword", "type": "weapon",
+        "damage_dice": "1d6", "attack_bonus": 1, "damage_bonus": 0
+    },
+    "long_sword": { # Added for more testing options
+        "id": "long_sword", "name": "Long Sword", "type": "weapon",
+        "damage_dice": "1d8", "attack_bonus": 1, "damage_bonus": 1
+    },
+    "leather_armor": {
+        "id": "leather_armor", "name": "Leather Armor", "type": "armor",
+        "ac_bonus": 2
+    },
+    "wooden_shield": {
+        "id": "wooden_shield", "name": "Wooden Shield", "type": "shield",
+        "ac_bonus": 1
+    },
+    "steel_shield": { # Added for more testing options
+        "id": "steel_shield", "name": "Steel Shield", "type": "shield",
+        "ac_bonus": 2
+    }
+}
+
 class Character:
     """
     Base class for all characters in the game, including players and NPCs.
@@ -109,60 +134,70 @@ class Character:
         dm_message = f"{self.name} attacks {target.name}."
 
         attack_roll = roll_dice(sides=20) # Standard d20 roll
-        attack_bonus = self.combat_stats.get('attack_bonus', 0)
-        total_attack = attack_roll + attack_bonus
 
-        target_ac = target.combat_stats.get('armor_class', 10) # Default AC if not specified
+        # Determine attacker's bonuses and damage dice
+        is_player_attacker = isinstance(self, Player)
+
+        current_attack_bonus = self.combat_stats.get('attack_bonus', 0)
+        current_damage_bonus = self.combat_stats.get('damage_bonus', 0)
+        current_damage_dice_str = self.base_damage_dice # Default for NPCs
+
+        if is_player_attacker:
+            player_weapon_stats = self.get_equipped_weapon_stats() # self is a Player instance
+            current_damage_dice_str = player_weapon_stats["damage_dice"]
+            # Weapon bonuses are added to base combat_stats bonuses
+            current_attack_bonus += player_weapon_stats["attack_bonus"]
+            current_damage_bonus += player_weapon_stats["damage_bonus"]
+
+        total_attack = attack_roll + current_attack_bonus
+
+        # Determine target's AC
+        if isinstance(target, Player):
+            target_ac = target.get_effective_armor_class() # Target is a Player instance
+        else:
+            target_ac = target.combat_stats.get('armor_class', 10) # Target is an NPC
 
         if total_attack >= target_ac:
             # HIT!
-            dm_message += f" d20({attack_roll}) + ATK Bonus({attack_bonus}) = {total_attack} vs AC({target_ac}). HIT!"
+            dm_message += f" d20({attack_roll}) + ATK Bonus({current_attack_bonus}) = {total_attack} vs AC({target_ac}). HIT!"
 
-            damage_dice_str = self.base_damage_dice
             num_dice = 1
             dice_sides = 4 # Default to 1d4 if parsing fails for some reason
 
             try:
-                parts = damage_dice_str.lower().split('d')
+                parts = current_damage_dice_str.lower().split('d')
                 if len(parts) == 2: # Format "XdY" or "dY"
                     num_dice_str, dice_sides_str = parts
                     num_dice = int(num_dice_str) if num_dice_str else 1 # Handles "dY" as "1dY"
                     dice_sides = int(dice_sides_str)
-                elif len(parts) == 1 and parts[0].isdigit(): # Format "Y" (fixed damage, interpreted as Y-sided die, 1 roll)
-                    # This case might be ambiguous. Standard is XdY.
-                    # For now, let's assume if it's just a number, it's "1d<number>" e.g. "4" becomes "1d4"
-                    # However, the spec says "base_damage_dice should always be XdY"
-                    # Sticking to XdY or dY. This path should ideally not be taken if format is enforced.
-                    # raising ValueError for non "XdY" or "dY" formats.
-                    raise ValueError(f"Invalid base_damage_dice format for {self.name}: '{damage_dice_str}'. Expected XdY or dY (e.g., 1d4, d6).")
+                elif len(parts) == 1 and parts[0].isdigit():
+                    # This case might be ambiguous for "XdY".
+                    # For now, assume if it's just a number, it's "1d<number>" e.g. "4" becomes "1d4"
+                    # This path should ideally not be taken if format is "XdY" or "dY".
+                    raise ValueError(f"Invalid damage_dice format for {self.name}: '{current_damage_dice_str}'. Expected XdY or dY (e.g., 1d4, d6).")
                 else: # Malformed
-                    raise ValueError(f"Invalid base_damage_dice format for {self.name}: '{damage_dice_str}'. Expected XdY or dY (e.g., 1d4, d6).")
+                    raise ValueError(f"Invalid damage_dice format for {self.name}: '{current_damage_dice_str}'. Expected XdY or dY (e.g., 1d4, d6).")
 
                 if num_dice <=0 or dice_sides <= 0:
                     raise ValueError(f"Number of dice and sides must be positive. Got: {num_dice}d{dice_sides}")
 
-            except ValueError as e: # Catch parsing errors or invalid numbers
-                # Option: Default to a safe value like 1d4, or re-raise, or log and use default
-                # For now, re-raise as it's a configuration issue for the character
-                # print(f"Error parsing damage dice '{damage_dice_str}': {e}. Defaulting to 1d4.") # Debug
-                # num_dice, dice_sides = 1, 4
-                raise ValueError(f"Error parsing damage dice '{damage_dice_str}' for {self.name}: {e}")
+            except ValueError as e:
+                raise ValueError(f"Error parsing damage dice '{current_damage_dice_str}' for {self.name}: {e}")
 
 
             damage_roll = roll_dice(sides=dice_sides, num_dice=num_dice)
-            damage_bonus = self.combat_stats.get('damage_bonus', 0)
-            total_damage = damage_roll + damage_bonus
+            total_damage = damage_roll + current_damage_bonus
             total_damage = max(0, total_damage) # Damage cannot be negative
 
             target.take_damage(total_damage)
 
-            dm_message += f" Deals {num_dice}d{dice_sides}({damage_roll}) + DMG Bonus({damage_bonus}) = {total_damage} damage."
+            dm_message += f" Deals {num_dice}d{dice_sides}({damage_roll}) + DMG Bonus({current_damage_bonus}) = {total_damage} damage."
             dm_message += f" {target.name} HP: {target.current_hp}/{target.max_hp}."
             if not target.is_alive():
                 dm_message += f" {target.name} has been defeated!"
         else:
             # MISS!
-            dm_message += f" d20({attack_roll}) + ATK Bonus({attack_bonus}) = {total_attack} vs AC({target_ac}). MISS!"
+            dm_message += f" d20({attack_roll}) + ATK Bonus({current_attack_bonus}) = {total_attack} vs AC({target_ac}). MISS!"
 
         return dm_message
 
@@ -172,7 +207,7 @@ class Player(Character):
     Represents the player character, inheriting from Character.
     Includes player-specific attributes like equipment.
     """
-    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str):
+    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str, equipment_data: dict = None): # Added equipment_data
         """
         Initializes a new Player character.
 
@@ -182,13 +217,126 @@ class Player(Character):
             max_hp: Maximum health points.
             combat_stats: Dictionary of combat-related statistics.
             base_damage_dice: String representation of base damage dice.
+            equipment_data: Optional dictionary of item IDs to equip.
         """
         super().__init__(id, name, max_hp, combat_stats, base_damage_dice)
-        self.equipment = {}  # Example: {'weapon': {'name': 'Longsword', 'damage_dice': '1d8'}}
-        self.inventory = [] # Player specific inventory, distinct from PlayerState's version if that's for world items
+        self.equipment = {
+            "weapon": None,
+            "armor": None,
+            "shield": None,
+            # Future slots: "helmet", "boots", etc.
+        }
+        self.inventory = []
+        # Store base AC, useful if armor is unequipped
+        self.base_armor_class = combat_stats.get('armor_class', 10)
 
-    # TODO: Method to equip items, which might modify combat_stats or damage_dice.
-    # TODO: Player-specific actions or abilities.
+        if equipment_data:
+            for slot, item_id in equipment_data.items():
+                if item_id: # Ensure item_id is not None or empty
+                    # We assume equip_item handles checks for valid slot and item_id.
+                    # It will print warnings if item/slot is invalid.
+                    self.equip_item(item_id, slot)
+
+
+    def _load_item_data(self, item_id: str) -> dict:
+        """Helper to fetch item data from the global ITEM_DATABASE."""
+        if not item_id:
+            return None
+        return ITEM_DATABASE.get(item_id)
+
+    def equip_item(self, item_id: str, slot: str) -> bool:
+        """
+        Equips an item to the specified slot if the slot exists.
+        Returns True if successful, False otherwise.
+        Assumes item_id is valid and exists in ITEM_DATABASE for simplicity here.
+        A real implementation would check item type against slot type.
+        """
+        item_data = self._load_item_data(item_id)
+        if not item_data:
+            print(f"Warning: Item ID '{item_id}' not found in database. Cannot equip.")
+            return False
+
+        if slot not in self.equipment:
+            print(f"Warning: Slot '{slot}' does not exist.")
+            return False
+
+        # Basic type checking for slot
+        item_type = item_data.get("type")
+        if slot == "weapon" and item_type != "weapon":
+            print(f"Warning: Cannot equip item '{item_id}' ({item_type}) in weapon slot.")
+            return False
+        if slot == "armor" and item_type != "armor":
+            print(f"Warning: Cannot equip item '{item_id}' ({item_type}) in armor slot.")
+            return False
+        if slot == "shield" and item_type != "shield":
+            print(f"Warning: Cannot equip item '{item_id}' ({item_type}) in shield slot.")
+            return False
+
+        self.equipment[slot] = item_id
+        # print(f"{self.name} equipped {item_data.get('name', item_id)} in {slot} slot.") # Debug
+        return True
+
+    def unequip_item(self, slot: str) -> str:
+        """
+        Unequips an item from the specified slot.
+        Returns the item_id of the unequipped item, or None if no item was in the slot.
+        """
+        if slot not in self.equipment:
+            print(f"Warning: Slot '{slot}' does not exist.")
+            return None
+
+        item_id = self.equipment.get(slot)
+        if item_id:
+            self.equipment[slot] = None
+            # item_name = self._load_item_data(item_id).get('name', item_id) # Debug
+            # print(f"{self.name} unequipped {item_name} from {slot} slot.") # Debug
+        return item_id
+
+    def get_equipped_weapon_stats(self) -> dict:
+        """
+        Returns the stats of the equipped weapon.
+        Defaults to unarmed strike if no weapon is equipped.
+        """
+        weapon_id = self.equipment.get("weapon")
+        if weapon_id:
+            weapon_data = self._load_item_data(weapon_id)
+            if weapon_data and weapon_data.get("type") == "weapon":
+                return {
+                    "damage_dice": weapon_data.get("damage_dice", "1d4"), # Default to 1d4 if missing
+                    "attack_bonus": weapon_data.get("attack_bonus", 0),
+                    "damage_bonus": weapon_data.get("damage_bonus", 0)
+                }
+        # Default unarmed strike
+        return {"damage_dice": "1d4", "attack_bonus": 0, "damage_bonus": 0}
+
+    def get_equipped_armor_ac_bonus(self) -> int:
+        """
+        Calculates the total AC bonus from equipped armor and shield.
+        """
+        total_ac_bonus = 0
+
+        # Armor
+        armor_id = self.equipment.get("armor")
+        if armor_id:
+            armor_data = self._load_item_data(armor_id)
+            if armor_data and armor_data.get("type") == "armor":
+                total_ac_bonus += armor_data.get("ac_bonus", 0)
+
+        # Shield
+        shield_id = self.equipment.get("shield")
+        if shield_id:
+            shield_data = self._load_item_data(shield_id)
+            if shield_data and shield_data.get("type") == "shield":
+                total_ac_bonus += shield_data.get("ac_bonus", 0)
+
+        return total_ac_bonus
+
+    def get_effective_armor_class(self) -> int:
+        """
+        Calculates the player's effective Armor Class including equipped items.
+        Uses base_armor_class stored at initialization.
+        """
+        return self.base_armor_class + self.get_equipped_armor_ac_bonus()
 
     def add_to_inventory(self, item_name: str):
         """
@@ -398,68 +546,69 @@ def determine_initiative(participants: list) -> list:
     return [entry['id'] for entry in initiative_rolls]
 
 if __name__ == '__main__':
-    print("--- PlayerState Demonstration ---")
-    player = PlayerState(initial_hp=80, max_hp=120)
-    print(f"Initial Status: {player.get_status()}") # Expected: HP: 80/120, Inventory: [empty]
+    # The __main__ block in game_state.py is primarily for basic, isolated tests.
+    # It has been updated to reflect recent changes to Player and PlayerState constructors.
 
-    player.take_damage(30)
-    print(f"After taking 30 damage: {player.get_status()}") # Expected: HP: 50/120
-
-    player.take_damage(100) # Taking more damage than HP
-    print(f"After taking 100 more damage: {player.get_status()}") # Expected: HP: 0/120
-
-    player.heal(50)
-    print(f"After healing 50 HP: {player.get_status()}") # Expected: HP: 50/120
-
-    player.heal(100) # Healing more than max_hp
-    print(f"After healing 100 more HP: {player.get_status()}") # Expected: HP: 120/120
-
-    print("\nInventory Management:")
-    player.add_to_inventory("sword")
-    print(f"Added sword: {player.get_status()}")
-    player.add_to_inventory("potion of healing")
-    print(f"Added potion: {player.get_status()}")
-    player.add_to_inventory("shield")
-    print(f"Added shield: {player.get_status()}")
-
-    if player.remove_from_inventory("potion of healing"):
-        print("Removed 'potion of healing'.")
-    else:
-        print("'potion of healing' not found to remove.")
-    print(f"After removal attempt: {player.get_status()}")
-
-    if player.remove_from_inventory("gold key"): # Item not in inventory
-        print("Removed 'gold key'.") # This line won't be reached if not found
-    else:
-        print("'gold key' not found to remove.")
-    print(f"After attempting to remove non-existent item: {player.get_status()}")
-
-    print("\nTesting PlayerState Initialization Edge Cases:")
+    print("\n--- Player and PlayerState Demonstration (with Equipment) ---")
     try:
-        p_invalid1 = PlayerState(initial_hp=-10)
-    except ValueError as e:
-        print(f"Caught expected error for negative initial_hp: {e}")
-    try:
-        p_invalid2 = PlayerState(max_hp=0)
-    except ValueError as e:
-        print(f"Caught expected error for zero max_hp: {e}")
-    p_capped = PlayerState(initial_hp=150, max_hp=100)
-    print(f"Player with initial_hp > max_hp: {p_capped.get_status()}") # Expected: HP: 100/100
+        demo_combat_stats = {'initiative_bonus': 2, 'armor_class': 12, 'attack_bonus': 3, 'damage_bonus': 1}
+        demo_equipment = {
+           "weapon": "long_sword", # Using long_sword for more impact
+           "armor": "leather_armor",
+           "shield": "wooden_shield",
+           "helmet": "item_circlet_of_intellect" # This will be ignored by current equip_item
+        }
 
-    print("\nTesting PlayerState Method Edge Cases:")
-    try:
-        player.take_damage(-10)
-    except ValueError as e:
-        print(f"Caught expected error for negative damage: {e}")
-    try:
-        player.heal(-10)
-    except ValueError as e:
-        print(f"Caught expected error for negative heal: {e}")
-    try:
-        player.add_to_inventory("  ")
-    except ValueError as e:
-        print(f"Caught expected error for empty item name: {e}")
-    print(f"Status after edge case method tests: {player.get_status()}")
+        player_for_state = Player(id="p1", name="TestPlayer", max_hp=50,
+                                  combat_stats=demo_combat_stats,
+                                  base_damage_dice="1d4", # Base, but weapon should override
+                                  equipment_data=demo_equipment)
+
+        print(f"\nPlayer '{player_for_state.name}' created.")
+        print(f"Base AC: {player_for_state.base_armor_class}")
+        print(f"Equipped Weapon: {player_for_state.equipment.get('weapon')} -> Stats: {player_for_state.get_equipped_weapon_stats()}")
+        print(f"Equipped Armor: {player_for_state.equipment.get('armor')} -> AC Bonus: {player_for_state._load_item_data(player_for_state.equipment.get('armor')).get('ac_bonus', 0) if player_for_state.equipment.get('armor') else 0}")
+        print(f"Equipped Shield: {player_for_state.equipment.get('shield')} -> AC Bonus: {player_for_state._load_item_data(player_for_state.equipment.get('shield')).get('ac_bonus', 0) if player_for_state.equipment.get('shield') else 0}")
+        print(f"Total AC Bonus from Armor/Shield: {player_for_state.get_equipped_armor_ac_bonus()}")
+        print(f"Effective Armor Class: {player_for_state.get_effective_armor_class()}")
+
+        player_state_demo = PlayerState(player_character=player_for_state)
+        print(f"\nPlayerState Initial Status: {player_state_demo.get_status()}")
+
+        player_state_demo.take_damage(10)
+        print(f"After taking 10 damage: {player_state_demo.get_status()}")
+
+        player_state_demo.heal(5)
+        print(f"After healing 5 HP: {player_state_demo.get_status()}")
+
+        print("\nInventory Management (via PlayerState):")
+        player_state_demo.add_to_inventory("health_potion")
+        print(f"Added health_potion: {player_state_demo.get_status()}")
+
+        if player_state_demo.remove_from_inventory("health_potion"):
+            print("Removed 'health_potion'.")
+        else:
+            print("'health_potion' not found to remove.")
+        print(f"After removal: {player_state_demo.get_status()}")
+
+        # Test attack (Player attacking a simple NPC)
+        print("\n--- Combat Demonstration ---")
+        npc_goblin = NPC(id="goblin1", name="Goblin Grunt", max_hp=15,
+                         combat_stats={'armor_class': 13, 'attack_bonus': 2, 'damage_bonus': 0},
+                         base_damage_dice="1d6")
+        print(f"Created NPC: {npc_goblin.name} (AC: {npc_goblin.combat_stats['armor_class']}, HP: {npc_goblin.current_hp})")
+
+        attack_message = player_for_state.attack(npc_goblin)
+        print(attack_message)
+
+        # Goblin attacks player
+        if npc_goblin.is_alive():
+            attack_message_npc = npc_goblin.attack(player_for_state)
+            print(attack_message_npc)
+
+
+    except Exception as e:
+        print(f"Error during __main__ demonstration: {e}")
 
 
     print("\n--- Dice Rolling Demonstration ---")
@@ -488,15 +637,67 @@ if __name__ == '__main__':
 
     print("\n--- End of Demonstration ---")
 
-    print("\n--- Determine Initiative Demonstration ---")
+    # The __main__ block in game_state.py is primarily for basic, isolated tests of PlayerState
+    # and dice rolling. It doesn't fully cover Character or Player interactions which are
+    # better suited for dedicated test files like test_combat.py or test_game_state.py.
+    # We will remove or comment out the PlayerState specific parts if they cause issues
+    # due to constructor changes for Player that PlayerState might not be aware of in this old __main__.
+
+    # For now, let's try to adapt the PlayerState instantiation for the demo,
+    # or simplify the demo if it becomes too complex.
+    # The Player class now requires more arguments.
+    # Let's create a default Player for the demo.
+    print("\n--- PlayerState Demonstration (adapted for new Player constructor) ---")
+    try:
+        # Create a default player for the PlayerState demonstration
+        demo_player_combat_stats = {'initiative_bonus': 1, 'armor_class': 10, 'attack_bonus': 1, 'damage_bonus': 0}
+        demo_player = Player(id="DemoHero", name="DemoHero", max_hp=100,
+                             combat_stats=demo_player_combat_stats, base_damage_dice="1d4")
+
+        # The old PlayerState demo used initial_hp, max_hp directly.
+        # Now PlayerState takes a Player object.
+        # The old PlayerState demo also had methods like take_damage, heal, add_to_inventory, remove_from_inventory, get_status
+        # which now delegate to the Player object.
+
+        player_state_demo = PlayerState(player_character=demo_player)
+        print(f"Initial Status: {player_state_demo.get_status()}")
+
+        player_state_demo.take_damage(30)
+        print(f"After taking 30 damage: {player_state_demo.get_status()}")
+
+        player_state_demo.take_damage(100)
+        print(f"After taking 100 more damage: {player_state_demo.get_status()}")
+
+        player_state_demo.heal(50)
+        print(f"After healing 50 HP: {player_state_demo.get_status()}")
+
+        player_state_demo.heal(100)
+        print(f"After healing 100 more HP: {player_state_demo.get_status()}")
+
+        print("\nInventory Management (via PlayerState):")
+        player_state_demo.add_to_inventory("health_potion") # Note: item_name is just a string for inventory
+        print(f"Added health_potion: {player_state_demo.get_status()}")
+
+        if player_state_demo.remove_from_inventory("health_potion"):
+            print("Removed 'health_potion'.")
+        else:
+            print("'health_potion' not found to remove.")
+        print(f"After removal attempt: {player_state_demo.get_status()}")
+
+    except Exception as e:
+        print(f"Error during PlayerState demonstration: {e}")
+
+
+    print("\n--- Dice Rolling Demonstration ---")
     # Mock participants
     # In a real scenario, these would be objects with 'id' and 'combat_stats' attributes.
     # For this test, we'll use simple mock objects (dictionaries that behave like objects).
-    class MockParticipant:
+    class MockParticipant: # Keep MockParticipant for determine_initiative demo
         def __init__(self, id, initiative_bonus):
             self.id = id
             self.combat_stats = {'initiative_bonus': initiative_bonus}
 
+    print("\n--- Determine Initiative Demonstration ---") # Moved this line up to group with its content
     participants1 = [
         MockParticipant(id="Alice", initiative_bonus=2),
         MockParticipant(id="Bob", initiative_bonus=-1),
@@ -512,11 +713,12 @@ if __name__ == '__main__':
 
     # Note: Since initiative involves random rolls, the exact order can vary for ties
     # or close scores. We're primarily checking that it runs and returns IDs.
-    print(f"Participants 1: {[p.id for p in participants1]}")
+    print(f"Participants 1: {[p.id for p in participants1]}") #This will cause error if p.id does not exist
     turn_order1 = determine_initiative(participants1)
     print(f"Turn order 1: {turn_order1}")
-    assert len(turn_order1) == len(participants1)
-    assert all(isinstance(pid, str) for pid in turn_order1) # Assuming IDs are strings
+    if participants1: # Add check to prevent error if participants1 is empty
+        assert len(turn_order1) == len(participants1)
+        assert all(isinstance(pid, str) for pid in turn_order1) # Assuming IDs are strings
 
     print(f"\nParticipants 2 (empty): {[p.id for p in participants2]}")
     turn_order2 = determine_initiative(participants2)
@@ -526,7 +728,8 @@ if __name__ == '__main__':
     print(f"\nParticipants 3 (single): {[p.id for p in participants3]}")
     turn_order3 = determine_initiative(participants3)
     print(f"Turn order 3: {turn_order3}")
-    assert len(turn_order3) == 1
-    assert turn_order3[0] == "Eve"
+    if participants3: # Add check here as well
+        assert len(turn_order3) == 1
+        assert turn_order3[0] == "Eve"
 
     print("\n--- End of Initiative Demonstration ---")
