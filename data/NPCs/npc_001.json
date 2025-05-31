@@ -3,21 +3,83 @@
     "id": "npc_001",
     "name": "엘라라",
     "type": "npc",
-    "hp": 30,
+    "max_hp": 30,
     "current_location": "엘름 마을 촌장집",
     "description": "엘름 마을의 현명한 촌장.",
+    "combat_stats": {
+        "armor_class": 10,
+        "attack_bonus": 1,
+        "damage_bonus": 0,
+        "initiative_bonus": 0
+    },
+    "base_damage_dice": "1d4",
     "lore_fragments": [
       "엘라라는 젊은 시절 뛰어난 마법사였다.",
       "고대 유물에 대해 잘 알고 있다."
     ],
     "dialogue_responses": {
-      "artifact_info": [
-        "고대 유물이라... 그것은 우리 마을의 오랜 전설과 관련이 깊지.",
-        "그 유물은 강력한 힘을 지녔지만, 동시에 위험한 저주도 품고 있다고 전해지네."
-      ],
-      "greetings": [
-        "엘름 마을에 온 것을 환영하네."
-      ]
+      "greetings": {
+        "npc_text": "엘름 마을에 온 것을 환영하네. 무엇을 도와줄까?",
+        "player_choices": [
+          {"text": "마을에 대해 알려주세요.", "next_key": "about_village"},
+          {"text": "고대 유물에 대해 아는 것이 있나요?", "next_key": "artifact_info_query"},
+          {"text": "별거 아닙니다. 안녕히 계세요.", "next_key": "farewell"}
+        ]
+      },
+      "about_village": {
+        "npc_text": "우리 엘름 마을은 작지만 평화로운 곳이지. 주변 숲은 아름답지만, 가끔 위험한 생물들이 나타나기도 한다네.",
+        "player_choices": [
+          {"text": "고대 유물에 대해 아는 것이 있나요?", "next_key": "artifact_info_query"},
+          {"text": "알겠습니다. 안녕히 계세요.", "next_key": "farewell"}
+        ]
+      },
+      "artifact_info_query": {
+        "npc_text": "고대 유물이라... 그것은 우리 마을의 오랜 전설과 관련이 깊지. 그 유물은 강력한 힘을 지녔지만, 동시에 위험한 저주도 품고 있다고 전해지네.",
+        "player_choices": [
+          {"text": "자세히 알려주실 수 있나요?", "next_key": "artifact_details"},
+          {"text": "흥미롭군요. 다른 건 없나요?", "next_key": "greetings_repeat"},
+          {"text": "그렇군요. 안녕히 계세요.", "next_key": "farewell"}
+        ]
+      },
+      "artifact_details": {
+        "npc_text": "그 유물은 '태양석'이라고 불리며, 고대 문명의 힘을 담고 있다고 하네. 하지만 강력한 수호자가 지키고 있어 아무나 가질 수는 없지.",
+        "player_choices": [
+          {"text": "수호자에 대해 알려주세요.", "next_key": "guardian_info"},
+          {"text": "태양석의 위치를 아시나요?", "next_key": "location_query"},
+          {"text": "이제 그만 듣겠습니다.", "next_key": "farewell"}
+        ]
+      },
+      "guardian_info": {
+        "npc_text": "수호자는 강력한 골렘이라고 들었네. 고대 마법으로 만들어져서 웬만한 공격은 통하지 않는다고 하더군.",
+        "player_choices": [
+          {"text": "태양석의 위치를 아시나요?", "next_key": "location_query"},
+          {"text": "다른 질문이 있습니다.", "next_key": "greetings_repeat"},
+          {"text": "안녕히 계세요.", "next_key": "farewell"}
+        ]
+      },
+      "location_query": {
+        "npc_text": "태양석은 마을 동쪽 폐허 깊숙한 곳에 숨겨져 있다고 들었네. 하지만 그곳은 위험하니 조심해야 할 걸세.",
+        "player_choices": [
+          {"text": "고맙습니다. 큰 도움이 됐어요.", "next_key": "farewell_positive"},
+          {"text": "다른 질문이 있습니다.", "next_key": "greetings_repeat"}
+        ]
+      },
+      "farewell": {
+        "npc_text": "그래, 조심해서 가게나.",
+        "player_choices": []
+      },
+      "farewell_positive": {
+        "npc_text": "천만에. 언제든 도움이 필요하면 다시 찾아오게.",
+        "player_choices": []
+      },
+      "greetings_repeat": {
+        "npc_text": "다른 궁금한 것이라도 있나?",
+        "player_choices": [
+          {"text": "마을에 대해 알려주세요.", "next_key": "about_village"},
+          {"text": "고대 유물에 대해 아는 것이 있나요?", "next_key": "artifact_info_query"},
+          {"text": "아닙니다. 안녕히 계세요.", "next_key": "farewell"}
+        ]
+      }
     }
   }
 ]
