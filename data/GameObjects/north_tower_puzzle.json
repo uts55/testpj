@@ -1,0 +1,26 @@
+{
+  "id": "north_tower_puzzle_room",
+  "name": "북쪽 탑의 비밀 방",
+  "type": "location",
+  "description": "탑의 한 구석에 먼지가 덮인 세 개의 레버가 벽에 붙어 있습니다. 각 레버는 현재 '중립' 위치에 있습니다.",
+  "puzzle_details": {
+    "type": "lever_sequence",
+    "elements": [
+      {"id": "lever1", "name": "첫 번째 레버", "state": "neutral", "available_states": ["up", "neutral", "down"]},
+      {"id": "lever2", "name": "두 번째 레버", "state": "neutral", "available_states": ["up", "neutral", "down"]},
+      {"id": "lever3", "name": "세 번째 레버", "state": "neutral", "available_states": ["up", "neutral", "down"]}
+    ],
+    "solution_sequence": [
+      {"element_id": "lever1", "target_state": "down"},
+      {"element_id": "lever3", "target_state": "up"},
+      {"element_id": "lever2", "target_state": "down"}
+    ],
+    "is_solved": false,
+    "success_message": "레버를 올바른 순서로 조작하자, 벽의 일부가 움직이며 숨겨진 통로가 드러났습니다!",
+    "failure_message": "레버를 조작했지만, 아무 일도 일어나지 않았습니다."
+  },
+  "on_solve_effect": {
+    "world_variable_to_set": "north_tower_secret_passage_unlocked",
+    "value": true
+  }
+}

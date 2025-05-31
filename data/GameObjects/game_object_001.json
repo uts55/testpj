@@ -13,6 +13,12 @@
     "related_quests": [
       "quest_001",
       "quest_003"
-    ]
+    ],
+    "hidden_clue_details": {
+      "clue_text": "오래된 책의 마지막 페이지 구석에 작은 글씨로 '북쪽 탑, 세 번째 돌 아래'라고 적혀있다.",
+      "required_skill": "investigation",
+      "dc": 15,
+      "revealed": false
+    }
   }
 ]

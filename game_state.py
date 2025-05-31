@@ -330,6 +330,9 @@ class Player(Character):
         # Initialize spell_slots
         self.spell_slots = player_data.get("spell_slots", {})
 
+        # Initialize discovered clues
+        self.discovered_clues: list[str] = player_data.get("discovered_clues", [])
+
         # Initialize experience points
         self.experience_points = player_data.get("experience_points", 0)
 
@@ -972,6 +975,8 @@ class PlayerState:
             raise TypeError("player_character must be an instance of Player.")
 
         self.player_character = player_character
+        self.world_data: dict = {}
+        self.world_variables: dict = {}
 
         # Combat state attributes
         self.participants_in_combat = [] # Now stores Character objects
@@ -1177,6 +1182,213 @@ def player_sells_item(player: Player, npc: NPC, item_id: str) -> tuple[bool, str
     notify_dm(dm_message)
 
     return True, f"'{item_data.get('name', item_id)}'을(를) {sell_price} 골드에 판매했습니다."
+
+
+def reveal_clue(player: Player, target_object_id: str, game_state: PlayerState) -> tuple[bool, str]:
+    """
+    Attempts to reveal a hidden clue from a target object using a skill check.
+
+    Args:
+        player: The Player attempting to find the clue.
+        target_object_id: The ID of the game object to investigate.
+        game_state: The current game state, containing world_data.
+
+    Returns:
+        A tuple: (success: bool, message_or_clue: str).
+        If successful, message_or_clue is the clue text.
+        If failed or no clue, message_or_clue is an appropriate message.
+    """
+    if not isinstance(player, Player):
+        raise TypeError("Player argument must be an instance of the Player class.")
+    if not isinstance(game_state, PlayerState):
+        raise TypeError("game_state argument must be an instance of the PlayerState class.")
+
+    target_object_data = game_state.world_data.get(target_object_id)
+
+    if not target_object_data:
+        return False, "조사할 대상을 찾을 수 없습니다."
+
+    clue_details = target_object_data.get("hidden_clue_details")
+
+    if not clue_details:
+        return False, "이 대상에는 숨겨진 단서가 없는 것 같습니다."
+
+    if clue_details.get("revealed", False):
+        # Clue already revealed, optionally return the clue text again or a specific message.
+        # For this implementation, let's inform it's already found and provide the clue.
+        return True, f"(이미 발견된 단서): {clue_details.get('clue_text', '내용 없음')}"
+
+    required_skill = clue_details.get("required_skill")
+    dc = clue_details.get("dc")
+
+    if not required_skill or dc is None:
+        # This would be a configuration error in the JSON data
+        return False, "단서의 정보가 잘못 설정되어 조사할 수 없습니다."
+
+    # Perform the skill check
+    success, _, _, breakdown_str = player.perform_skill_check(required_skill, dc)
+    # notify_dm(f"{player.name} attempts to investigate {target_object_data.get('name', target_object_id)}: {breakdown_str}") # Optional: DM notification of attempt
+
+    if success:
+        clue_text = clue_details.get("clue_text", "알 수 없는 단서입니다.")
+        player.discovered_clues.append(clue_text)
+        clue_details["revealed"] = True # Modifies the object in game_state.world_data directly
+
+        # Notify the DM about the discovered clue
+        dm_message = f"{player.name}이(가) {target_object_data.get('name', target_object_id)}에서 단서를 발견했습니다: '{clue_text}' (스킬 체크: {breakdown_str})"
+        notify_dm(dm_message)
+
+        return True, clue_text
+    else:
+        # Notify the DM about the failed attempt
+        dm_message = f"{player.name}이(가) {target_object_data.get('name', target_object_id)}을(를) 조사했지만 단서를 찾지 못했습니다. (스킬 체크: {breakdown_str})"
+        notify_dm(dm_message)
+        return False, f"{target_object_data.get('name', target_object_id)}을(를) 조사했지만 특별한 것을 찾지 못했습니다."
+
+
+def operate_puzzle_element(player: Player, puzzle_room_id: str, element_id: str, new_state: str, game_state: PlayerState) -> tuple[bool, str]:
+    """
+    Operates an element of a puzzle (e.g., a lever) and checks if the puzzle is solved.
+
+    Args:
+        player: The Player interacting with the puzzle.
+        puzzle_room_id: The ID of the game object representing the puzzle room.
+        element_id: The ID of the puzzle element being interacted with (e.g., "lever1").
+        new_state: The new state for the element (e.g., "up", "down").
+        game_state: The current game state.
+
+    Returns:
+        A tuple: (operation_successful: bool, message: str).
+        Message indicates the outcome of the operation or if the puzzle was solved.
+    """
+    if not isinstance(player, Player):
+        raise TypeError("Player argument must be an instance of the Player class.")
+    if not isinstance(game_state, PlayerState):
+        raise TypeError("game_state argument must be an instance of the PlayerState class.")
+
+    puzzle_room_data = game_state.world_data.get(puzzle_room_id)
+    if not puzzle_room_data:
+        return False, "퍼즐 방을 찾을 수 없습니다."
+
+    puzzle_details = puzzle_room_data.get("puzzle_details")
+    if not puzzle_details or puzzle_details.get("type") != "lever_sequence":
+        return False, "이곳에는 상호작용할 수 있는 레버 퍼즐이 없는 것 같습니다."
+
+    if puzzle_details.get("is_solved", False):
+        return True, "이미 해결된 퍼즐입니다."
+
+    target_element = None
+    for element in puzzle_details.get("elements", []):
+        if element.get("id") == element_id:
+            target_element = element
+            break
+
+    if not target_element:
+        return False, f"'{element_id}'(이)라는 이름의 퍼즐 요소를 찾을 수 없습니다."
+
+    available_states = target_element.get("available_states", [])
+    if new_state not in available_states:
+        return False, f"'{target_element.get('name', element_id)}' 레버를 '{new_state}' 상태로 설정할 수 없습니다. 사용 가능한 상태: {', '.join(available_states)}"
+
+    old_state = target_element.get("state")
+    target_element["state"] = new_state
+
+    element_name = target_element.get('name', element_id)
+    action_message = f"{player.name}이(가) {element_name} 레버를 {old_state} 상태에서 {new_state} 상태로 변경했습니다."
+    notify_dm(action_message) # Notify DM of the specific action
+
+    puzzle_solved, solve_message = check_puzzle_solution(puzzle_room_id, game_state, player)
+
+    if puzzle_solved:
+        return True, solve_message # This message comes from check_puzzle_solution's success
+    else:
+        # If not solved, return the immediate feedback of the lever action.
+        # solve_message here would be the failure message from check_puzzle_solution if an attempt was made and failed,
+        # or potentially an empty string if check_puzzle_solution doesn't return failure messages for partial attempts.
+        # The current plan for check_puzzle_solution implies it returns True/False.
+        # Let's use the puzzle's generic failure message if the sequence is wrong,
+        # or just the action message if it's an intermediate step.
+        # For now, simply returning the action_message is fine, or a generic "nothing happens"
+        return True, f"{element_name} 레버를 {new_state}(으)로 설정했습니다. 아직 아무 일도 일어나지 않았습니다."
+
+
+def check_puzzle_solution(puzzle_room_id: str, game_state: PlayerState, player: Player) -> tuple[bool, str]:
+    """
+    Checks if the current state of puzzle elements matches the solution.
+    If solved, updates game state and notifies the DM.
+
+    Args:
+        puzzle_room_id: The ID of the puzzle room in game_state.world_data.
+        game_state: The current game state.
+        player: The player who triggered the check (for DM notification).
+
+    Returns:
+        A tuple (solved: bool, message: str). Message is success or failure/no change.
+    """
+    puzzle_room_data = game_state.world_data.get(puzzle_room_id)
+    if not puzzle_room_data:
+        # This should ideally be caught by the calling function
+        return False, "퍼즐 방 데이터를 찾을 수 없습니다."
+
+    puzzle_details = puzzle_room_data.get("puzzle_details")
+    if not puzzle_details:
+        return False, "퍼즐 세부 정보를 찾을 수 없습니다."
+
+    if puzzle_details.get("is_solved", False):
+        # Already solved, no message needed here as operate_puzzle_element handles it.
+        return True, "이미 해결된 퍼즐입니다."
+
+    current_states = []
+    for element in puzzle_details.get("elements", []):
+        current_states.append({"element_id": element.get("id"), "state": element.get("state")})
+
+    solution_sequence = puzzle_details.get("solution_sequence", [])
+
+    # Check if the current state of all elements matches the defined solution sequence
+    # This assumes the order of elements in solution_sequence matters if not all elements are defined in it.
+    # A more robust check might be to ensure all elements in solution_sequence have matching states,
+    # and other elements are in a "default" or irrelevant state if applicable.
+    # For this implementation, we check if the *current full state* matches the *target full state* implied by solution_sequence.
+
+    # Let's simplify: the solution_sequence dictates the required state for listed elements.
+    # The check passes if *all* elements in solution_sequence are in their target_state.
+
+    match = True
+    if len(current_states) != len(puzzle_details.get("elements", [])): # Basic integrity check
+        return False, "퍼즐 상태 오류."
+
+    # Create a map of current states for easy lookup
+    current_state_map = {el["element_id"]: el["state"] for el in current_states}
+
+    for solved_element_state in solution_sequence:
+        element_id = solved_element_state.get("element_id")
+        target_state = solved_element_state.get("target_state")
+        if current_state_map.get(element_id) != target_state:
+            match = False
+            break
+
+    if match:
+        puzzle_details["is_solved"] = True
+        success_message = puzzle_details.get("success_message", f"{player.name}이(가) {puzzle_room_data.get('name', '방')}의 퍼즐을 풀었습니다!")
+
+        on_solve_effect = puzzle_room_data.get("on_solve_effect")
+        if on_solve_effect and "world_variable_to_set" in on_solve_effect:
+            var_name = on_solve_effect["world_variable_to_set"]
+            var_value = on_solve_effect.get("value", True)
+            game_state.world_variables[var_name] = var_value
+            success_message += f" ({var_name}이(가) {var_value}(으)로 설정되었습니다.)"
+
+        notify_dm(f"{player.name}이(가) '{puzzle_room_data.get('name', puzzle_room_id)}'의 퍼즐을 해결했습니다! {success_message}")
+        return True, success_message
+    else:
+        # This function is primarily for checking if the *final* solution is met.
+        # Individual step feedback is handled by operate_puzzle_element.
+        # If a more complex sequence check is needed (e.g. specific order of operations, not just final state),
+        # this logic would need to be more sophisticated.
+        # For now, if it's not a match, it's just not solved yet.
+        # We can return the puzzle's failure message if all levers have been touched (or some other condition).
+        # For this version, let's assume it's called after each operation, and if not solved, no specific message from here.
+        return False, "" # No specific message if not solved, caller handles intermediate messages.
 
 
 if __name__ == '__main__':
