@@ -1,0 +1,9 @@
+{
+    "id": "old_key",
+    "name": "Old Rusty Key",
+    "description": "An old key, covered in rust. It looks like it might unlock a simple door or chest.",
+    "type": "key_item",
+    "weight": 0.1,
+    "value": {"buy": 5, "sell": 1},
+    "unlocks": ["cell_door_01"]
+}

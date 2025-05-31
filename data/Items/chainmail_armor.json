@@ -1,0 +1,10 @@
+{
+    "id": "chainmail_armor",
+    "name": "Chainmail Armor",
+    "description": "A suit of interlocking metal rings, offering good protection.",
+    "type": "armor",
+    "weight": 40.0,
+    "value": {"buy": 75, "sell": 25},
+    "ac_bonus": 4,
+    "armor_type": "heavy"
+}

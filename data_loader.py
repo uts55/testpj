@@ -1,101 +1,81 @@
 import os
 import json
+from game_state import NPC # Keep for create_npc_from_data, which might be used by GameState or other modules
 
-def load_game_data(npc_dir: str = "data/NPCs", game_object_dir: str = "data/GameObjects") -> dict:
+def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[dict | str]]:
     """
-    Loads all NPC and GameObject data from JSON files in specified directories.
+    Loads raw data from all specified document sources.
+    Iterates through source directories, reads .json and .txt files,
+    and organizes them by category (derived from directory names).
 
     Args:
-        npc_dir: The directory path containing NPC JSON files.
-        game_object_dir: The directory path containing GameObject JSON files.
+        document_sources: A list of directory paths to load data from.
 
     Returns:
-        A dictionary with two keys:
-        'npcs': A list of NPC data (each item is a dictionary parsed from JSON).
-        'game_objects': A dictionary of GameObject data, keyed by their 'id'.
-        Returns empty list for npcs and empty dict for game_objects if issues occur.
+        A dictionary where keys are category names (e.g., "NPCs", "Lore")
+        and values are lists of loaded file contents.
+        JSON files are loaded as dictionaries.
+        TXT files are loaded as dictionaries: {"id": filename, "text_content": content, "source_category": category_name}
     """
-    data = {"npcs": [], "game_objects": {}}
+    all_data: dict[str, list[dict | str]] = {}
+    for source_path in document_sources:
+        # Derive category name from the directory's basename
+        # e.g., './data/NPCs' becomes 'NPCs'
+        category_name = os.path.basename(source_path)
+        if not category_name: # Handles cases like './data/' if it were passed
+            category_name = os.path.basename(os.path.dirname(source_path))
 
-    # Load NPCs
-    if os.path.exists(npc_dir) and os.path.isdir(npc_dir):
-        for filename in os.listdir(npc_dir):
-            if filename.endswith(".json"):
-                filepath = os.path.join(npc_dir, filename)
-                try:
-                    with open(filepath, 'r') as f:
-                        loaded_json_content = json.load(f)
-                        if isinstance(loaded_json_content, list):
-                            if len(loaded_json_content) == 1 and isinstance(loaded_json_content[0], dict):
-                                data["npcs"].append(loaded_json_content[0]) # Extract the single dict
-                            elif not loaded_json_content: # Empty list
-                                print(f"Warning: JSON file {filepath} contains an empty list, skipping.")
-                            else: # List with multiple items or non-dict items
-                                print(f"Warning: JSON file {filepath} contains a list with multiple items or non-dict items. Skipping.")
-                        elif isinstance(loaded_json_content, dict):
-                            data["npcs"].append(loaded_json_content) # Append the dict directly
-                        else:
-                            print(f"Warning: JSON file {filepath} does not contain a dictionary or a list with a single dictionary. Skipping.")
-                except FileNotFoundError:
-                    # Using print for logging as per environment constraints
-                    print(f"Warning: File not found {filepath}, skipping.")
-                except json.JSONDecodeError:
-                    print(f"Warning: Could not parse JSON from {filepath}, skipping. Check JSON validity.")
-                except Exception as e:
-                    print(f"Warning: An unexpected error occurred while processing {filepath}: {e}, skipping.")
-    else:
-        print(f"Warning: NPC directory '{npc_dir}' not found. No NPCs will be loaded from here.")
+        all_data[category_name] = []
 
-    # Load GameObjects
-    if os.path.exists(game_object_dir) and os.path.isdir(game_object_dir):
-        for filename in os.listdir(game_object_dir):
-            if filename.endswith(".json"):
-                filepath = os.path.join(game_object_dir, filename)
-                try:
-                    with open(filepath, 'r') as f:
-                        loaded_json_content = json.load(f)
+        if os.path.exists(source_path) and os.path.isdir(source_path):
+            for filename in os.listdir(source_path):
+                filepath = os.path.join(source_path, filename)
+                if os.path.isdir(filepath): # Skip subdirectories
+                    continue
 
-                        actual_game_object_dict = None
-                        if isinstance(loaded_json_content, list):
-                            if len(loaded_json_content) == 1 and isinstance(loaded_json_content[0], dict):
-                                actual_game_object_dict = loaded_json_content[0]
-                            elif not loaded_json_content:
-                                print(f"Warning: JSON file {filepath} contains an empty list. Skipping.")
-                            else:
-                                print(f"Warning: JSON file {filepath} contains a list with multiple items or non-dict items. Skipping object.")
-                        elif isinstance(loaded_json_content, dict):
-                            actual_game_object_dict = loaded_json_content
-                        else:
-                            print(f"Warning: JSON file {filepath} does not contain a dictionary or a list of a single dictionary. Skipping.")
-
-                        if actual_game_object_dict:
-                            obj_id = actual_game_object_dict.get("id")
-                            if obj_id:
-                                data["game_objects"][obj_id] = actual_game_object_dict
-                            else:
-                                print(f"Warning: GameObject in file {filepath} is missing an 'id'. Skipping.")
-                        # No explicit else here, as warnings for non-dict/list content are handled above
-                except FileNotFoundError:
-                    print(f"Warning: File not found {filepath}, skipping.")
-                except json.JSONDecodeError:
-                    print(f"Warning: Could not parse JSON from {filepath}, skipping. Check JSON validity.")
-                except Exception as e:
-                    print(f"Warning: An unexpected error occurred while processing {filepath}: {e}, skipping.")
-    else:
-        print(f"Warning: GameObject directory '{game_object_dir}' not found. No GameObjects will be loaded from here.")
-
-    return data
-
-# It's assumed that the NPC class is imported here if it's not already.
-# from game_state import NPC # This line would be needed if NPC class is used directly here.
-# For now, we'll add it conceptually. If game_state.py is not accessible here,
-# this function might live in a different file or NPC class needs to be passed.
-# Let's assume for the task that we can import NPC.
-from game_state import NPC # Added for NPC class usage
+                if filename.endswith(".json"):
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            # Ensure the loaded data has an 'id' if it's a dictionary,
+                            # otherwise use filename as id. This is helpful for later processing.
+                            if isinstance(data, dict) and 'id' not in data:
+                                data['id'] = os.path.splitext(filename)[0]
+                            elif isinstance(data, list): # If JSON root is a list, try to process items
+                                processed_list = []
+                                for item in data:
+                                    if isinstance(item, dict) and 'id' not in item:
+                                        # This might not be ideal if list items don't have natural IDs
+                                        # For now, we'll just add them as-is if they are dicts
+                                        pass
+                                    processed_list.append(item)
+                                data = processed_list # Replace data with the list of items
+                            all_data[category_name].append(data)
+                    except json.JSONDecodeError:
+                        print(f"Warning: Could not parse JSON from {filepath}, skipping.")
+                    except Exception as e:
+                        print(f"Warning: An unexpected error occurred while processing JSON {filepath}: {e}, skipping.")
+                elif filename.endswith(".txt"):
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            # Store TXT content in a dictionary for consistency and RAG processing needs
+                            all_data[category_name].append({
+                                "id": os.path.splitext(filename)[0], # Use filename without extension as ID
+                                "text_content": content,
+                                "source_category": category_name # Add category for context
+                            })
+                    except Exception as e:
+                        print(f"Warning: An unexpected error occurred while processing TXT {filepath}: {e}, skipping.")
+        else:
+            print(f"Warning: Source directory '{source_path}' not found or is not a directory.")
+    return all_data
 
 def create_npc_from_data(npc_data: dict) -> NPC | None:
     """
     Creates an NPC instance from a dictionary of NPC data.
+    This function is kept as a utility, potentially for GameState to use
+    when instantiating NPCs from the raw data loaded by load_raw_data_from_sources.
 
     Args:
         npc_data: A dictionary containing the NPC's attributes.
@@ -106,87 +86,99 @@ def create_npc_from_data(npc_data: dict) -> NPC | None:
         An NPC object if creation is successful, None otherwise.
     """
     try:
+        # Ensure essential keys are present before trying to access them directly
+        required_keys = ['id', 'name', 'max_hp', 'combat_stats', 'base_damage_dice']
+        for key in required_keys:
+            if key not in npc_data:
+                raise KeyError(f"Missing essential key '{key}'")
+
         return NPC(
             id=npc_data['id'],
             name=npc_data['name'],
             max_hp=npc_data['max_hp'],
             combat_stats=npc_data['combat_stats'],
             base_damage_dice=npc_data['base_damage_dice'],
-            # Pass dialogue_responses, defaults to None if not present
-            dialogue_responses=npc_data.get("dialogue_responses")
+            dialogue_responses=npc_data.get("dialogue_responses") # Safely get optional key
         )
     except KeyError as e:
-        print(f"Warning: Missing essential key '{e}' in NPC data for '{npc_data.get('name', 'Unknown NPC')}'. Skipping NPC creation.")
+        # Error message now includes the specific NPC name/id if available for better debugging
+        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC'))
+        print(f"Warning: Missing essential data for NPC '{npc_identifier}'. Details: {e}. Skipping NPC creation.")
         return None
     except Exception as e:
-        print(f"Warning: Error creating NPC from data for '{npc_data.get('name', 'Unknown NPC')}': {e}. Skipping.")
+        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC'))
+        print(f"Warning: Error creating NPC '{npc_identifier}' from data: {e}. Skipping.")
         return None
 
-def load_npcs_from_directory(npc_dir_path: str = "data/NPCs") -> list[NPC]:
-    """
-    Loads all NPCs from a directory, instantiating them into NPC objects.
-
-    Args:
-        npc_dir_path: The directory path containing NPC JSON files.
-
-    Returns:
-        A list of NPC objects.
-    """
-    raw_data = load_game_data(npc_dir=npc_dir_path, game_object_dir="data/NonExistentPath") # Only load NPCs
-
-    npcs_list = []
-    for npc_data_item in raw_data.get("npcs", []):
-        npc_instance = create_npc_from_data(npc_data_item)
-        if npc_instance:
-            npcs_list.append(npc_instance)
-    return npcs_list
-
+# Old load_game_data and load_npcs_from_directory are now removed.
 
 if __name__ == '__main__':
-    # Example usage:
     print("--- Running data_loader.py example usage ---")
 
-    # Example for load_game_data (original functionality)
-    print("\nLoading raw game data from default directories...")
-    game_data = load_game_data()
-    print(f"Loaded {len(game_data['npcs'])} raw NPC data entries.")
-    if game_data['npcs']:
-        for npc_raw in game_data['npcs']:
-            print(f"  - Raw: {npc_raw.get('name', 'Unnamed NPC')} (Dialogue present: {'dialogue_responses' in npc_raw})")
+    # Need to import RAG_DOCUMENT_SOURCES from config
+    # For testing, we can define a dummy path or try to import from parent if structure allows
+    # Assuming this script is run from the project root for pathing to work as in config.
+    try:
+        from config import RAG_DOCUMENT_SOURCES
 
-    print(f"\nLoaded {len(game_data['game_objects'])} raw GameObject data entries.")
-    # ... (rest of game_object printing)
+        print(f"\nLoading raw data from configured sources: {RAG_DOCUMENT_SOURCES}")
+        raw_data_loaded = load_raw_data_from_sources(RAG_DOCUMENT_SOURCES)
 
-    # Example for new load_npcs_from_directory
-    print("\n--- Loading and Instantiating NPCs ---")
-    instantiated_npcs = load_npcs_from_directory()
-    print(f"Successfully instantiated {len(instantiated_npcs)} NPC objects:")
-    for npc_obj in instantiated_npcs:
-        print(f"  - Object: {npc_obj.name} (ID: {npc_obj.id}), HP: {npc_obj.max_hp}")
-        if npc_obj.dialogue_responses:
-            print(f"    Dialogue Keys: {list(npc_obj.dialogue_responses.keys())}")
-        else:
-            print("    No dialogue responses.")
+        print(f"\n--- Loaded Data Summary ---")
+        for category, data_list in raw_data_loaded.items():
+            print(f"Category: {category} - Loaded {len(data_list)} files.")
+            if data_list:
+                # Print details of the first item in each category for a quick check
+                first_item = data_list[0]
+                item_id = first_item.get('id', 'N/A') if isinstance(first_item, dict) else "N/A (raw string)"
+                item_type = type(first_item).__name__
+                print(f"  First item example (ID: {item_id}, Type: {item_type}):")
+                if isinstance(first_item, dict):
+                    # Print a few key-value pairs from the dictionary
+                    for i, (key, value) in enumerate(first_item.items()):
+                        if i < 3: # Print max 3 key-value pairs
+                            print(f"    '{key}': '{str(value)[:50]}{'...' if len(str(value)) > 50 else ''}'")
+                        else:
+                            break
+                elif isinstance(first_item, str): # Should not happen with current .txt handling
+                    print(f"    Content (first 50 chars): {first_item[:50]}{'...' if len(first_item) > 50 else ''}")
+                print("-" * 20)
 
-    # Test with a specific NPC that should have dialogue (npc_001.json - Ellara)
-    ellara_npc = next((n for n in instantiated_npcs if n.id == "npc_001"), None)
-    if ellara_npc:
-        print(f"\nTesting Ellara (npc_001) dialogue loading:")
-        greeting_node = ellara_npc.get_dialogue_node("greetings")
-        if greeting_node:
-            print(f"  Greeting NPC Text: {greeting_node.get('npc_text')}")
-            print(f"  Greeting Player Choices: {len(greeting_node.get('player_choices', []))}")
-        else:
-            print("  Could not get 'greetings' node for Ellara.")
-    else:
-        print("\nEllara (npc_001) not found among instantiated NPCs.")
+        # Example: Accessing specific loaded data
+        if "NPCs" in raw_data_loaded and raw_data_loaded["NPCs"]:
+            print("\n--- Example: First loaded NPC raw data ---")
+            first_npc_data = raw_data_loaded["NPCs"][0]
+            if isinstance(first_npc_data, dict): # Should be a dict
+                 print(json.dumps(first_npc_data, indent=2))
+                 # Test NPC instantiation using create_npc_from_data
+                 npc_instance = create_npc_from_data(first_npc_data)
+                 if npc_instance:
+                     print(f"\nSuccessfully instantiated NPC from raw data: {npc_instance.name} (ID: {npc_instance.id})")
+                 else:
+                     print("\nFailed to instantiate NPC from raw data.")
+            else:
+                print("First NPC data was not a dictionary as expected.")
 
 
-    print("\n--- Testing with non-existent directories (for raw data loading) ---")
-    non_existent_data = load_game_data(npc_dir="data/NonExistentNPCs", game_object_dir="data/NonExistentObjects")
-    print(f"Raw NPCs loaded from non-existent dirs: {len(non_existent_data['npcs'])}")
-    print(f"Raw GameObjects loaded from non-existent dirs: {len(non_existent_data['game_objects'])}")
+        if "Lore" in raw_data_loaded and raw_data_loaded["Lore"]:
+            print("\n--- Example: First loaded Lore raw data ---")
+            first_lore_data = raw_data_loaded["Lore"][0]
+            if isinstance(first_lore_data, dict):
+                print(json.dumps(first_lore_data, indent=2))
+            else:
+                print("First Lore data was not a dictionary as expected.") # Should be dict for .txt files too
 
-    # The malformed.json file in data/NPCs/ should have triggered a warning during the default loading.
-    # And also during the instantiation attempt by load_npcs_from_directory.
+        if "Items" in raw_data_loaded and raw_data_loaded["Items"]:
+            print("\n--- Example: First loaded Item raw data ---")
+            first_item_data = raw_data_loaded["Items"][0]
+            if isinstance(first_item_data, dict):
+                 print(json.dumps(first_item_data, indent=2))
+            else:
+                print("First Item data was not a dictionary as expected.")
+
+    except ImportError:
+        print("Could not import RAG_DOCUMENT_SOURCES from config.py. Make sure it's accessible.")
+    except Exception as e:
+        print(f"An error occurred during the test run: {e}")
+
     print("\n--- data_loader.py example usage complete ---")

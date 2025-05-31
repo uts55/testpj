@@ -1,0 +1,12 @@
+{
+    "id": "gloomy_cave_entrance",
+    "name": "Gloomy Cave Entrance",
+    "description": "A dark and foreboding cave mouth gapes in the hillside. A chill wind emanates from within, carrying faint, unsettling sounds. The only way is deeper into the cave or back the way you came.",
+    "exits": {
+        "south": "forest_path_to_cave",
+        "inward": "gloomy_cave_passage1"
+    },
+    "item_ids": ["iron_sword"],
+    "npc_ids": [],
+    "game_object_ids": []
+}

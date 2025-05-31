@@ -1,0 +1,11 @@
+{
+    "id": "healing_potion_small",
+    "name": "Small Healing Potion",
+    "description": "A common potion that restores a small amount of health.",
+    "type": "consumable",
+    "weight": 0.5,
+    "value": {"buy": 50, "sell": 15},
+    "effects": [
+        {"effect_type": "heal", "amount": "2d4+2"}
+    ]
+}

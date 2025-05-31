@@ -1,0 +1,47 @@
+{
+    "id": "npc_merchant_jane",
+    "name": "Merchant Jane",
+    "max_hp": 25,
+    "combat_stats": {
+        "armor_class": 10,
+        "attack_bonus": 0,
+        "damage_bonus": 0,
+        "initiative_bonus": 1
+    },
+    "base_damage_dice": "1d4",
+    "dialogue_responses": {
+        "greetings": {
+            "npc_text": "Welcome to my stall! Looking for anything in particular?",
+            "player_choices": [
+                {"text": "What do you have for sale?", "next_node": "show_wares"},
+                {"text": "Any rumors?", "next_node": "rumors"},
+                {"text": "Just looking around.", "next_node": "farewell"}
+            ]
+        },
+        "show_wares": {
+            "npc_text": "Take a look! I've got potions, basic gear, and a few odds and ends.",
+            "shop_inventory": [
+                "healing_potion_small",
+                "short_sword",
+                "leather_armor",
+                "wooden_shield"
+            ],
+            "player_choices": [
+                {"text": "Thanks, I'll browse.", "next_node": "greetings"},
+                {"text": "Goodbye.", "next_node": "farewell"}
+            ]
+        },
+         "rumors": {
+            "npc_text": "They say there's an old cave up in the hills north of here. Some say it's full of goblins, others whisper of treasure.",
+            "player_choices": [
+                {"text": "Interesting. Anything else?", "next_node": "greetings"},
+                {"text": "Goodbye.", "next_node": "farewell"}
+            ]
+        },
+        "farewell": {
+            "npc_text": "Safe travels!",
+            "ends_dialogue": true
+        }
+    },
+    "description": "Jane is a friendly merchant with a stall in the town square, always ready to trade."
+}

@@ -3,159 +3,242 @@ import os
 import json
 import shutil
 import tempfile
-from data_loader import load_game_data # Assuming data_loader.py is in the parent directory or accessible via PYTHONPATH
 
-class TestDataLoader(unittest.TestCase):
-    """Test cases for the load_game_data function."""
+# Assuming data_loader.py is in the parent directory or accessible via PYTHONPATH
+# The functions to test are load_raw_data_from_sources and create_npc_from_data
+from data_loader import load_raw_data_from_sources, create_npc_from_data
+from game_state import NPC # For testing create_npc_from_data
+
+class TestLoadRawDataFromSources(unittest.TestCase):
+    """Test cases for the load_raw_data_from_sources function."""
 
     def setUp(self):
-        """Set up a temporary directory structure for test JSON files."""
-        # Create a top-level temporary directory for this test case
-        self.base_temp_dir = tempfile.mkdtemp(prefix="test_data_loader_")
-
-        # Create the 'data/NPCs' and 'data/GameObjects' structure within base_temp_dir
-        self.npcs_dir = os.path.join(self.base_temp_dir, "data", "NPCs")
-        self.game_objects_dir = os.path.join(self.base_temp_dir, "data", "GameObjects")
-
-        os.makedirs(self.npcs_dir)
-        os.makedirs(self.game_objects_dir)
-
-        # self.addCleanup(shutil.rmtree, self.base_temp_dir) # Ensure cleanup
+        """Set up a temporary base directory for test files and directories."""
+        self.base_temp_dir = tempfile.mkdtemp(prefix="test_raw_data_")
+        # self.addCleanup(shutil.rmtree, self.base_temp_dir) # For Python 3.8+
 
     def tearDown(self):
-        """Clean up the temporary directory structure."""
+        """Clean up the temporary base directory."""
         shutil.rmtree(self.base_temp_dir)
 
-    def _create_json_file(self, dir_path, filename, content):
-        """Helper method to create a JSON file."""
+    def _create_file(self, dir_path, filename, content, is_json=True):
+        """Helper method to create a file (JSON or TXT)."""
+        os.makedirs(dir_path, exist_ok=True)
         filepath = os.path.join(dir_path, filename)
-        with open(filepath, 'w') as f:
-            json.dump(content, f)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            if is_json:
+                json.dump(content, f)
+            else:
+                f.write(content)
         return filepath
 
-    def _create_raw_file(self, dir_path, filename, raw_content_str):
-        """Helper method to create a file with raw string content."""
-        filepath = os.path.join(dir_path, filename)
-        with open(filepath, 'w') as f:
-            f.write(raw_content_str)
-        return filepath
+    def test_load_mixed_json_and_txt(self):
+        """Test loading from a directory with mixed JSON and TXT files."""
+        items_dir = os.path.join(self.base_temp_dir, "Items")
+        item_data_json = {"id": "sword1", "name": "Iron Sword", "type": "weapon"}
+        lore_data_txt = "This is a tale of ancient swords."
+        self._create_file(items_dir, "sword.json", item_data_json, is_json=True)
+        self._create_file(items_dir, "sword_lore.txt", lore_data_txt, is_json=False)
 
-    def test_load_valid_data(self):
-        """Test loading of valid NPC and GameObject JSON files."""
-        npc_data1 = {"name": "Guard Eric", "description": "A stoic guard."}
-        npc_data2 = {"name": "Merchant Freya", "description": "A friendly merchant."}
-        obj_data1 = {"name": "Sunstone", "description": "A glowing stone."}
+        document_sources = [items_dir]
+        loaded_data = load_raw_data_from_sources(document_sources)
 
-        self._create_json_file(self.npcs_dir, "eric.json", npc_data1)
-        self._create_json_file(self.npcs_dir, "freya.json", npc_data2)
-        self._create_json_file(self.game_objects_dir, "sunstone.json", obj_data1)
+        self.assertIn("Items", loaded_data)
+        self.assertEqual(len(loaded_data["Items"]), 2)
 
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
+        loaded_json_item = next((item for item in loaded_data["Items"] if isinstance(item, dict) and item.get("id") == "sword1"), None)
+        self.assertEqual(loaded_json_item, item_data_json)
 
-        self.assertEqual(len(loaded_data["npcs"]), 2)
-        self.assertEqual(len(loaded_data["game_objects"]), 1)
-        self.assertIn(npc_data1, loaded_data["npcs"])
-        self.assertIn(npc_data2, loaded_data["npcs"])
-        self.assertIn(obj_data1, loaded_data["game_objects"])
-
-    def test_load_malformed_json(self):
-        """Test that malformed JSON files are skipped."""
-        npc_data_valid = {"name": "Valid NPC", "description": "This one is fine."}
-        self._create_json_file(self.npcs_dir, "valid_npc.json", npc_data_valid)
-        self._create_raw_file(self.npcs_dir, "malformed.json", "{'name': 'Broken', 'description': 'unterminated string")
-
-        # We can't easily check print output for warnings without more complex mocking.
-        # So, we primarily check that the function doesn't crash and loads valid files.
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
-
-        self.assertEqual(len(loaded_data["npcs"]), 1, "Should only load the valid NPC file.")
-        self.assertIn(npc_data_valid, loaded_data["npcs"])
-        self.assertEqual(len(loaded_data["game_objects"]), 0)
+        loaded_txt_item = next((item for item in loaded_data["Items"] if isinstance(item, dict) and item.get("id") == "sword_lore"), None)
+        self.assertIsNotNone(loaded_txt_item)
+        self.assertEqual(loaded_txt_item.get("text_content"), lore_data_txt)
+        self.assertEqual(loaded_txt_item.get("source_category"), "Items")
 
 
-    def test_load_empty_json_file(self):
-        """Test loading an empty JSON file (should be skipped or handled as error by json.load)."""
-        # json.load on an empty file raises JSONDecodeError. data_loader should skip it.
-        self._create_raw_file(self.npcs_dir, "empty.json", "")
-        npc_data_valid = {"name": "Another NPC", "description": "Also fine."}
-        self._create_json_file(self.npcs_dir, "another_npc.json", npc_data_valid)
+    def test_load_only_json(self):
+        """Test loading from a directory with only JSON files."""
+        npcs_dir = os.path.join(self.base_temp_dir, "NPCs")
+        npc_data1 = {"id": "npc1", "name": "Guard"}
+        npc_data2 = {"id": "npc2", "name": "Merchant"}
+        self._create_file(npcs_dir, "guard.json", npc_data1)
+        self._create_file(npcs_dir, "merchant.json", npc_data2)
 
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
+        loaded_data = load_raw_data_from_sources([npcs_dir])
+        self.assertIn("NPCs", loaded_data)
+        self.assertEqual(len(loaded_data["NPCs"]), 2)
+        self.assertIn(npc_data1, loaded_data["NPCs"])
+        self.assertIn(npc_data2, loaded_data["NPCs"])
 
-        self.assertEqual(len(loaded_data["npcs"]), 1, "Should skip the empty JSON and load the valid one.")
-        self.assertIn(npc_data_valid, loaded_data["npcs"])
+    def test_load_only_txt(self):
+        """Test loading from a directory with only TXT files."""
+        lore_dir = os.path.join(self.base_temp_dir, "Lore")
+        lore_text1 = "Chapter 1: The Beginning."
+        lore_text2 = "Chapter 2: The Journey."
+        self._create_file(lore_dir, "chapter1.txt", lore_text1, is_json=False)
+        self._create_file(lore_dir, "chapter2.txt", lore_text2, is_json=False)
 
-    def test_load_json_with_list_root(self):
-        """Test loading JSON files where the root is a list containing one object."""
-        list_npc_data = [{"name": "List NPC", "description": "Contained in a list."}]
-        self._create_json_file(self.npcs_dir, "list_npc.json", list_npc_data)
+        loaded_data = load_raw_data_from_sources([lore_dir])
+        self.assertIn("Lore", loaded_data)
+        self.assertEqual(len(loaded_data["Lore"]), 2)
 
-        dict_npc_data = {"name": "Dict NPC", "description": "Regular dict."}
-        self._create_json_file(self.npcs_dir, "dict_npc.json", dict_npc_data)
+        expected_lore1 = {"id": "chapter1", "text_content": lore_text1, "source_category": "Lore"}
+        expected_lore2 = {"id": "chapter2", "text_content": lore_text2, "source_category": "Lore"}
 
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
-
-        self.assertEqual(len(loaded_data["npcs"]), 2)
-        # The data_loader is expected to extract the dictionary from the list
-        self.assertIn(list_npc_data[0], loaded_data["npcs"])
-        self.assertIn(dict_npc_data, loaded_data["npcs"])
-
-    def test_load_json_with_list_root_multiple_items_or_empty(self):
-        """Test JSONs with list root but multiple items or empty list (should be skipped)."""
-        list_multi_npc_data = [
-            {"name": "NPC A", "description": "First in list."},
-            {"name": "NPC B", "description": "Second in list."}
-        ]
-        self._create_json_file(self.npcs_dir, "list_multi_npc.json", list_multi_npc_data)
-        self._create_json_file(self.npcs_dir, "list_empty.json", [])
-
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
-        self.assertEqual(len(loaded_data["npcs"]), 0, "Should skip lists with multiple items or empty lists.")
+        # Check if expected dicts are present (order might vary)
+        self.assertTrue(any(d == expected_lore1 for d in loaded_data["Lore"]))
+        self.assertTrue(any(d == expected_lore2 for d in loaded_data["Lore"]))
 
 
-    def test_ignore_files_in_subdirectories(self):
-        """Test that files in subdirectories are not loaded."""
-        npc_data_main = {"name": "Main NPC", "description": "Lives in main NPCs dir."}
-        self._create_json_file(self.npcs_dir, "main_npc.json", npc_data_main)
+    def test_json_missing_id_autogenerated(self):
+        """Test JSON missing 'id' gets an ID generated from filename."""
+        items_dir = os.path.join(self.base_temp_dir, "Items")
+        item_data_no_id = {"name": "Mystic Orb", "type": "artifact"}
+        self._create_file(items_dir, "orb_of_mystery.json", item_data_no_id)
 
-        archive_npc_dir = os.path.join(self.npcs_dir, "archive")
-        os.makedirs(archive_npc_dir)
-        self._create_json_file(archive_npc_dir, "archived_npc.json", {"name": "Old NPC", "description": "Archived."})
+        loaded_data = load_raw_data_from_sources([items_dir])
+        self.assertIn("Items", loaded_data)
+        self.assertEqual(len(loaded_data["Items"]), 1)
+        loaded_item = loaded_data["Items"][0]
+        self.assertEqual(loaded_item.get("id"), "orb_of_mystery")
+        self.assertEqual(loaded_item.get("name"), "Mystic Orb")
 
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
+    def test_empty_directory(self):
+        """Test loading from an empty directory."""
+        empty_dir = os.path.join(self.base_temp_dir, "EmptyStuff")
+        os.makedirs(empty_dir, exist_ok=True)
 
-        self.assertEqual(len(loaded_data["npcs"]), 1)
-        self.assertIn(npc_data_main, loaded_data["npcs"])
+        loaded_data = load_raw_data_from_sources([empty_dir])
+        self.assertIn("EmptyStuff", loaded_data)
+        self.assertEqual(len(loaded_data["EmptyStuff"]), 0)
 
-    def test_non_json_files_ignored(self):
-        """Test that non-JSON files are ignored."""
-        npc_data_valid = {"name": "JSON NPC", "description": "A valid JSON."}
-        self._create_json_file(self.npcs_dir, "json_npc.json", npc_data_valid)
-        self._create_raw_file(self.npcs_dir, "text_file.txt", "This is not a JSON file.")
+    def test_non_existent_directory(self):
+        """Test loading from a non-existent directory (should warn and return empty for that category)."""
+        non_existent_dir = os.path.join(self.base_temp_dir, "Ghosts")
+        # data_loader prints a warning, here we check the output structure
+        loaded_data = load_raw_data_from_sources([non_existent_dir])
+        self.assertIn("Ghosts", loaded_data) # Category should still be created
+        self.assertEqual(len(loaded_data["Ghosts"]), 0)
 
-        loaded_data = load_game_data(npc_dir=self.npcs_dir, game_object_dir=self.game_objects_dir)
-        self.assertEqual(len(loaded_data["npcs"]), 1)
-        self.assertIn(npc_data_valid, loaded_data["npcs"])
 
-    def test_missing_directories(self):
-        """Test behavior when specified directories do not exist."""
-        # Create a valid NPCs directory for one part of the test
-        valid_npc_data = {"name": "Test NPC", "description": "In a valid directory."}
-        self._create_json_file(self.npcs_dir, "test_npc.json", valid_npc_data)
+    def test_invalid_json_file(self):
+        """Test handling of invalid JSON (should warn and skip)."""
+        items_dir = os.path.join(self.base_temp_dir, "Items")
+        valid_item_data = {"id": "potion", "name": "Health Potion"}
+        self._create_file(items_dir, "potion.json", valid_item_data)
+        self._create_file(items_dir, "broken.json", "{'name': 'bad json',", is_json=False) # Write raw broken string
 
-        # Test with one valid and one missing directory
-        missing_obj_dir = os.path.join(self.base_temp_dir, "data", "NonExistentObjects")
-        loaded_data_one_missing = load_game_data(npc_dir=self.npcs_dir, game_object_dir=missing_obj_dir)
-        self.assertEqual(len(loaded_data_one_missing["npcs"]), 1)
-        self.assertIn(valid_npc_data, loaded_data_one_missing["npcs"])
-        self.assertEqual(len(loaded_data_one_missing["game_objects"]), 0)
+        loaded_data = load_raw_data_from_sources([items_dir])
+        self.assertIn("Items", loaded_data)
+        self.assertEqual(len(loaded_data["Items"]), 1) # Only valid item should be loaded
+        self.assertEqual(loaded_data["Items"][0], valid_item_data)
 
-        # Test with both directories missing
-        missing_npc_dir = os.path.join(self.base_temp_dir, "data", "NonExistentNPCs")
-        loaded_data_both_missing = load_game_data(npc_dir=missing_npc_dir, game_object_dir=missing_obj_dir)
-        self.assertEqual(len(loaded_data_both_missing["npcs"]), 0)
-        self.assertEqual(len(loaded_data_both_missing["game_objects"]), 0)
-        # Expect warnings to be printed by data_loader.py, cannot easily capture here.
+    def test_multiple_source_directories(self):
+        """Test loading from multiple source directories."""
+        npcs_dir = os.path.join(self.base_temp_dir, "NPCs")
+        items_dir = os.path.join(self.base_temp_dir, "Items")
+        lore_dir = os.path.join(self.base_temp_dir, "Lore")
+
+        npc_data = {"id": "kane", "name": "Kane"}
+        item_data = {"id": "scroll", "name": "Scroll of Wisdom"}
+        lore_text = "A forgotten tale."
+
+        self._create_file(npcs_dir, "kane.json", npc_data)
+        self._create_file(items_dir, "scroll.json", item_data)
+        self._create_file(lore_dir, "forgotten_tale.txt", lore_text, is_json=False)
+
+        document_sources = [npcs_dir, items_dir, lore_dir]
+        loaded_data = load_raw_data_from_sources(document_sources)
+
+        self.assertIn("NPCs", loaded_data)
+        self.assertEqual(len(loaded_data["NPCs"]), 1)
+        self.assertEqual(loaded_data["NPCs"][0], npc_data)
+
+        self.assertIn("Items", loaded_data)
+        self.assertEqual(len(loaded_data["Items"]), 1)
+        self.assertEqual(loaded_data["Items"][0], item_data)
+
+        self.assertIn("Lore", loaded_data)
+        self.assertEqual(len(loaded_data["Lore"]), 1)
+        self.assertEqual(loaded_data["Lore"][0]["id"], "forgotten_tale")
+        self.assertEqual(loaded_data["Lore"][0]["text_content"], lore_text)
+
+    def test_skip_subdirectories(self):
+        """Test that subdirectories within a source directory are skipped."""
+        main_dir = os.path.join(self.base_temp_dir, "MainData")
+        sub_dir = os.path.join(main_dir, "SubData")
+        os.makedirs(sub_dir, exist_ok=True)
+
+        main_data_json = {"id": "main1", "content": "Main level data"}
+        sub_data_json = {"id": "sub1", "content": "Sub level data"}
+
+        self._create_file(main_dir, "main_doc.json", main_data_json)
+        self._create_file(sub_dir, "sub_doc.json", sub_data_json)
+
+        loaded_data = load_raw_data_from_sources([main_dir])
+        self.assertIn("MainData", loaded_data)
+        self.assertEqual(len(loaded_data["MainData"]), 1)
+        self.assertEqual(loaded_data["MainData"][0], main_data_json)
+
+
+class TestCreateNpcFromData(unittest.TestCase):
+    """Test cases for the create_npc_from_data utility function."""
+
+    def test_create_valid_npc(self):
+        """Test creating an NPC from valid data."""
+        npc_data = {
+            "id": "npc001", "name": "Guard Test", "max_hp": 50,
+            "combat_stats": {"armor_class": 15, "attack_bonus": 3, "damage_bonus": 1},
+            "base_damage_dice": "1d8",
+            "dialogue_responses": {"greetings": {"npc_text": "Halt!"}}
+        }
+        npc = create_npc_from_data(npc_data)
+        self.assertIsNotNone(npc)
+        self.assertIsInstance(npc, NPC)
+        self.assertEqual(npc.id, "npc001")
+        self.assertEqual(npc.name, "Guard Test")
+        self.assertEqual(npc.max_hp, 50)
+        self.assertEqual(npc.combat_stats["armor_class"], 15)
+        self.assertEqual(npc.base_damage_dice, "1d8")
+        self.assertIn("greetings", npc.dialogue_responses)
+
+    def test_create_npc_minimal_data(self):
+        """Test creating an NPC with only essential data (no dialogue)."""
+        npc_data = {
+            "id": "npc002", "name": "Silent Knight", "max_hp": 60,
+            "combat_stats": {"armor_class": 18}, "base_damage_dice": "1d10"
+        }
+        npc = create_npc_from_data(npc_data)
+        self.assertIsNotNone(npc)
+        self.assertEqual(npc.id, "npc002")
+        self.assertEqual(npc.dialogue_responses, {}) # Should default to empty dict
+
+    def test_create_npc_missing_essential_key(self):
+        """Test NPC creation failure if an essential key is missing."""
+        npc_data_missing_name = {
+            "id": "npc003", "max_hp": 30, # 'name' is missing
+            "combat_stats": {"armor_class": 12}, "base_damage_dice": "1d6"
+        }
+        # create_npc_from_data prints a warning, we check for None return
+        npc = create_npc_from_data(npc_data_missing_name)
+        self.assertIsNone(npc, "NPC creation should fail if 'name' is missing.")
+
+        npc_data_missing_id = {
+            "name": "No ID NPC", "max_hp": 30,
+            "combat_stats": {"armor_class": 12}, "base_damage_dice": "1d6"
+        }
+        npc = create_npc_from_data(npc_data_missing_id)
+        self.assertIsNone(npc, "NPC creation should fail if 'id' is missing.")
+
+
+    def test_create_npc_invalid_data_type(self):
+        """Test NPC creation with invalid data types for fields."""
+        npc_data_invalid_hp = {
+            "id": "npc004", "name": "Type Error NPC", "max_hp": "should_be_int",
+            "combat_stats": {"armor_class": 10}, "base_damage_dice": "1d4"
+        }
+        # This will raise an error inside NPC constructor, create_npc_from_data should catch and return None
+        npc = create_npc_from_data(npc_data_invalid_hp)
+        self.assertIsNone(npc, "NPC creation should fail if max_hp is not an int.")
 
 if __name__ == '__main__':
     unittest.main()

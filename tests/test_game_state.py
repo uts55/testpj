@@ -1,204 +1,285 @@
 import unittest
-import random # random is used by game_state.roll_dice, not directly in tests but good to note
-from game_state import PlayerState, roll_dice
+import os # For path manipulation in main, if needed
+import json # For main block example printing, if used
 
-class TestPlayerState(unittest.TestCase):
-    """Test cases for the PlayerState class."""
+# Import classes and functions from game_state
+from game_state import (
+    GameState, Player, NPC, Character,
+    Item, Weapon, Armor, Consumable, KeyItem, Location,
+    player_buys_item, player_sells_item,
+    determine_initiative, reveal_clue # Added reveal_clue for testing
+)
+# Import functions/data needed for GameState initialization in tests
+from data_loader import load_raw_data_from_sources, create_npc_from_data
+# RAG_DOCUMENT_SOURCES might be needed if we test loading from actual files in some specific GameState tests,
+# but for unit tests, it's better to use mock raw data.
+# For the __main__ block in game_state.py, it uses RAG_DOCUMENT_SOURCES directly.
 
-    def test_initialization_defaults(self):
-        """Test PlayerState initialization with default values."""
-        player = PlayerState()
-        self.assertEqual(player.current_hp, 100, "Default HP should be 100")
-        self.assertEqual(player.max_hp, 100, "Default max_hp should be 100")
-        self.assertEqual(player.inventory, [], "Default inventory should be empty")
+class TestItemClasses(unittest.TestCase):
+    """Test cases for Item and its subclasses."""
+    def test_item_creation(self):
+        item = Item(id="gem", name="Shining Gem", description="A bright, worthless gem.", item_type="generic", weight=0.1, value={"buy": 1, "sell": 0})
+        self.assertEqual(item.name, "Shining Gem")
+        self.assertEqual(item.item_type, "generic")
 
-    def test_initialization_custom(self):
-        """Test PlayerState initialization with custom values."""
-        player = PlayerState(initial_hp=80, max_hp=120)
-        self.assertEqual(player.current_hp, 80, "Custom initial_hp not set correctly")
-        self.assertEqual(player.max_hp, 120, "Custom max_hp not set correctly")
+    def test_weapon_creation(self):
+        weapon = Weapon(id="ws001", name="Iron Dagger", description="A simple dagger.",
+                        damage_dice="1d4", attack_bonus=1, damage_bonus=0, weapon_type="dagger", weight=1.0, value={"buy":10, "sell":3})
+        self.assertEqual(weapon.name, "Iron Dagger")
+        self.assertEqual(weapon.item_type, "weapon")
+        self.assertEqual(weapon.damage_dice, "1d4")
+        self.assertEqual(weapon.attack_bonus, 1)
 
-    def test_initialization_hp_capped_at_max(self):
-        """Test that initial_hp is capped at max_hp if it exceeds it."""
-        player = PlayerState(initial_hp=150, max_hp=100)
-        self.assertEqual(player.current_hp, 100, "initial_hp should be capped at max_hp")
-        self.assertEqual(player.max_hp, 100)
+    def test_armor_creation(self):
+        armor = Armor(id="am001", name="Leather Tunic", description="Basic leather armor.",
+                      ac_bonus=2, armor_type="light", weight=5.0, value={"buy":20, "sell":5})
+        self.assertEqual(armor.name, "Leather Tunic")
+        self.assertEqual(armor.item_type, "armor")
+        self.assertEqual(armor.ac_bonus, 2)
+        self.assertEqual(armor.armor_type, "light")
 
-    def test_initialization_invalid_hp_values(self):
-        """Test PlayerState initialization with invalid HP values."""
-        with self.assertRaisesRegex(ValueError, "initial_hp cannot be negative", msg="Negative initial_hp"):
-            PlayerState(initial_hp=-10)
-        with self.assertRaisesRegex(ValueError, "max_hp must be a positive integer", msg="Zero max_hp"):
-            PlayerState(max_hp=0)
-        with self.assertRaisesRegex(ValueError, "max_hp must be a positive integer", msg="Negative max_hp"):
-            PlayerState(max_hp=-5)
-        with self.assertRaisesRegex(TypeError, "HP values must be integers", msg="String initial_hp"):
-            PlayerState(initial_hp="abc")
-        with self.assertRaisesRegex(TypeError, "HP values must be integers", msg="String max_hp"):
-            PlayerState(max_hp="xyz")
-
-    def test_take_damage(self):
-        """Test the take_damage method."""
-        player = PlayerState(initial_hp=100, max_hp=100)
-        player.take_damage(30)
-        self.assertEqual(player.current_hp, 70, "Damage not applied correctly")
-        player.take_damage(80) # Damage exceeding current HP
-        self.assertEqual(player.current_hp, 0, "HP should be 0 after taking more damage than available")
-
-    def test_take_damage_to_zero(self):
-        """Test take_damage reducing HP exactly to zero."""
-        player = PlayerState(initial_hp=50)
-        player.take_damage(50)
-        self.assertEqual(player.current_hp, 0, "HP should be exactly 0")
-
-    def test_take_damage_already_zero(self):
-        """Test take_damage when HP is already zero."""
-        player = PlayerState(initial_hp=0)
-        player.take_damage(20)
-        self.assertEqual(player.current_hp, 0, "HP should remain 0 if damage taken at 0 HP")
-
-    def test_take_damage_invalid_amount(self):
-        """Test take_damage with invalid amounts."""
-        player = PlayerState()
-        with self.assertRaisesRegex(TypeError, "Damage amount must be an integer", msg="String damage amount"):
-            player.take_damage("abc")
-        with self.assertRaisesRegex(ValueError, "Damage amount cannot be negative", msg="Negative damage amount"):
-            player.take_damage(-10)
-
-    def test_heal(self):
-        """Test the heal method."""
-        player = PlayerState(initial_hp=30, max_hp=100)
-        player.heal(40)
-        self.assertEqual(player.current_hp, 70, "Healing not applied correctly")
-        player.heal(50) # Healing exceeding max_hp
-        self.assertEqual(player.current_hp, 100, "HP should be max_hp after healing beyond max")
-
-    def test_heal_to_max(self):
-        """Test heal restoring HP exactly to max_hp."""
-        player = PlayerState(initial_hp=90, max_hp=100)
-        player.heal(10)
-        self.assertEqual(player.current_hp, 100, "HP should be exactly max_hp")
-
-    def test_heal_already_max(self):
-        """Test heal when HP is already at max_hp."""
-        player = PlayerState(initial_hp=100, max_hp=100)
-        player.heal(20)
-        self.assertEqual(player.current_hp, 100, "HP should remain max_hp if healed at max_hp")
-
-    def test_heal_invalid_amount(self):
-        """Test heal with invalid amounts."""
-        player = PlayerState()
-        with self.assertRaisesRegex(TypeError, "Heal amount must be an integer", msg="String heal amount"):
-            player.heal("abc")
-        with self.assertRaisesRegex(ValueError, "Heal amount cannot be negative", msg="Negative heal amount"):
-            player.heal(-10)
-
-    def test_inventory_management(self):
-        """Test adding and removing items from inventory."""
-        player = PlayerState()
-        player.add_to_inventory("sword")
-        self.assertIn("sword", player.inventory, "Item 'sword' not added")
-        player.add_to_inventory("potion")
-        self.assertIn("potion", player.inventory, "Item 'potion' not added")
-        self.assertEqual(len(player.inventory), 2, "Inventory size incorrect after additions")
-
-        self.assertTrue(player.remove_from_inventory("sword"), "Removing 'sword' should return True")
-        self.assertNotIn("sword", player.inventory, "'sword' still in inventory after removal")
-        self.assertEqual(len(player.inventory), 1, "Inventory size incorrect after removal")
-
-        self.assertFalse(player.remove_from_inventory("shield"), "Removing non-existent 'shield' should return False")
-        self.assertIn("potion", player.inventory, "'potion' should still be in inventory")
-
-    def test_add_to_inventory_invalid_name(self):
-        """Test add_to_inventory with invalid item names."""
-        player = PlayerState()
-        with self.assertRaisesRegex(TypeError, "Item name must be a string", msg="Integer item name"):
-            player.add_to_inventory(123)
-        with self.assertRaisesRegex(ValueError, "Item name cannot be empty or just whitespace", msg="Whitespace item name"):
-            player.add_to_inventory("  ")
-        with self.assertRaisesRegex(ValueError, "Item name cannot be empty or just whitespace", msg="Empty item name"):
-            player.add_to_inventory("")
-
-    def test_remove_from_inventory_invalid_name(self):
-        """Test remove_from_inventory with invalid item names."""
-        player = PlayerState()
-        player.add_to_inventory("test_item")
-        with self.assertRaisesRegex(TypeError, "Item name must be a string", msg="Integer item name for removal"):
-            player.remove_from_inventory(123)
-        self.assertIn("test_item", player.inventory, "Item should still be in inventory after invalid removal attempt")
-
-    def test_get_status(self):
-        """Test the get_status method output format."""
-        player = PlayerState(initial_hp=75, max_hp=110)
-        self.assertEqual(player.get_status(), "HP: 75/110, Inventory: [empty]")
-        player.add_to_inventory("map")
-        self.assertEqual(player.get_status(), "HP: 75/110, Inventory: [map]")
-        player.add_to_inventory("torch")
-        self.assertEqual(player.get_status(), "HP: 75/110, Inventory: [map, torch]")
-        player.inventory = [] # Reset for next check
-        self.assertEqual(player.get_status(), "HP: 75/110, Inventory: [empty]")
+    def test_shield_creation(self):
+        shield = Armor(id="sh001", name="Wooden Shield", description="A simple wooden shield.",
+                       ac_bonus=1, armor_type="shield", weight=6.0, value={"buy":15, "sell":4})
+        self.assertEqual(shield.name, "Wooden Shield")
+        self.assertEqual(shield.item_type, "armor") # Shields are a type of Armor
+        self.assertEqual(shield.ac_bonus, 1)
+        self.assertEqual(shield.armor_type, "shield")
 
 
-class TestRollDice(unittest.TestCase):
-    """Test cases for the roll_dice function."""
+    def test_consumable_creation(self):
+        effects = [{"effect_type": "heal", "amount": "2d4+2"}]
+        consumable = Consumable(id="pot001", name="Healing Potion", description="Restores health.",
+                                effects=effects, weight=0.5, value={"buy":50, "sell":15})
+        self.assertEqual(consumable.name, "Healing Potion")
+        self.assertEqual(consumable.item_type, "consumable")
+        self.assertEqual(len(consumable.effects), 1)
+        self.assertEqual(consumable.effects[0]["amount"], "2d4+2")
 
-    def test_single_die_roll(self):
-        """Test rolling a single die for various sides."""
-        for sides in [1, 6, 20, 100]:
-            with self.subTest(sides=sides):
-                roll = roll_dice(sides)
-                self.assertTrue(1 <= roll <= sides, f"Roll {roll} out of range for 1d{sides}")
-
-    def test_single_die_roll_always_one_if_sides_one(self):
-        """Test rolling a 1-sided die always results in 1."""
-        for _ in range(10): # Repeat to increase confidence
-            self.assertEqual(roll_dice(1), 1, "Roll on 1-sided die should always be 1")
-
-    def test_multiple_dice_rolls(self):
-        """Test rolling multiple dice."""
-        for sides, num_dice in [(6, 2), (10, 3), (4, 5)]:
-            with self.subTest(sides=sides, num_dice=num_dice):
-                roll = roll_dice(sides, num_dice)
-                self.assertTrue(num_dice <= roll <= sides * num_dice,
-                                f"Roll {roll} out of range for {num_dice}d{sides}")
-
-    def test_roll_distribution_basic_d6(self):
-        """Basic check for d6 roll distribution (not a rigorous statistical test)."""
-        sides = 6
-        num_rolls = 300 # Increased number of rolls for better chance of seeing all outcomes
-        rolls = [roll_dice(sides) for _ in range(num_rolls)]
-        unique_rolls = set(rolls)
-        # For a d6, with 300 rolls, it's highly probable all outcomes (1-6) appear.
-        self.assertEqual(unique_rolls, {1, 2, 3, 4, 5, 6},
-                         f"Expected all outcomes (1-6) for d6 in {num_rolls} rolls, got {unique_rolls}")
-
-    def test_roll_distribution_basic_d4(self):
-        """Basic check for d4 roll distribution."""
-        sides = 4
-        num_rolls = 200
-        rolls = [roll_dice(sides, num_dice=2) for _ in range(num_rolls)] # 2d4
-        # Min sum 2, Max sum 8.
-        # Check if a few values in the middle range appear.
-        # This is a very loose check.
-        seen_values_near_mean = {r for r in rolls if 3 <= r <= 7} # Mean of 2d4 is 5
-        self.assertTrue(len(seen_values_near_mean) > 3, # Expect to see a few different values near mean
-                        f"Expected some variety near mean for 2d4 rolls, got {seen_values_near_mean}")
+    def test_keyitem_creation(self):
+        key = KeyItem(id="key001", name="Rusty Key", description="Opens an old chest.",
+                      unlocks=["chest_north_tower"], weight=0.1, value={"buy":5, "sell":1})
+        self.assertEqual(key.name, "Rusty Key")
+        self.assertEqual(key.item_type, "key_item")
+        self.assertIn("chest_north_tower", key.unlocks)
 
 
-    def test_input_validation_roll_dice(self):
-        """Test input validation for roll_dice."""
-        with self.assertRaisesRegex(TypeError, "Sides and num_dice must be integers", msg="String sides"):
-            roll_dice(sides="abc")
-        with self.assertRaisesRegex(TypeError, "Sides and num_dice must be integers", msg="String num_dice"):
-            roll_dice(sides=6, num_dice="two")
-        with self.assertRaisesRegex(ValueError, "Number of sides must be positive", msg="Zero sides"):
-            roll_dice(sides=0)
-        with self.assertRaisesRegex(ValueError, "Number of sides must be positive", msg="Negative sides"):
-            roll_dice(sides=-6)
-        with self.assertRaisesRegex(ValueError, "Number of dice to roll must be positive", msg="Zero num_dice"):
-            roll_dice(sides=6, num_dice=0)
-        with self.assertRaisesRegex(ValueError, "Number of dice to roll must be positive", msg="Negative num_dice"):
-            roll_dice(sides=6, num_dice=-3)
+class TestLocationClass(unittest.TestCase):
+    """Test cases for the Location class."""
+    def test_location_creation(self):
+        loc = Location(id="town_square", name="Town Square", description="A bustling place.",
+                       exits={"north": "market_street", "south": "inn"},
+                       item_ids=["potion1"], npc_ids=["guard1"], game_object_ids=["fountain"])
+        self.assertEqual(loc.name, "Town Square")
+        self.assertEqual(loc.exits["north"], "market_street")
+        self.assertIn("potion1", loc.item_ids)
+        self.assertIn("guard1", loc.npc_ids)
+        self.assertIn("fountain", loc.game_object_ids)
+
+class TestGameState(unittest.TestCase):
+    """Test cases for the GameState class and its interactions."""
+
+    def setUp(self):
+        """Set up a basic Player and GameState for each test."""
+        self.player_data = {
+            "id": "test_player", "name": "Hero", "max_hp": 100,
+            "combat_stats": {'armor_class': 10, 'attack_bonus': 2, 'damage_bonus': 1}, # Base AC for player
+            "base_damage_dice": "1d4", # Unarmed
+            "ability_scores": {"strength": 12, "dexterity": 14, "intelligence": 10},
+            "inventory": [],
+            "equipment": {"currency": {"gold": 50}}
+        }
+        self.player = Player(self.player_data)
+        self.game_state = GameState(player_character=self.player)
+
+        # Sample raw data for initializing GameState
+        self.sample_raw_items = [
+            {"id": "sword001", "name": "Steel Sword", "type": "weapon", "damage_dice": "1d8", "value": {"buy": 30, "sell": 10}},
+            {"id": "leather001", "name": "Leather Armor", "type": "armor", "ac_bonus": 2, "armor_type": "light", "value": {"buy": 25, "sell": 8}},
+            {"id": "potion_heal_1", "name": "Minor Healing Potion", "type": "consumable", "effects": [{"effect_type": "heal", "amount": "1d8+1"}], "value": {"buy": 20, "sell": 5}},
+            {"id": "key_jail", "name": "Jail Key", "type": "key_item", "unlocks": ["jail_door_01"], "value": {"buy":0,"sell":0}}
+        ]
+        self.sample_raw_locations = [
+            {"id": "loc001", "name": "Starting Room", "description": "A plain room.", "exits": {"north": "loc002"}},
+            {"id": "loc002", "name": "Corridor", "description": "A long corridor.", "exits": {"south": "loc001"}}
+        ]
+        self.sample_raw_npcs = [
+            {"id": "npc001", "name": "Old Man", "max_hp": 30, "combat_stats": {}, "base_damage_dice": "1d4", "dialogue_responses": {"greet": "Hello"}}
+        ]
+        self.sample_raw_game_objects = [
+            {"id": "obj001", "name": "Mysterious Chest", "description": "It's locked."}
+        ]
+        self.sample_raw_lore = [ # Example of a .txt file loaded by data_loader
+            {"id": "lore_intro", "text_content": "In the beginning...", "source_category": "Lore"}
+        ]
+
+        self.all_sample_raw_data = {
+            "Items": self.sample_raw_items,
+            "Regions": self.sample_raw_locations, # Note: data_loader uses directory name 'Regions'
+            "NPCs": self.sample_raw_npcs,
+            "GameObjects": self.sample_raw_game_objects,
+            "Lore": self.sample_raw_lore
+        }
+        self.game_state.initialize_from_raw_data(self.all_sample_raw_data)
+
+
+    def test_gamestate_initialization(self):
+        """Test GameState initialization with a player character."""
+        self.assertEqual(self.game_state.player_character.name, "Hero")
+        self.assertTrue(len(self.game_state.items) > 0, "Items should be loaded")
+        self.assertTrue(len(self.game_state.locations) > 0, "Locations should be loaded")
+        self.assertTrue(len(self.game_state.npcs) > 0, "NPCs should be loaded")
+
+    def test_initialize_from_raw_data(self):
+        """Test the main data initialization method."""
+        self.assertEqual(len(self.game_state.items), len(self.sample_raw_items))
+        self.assertIn("sword001", self.game_state.items)
+        self.assertIsInstance(self.game_state.items["sword001"], Weapon)
+
+        self.assertEqual(len(self.game_state.locations), len(self.sample_raw_locations))
+        self.assertIn("loc001", self.game_state.locations)
+        self.assertIsInstance(self.game_state.locations["loc001"], Location)
+
+        self.assertEqual(len(self.game_state.npcs), len(self.sample_raw_npcs))
+        self.assertIn("npc001", self.game_state.npcs)
+        self.assertIsInstance(self.game_state.npcs["npc001"], NPC)
+
+        self.assertEqual(len(self.game_state.game_objects), len(self.sample_raw_game_objects))
+        self.assertIn("obj001", self.game_state.game_objects)
+        self.assertEqual(self.game_state.game_objects["obj001"]["name"], "Mysterious Chest")
+
+        self.assertIn("Lore", self.game_state.rag_documents)
+        self.assertEqual(len(self.game_state.rag_documents["Lore"]), len(self.sample_raw_lore))
+        self.assertEqual(self.game_state.rag_documents["Lore"][0]["text_content"], "In the beginning...")
+
+
+    def test_player_equip_unequip_item(self):
+        """Test equipping and unequipping items for the Player."""
+        self.player.add_to_inventory("sword001")
+        self.assertTrue(self.player.equip_item("sword001", "weapon", self.game_state))
+        self.assertEqual(self.player.equipment.get("weapon"), "sword001")
+        self.assertNotIn("sword001", self.player.inventory)
+
+        # Test get_equipped_weapon_stats
+        weapon_stats = self.player.get_equipped_weapon_stats(self.game_state)
+        self.assertEqual(weapon_stats["damage_dice"], "1d8")
+
+        # Unequip
+        unequipped_id = self.player.unequip_item("weapon", self.game_state)
+        self.assertEqual(unequipped_id, "sword001")
+        self.assertIsNone(self.player.equipment.get("weapon"))
+        self.assertIn("sword001", self.player.inventory)
+
+        # Check unarmed stats
+        unarmed_stats = self.player.get_equipped_weapon_stats(self.game_state)
+        self.assertEqual(unarmed_stats["damage_dice"], "1d4") # Player's base_damage_dice
+
+    def test_player_armor_and_ac(self):
+        """Test equipping armor and shield, and AC calculation."""
+        initial_ac = self.player.get_effective_armor_class(self.game_state) # Base AC
+        self.assertEqual(initial_ac, self.player_data["combat_stats"]['armor_class'])
+
+        self.player.add_to_inventory("leather001")
+        self.player.equip_item("leather001", "armor", self.game_state)
+        ac_with_armor = self.player.get_effective_armor_class(self.game_state)
+        self.assertEqual(ac_with_armor, initial_ac + self.game_state.items["leather001"].ac_bonus)
+
+        # Add a shield for testing
+        shield_data = {"id": "shield001", "name": "Iron Shield", "type": "armor", "ac_bonus": 2, "armor_type": "shield"}
+        self.game_state.items["shield001"] = Armor(**shield_data) # Manually add to game_state for this test
+        self.player.add_to_inventory("shield001")
+        self.player.equip_item("shield001", "shield", self.game_state)
+
+        ac_with_shield = self.player.get_effective_armor_class(self.game_state)
+        expected_ac = initial_ac + self.game_state.items["leather001"].ac_bonus + self.game_state.items["shield001"].ac_bonus
+        self.assertEqual(ac_with_shield, expected_ac)
+
+    def test_player_use_consumable(self):
+        """Test using a consumable item."""
+        self.player.current_hp = 50
+        self.player.add_to_inventory("potion_heal_1")
+
+        success, msg = self.player.use_item("potion_heal_1", self.game_state)
+        self.assertTrue(success)
+        self.assertIn("healed for", msg)
+        self.assertNotIn("potion_heal_1", self.player.inventory)
+        self.assertTrue(self.player.current_hp > 50) # HP should have increased
+
+    def test_player_buy_sell_items(self):
+        """Test player buying and selling items."""
+        npc_trader = self.game_state.npcs.get("npc001") # Use the Old Man as a trader for test
+        initial_gold = self.player.equipment["currency"]["gold"]
+
+        # Player buys "sword001" (assuming it's available from NPC or world, for test we check price from item itself)
+        # For a real buy, item should be in NPC's inventory. Here, we test the transaction mechanism.
+        # Let's assume "sword001" has a buy price.
+        item_to_buy = self.game_state.items["sword001"]
+
+        # Ensure player doesn't have it and can afford it
+        if item_to_buy.id in self.player.inventory: self.player.remove_from_inventory(item_to_buy.id)
+        self.player.equipment["currency"]["gold"] = item_to_buy.value["buy"] # Ensure player has exact gold
+
+        success_buy, msg_buy = player_buys_item(self.player, npc_trader, item_to_buy.id, self.game_state)
+        self.assertTrue(success_buy)
+        self.assertIn(item_to_buy.id, self.player.inventory)
+        self.assertEqual(self.player.equipment["currency"]["gold"], 0)
+
+        # Player sells "sword001"
+        success_sell, msg_sell = player_sells_item(self.player, npc_trader, item_to_buy.id, self.game_state)
+        self.assertTrue(success_sell)
+        self.assertNotIn(item_to_buy.id, self.player.inventory)
+        self.assertEqual(self.player.equipment["currency"]["gold"], item_to_buy.value["sell"])
+
+        # Restore initial gold for other tests if needed, though each test should be isolated.
+        self.player.equipment["currency"]["gold"] = initial_gold
+
+
+    def test_combat_player_vs_npc(self):
+        """Test a round of combat: player attacks NPC."""
+        self.player.equip_item("sword001", "weapon", self.game_state) # Ensure player is armed
+        target_npc = self.game_state.npcs["npc001"]
+        initial_npc_hp = target_npc.current_hp
+
+        attack_message = self.player.attack(target_npc, self.game_state)
+        self.assertIsInstance(attack_message, str)
+        if "HIT!" in attack_message:
+            self.assertTrue(target_npc.current_hp < initial_npc_hp or not target_npc.is_alive())
+        else: # Miss
+            self.assertEqual(target_npc.current_hp, initial_npc_hp)
+
+    def test_reveal_clue_from_game_object(self):
+        """Test revealing a clue from a game object."""
+        # Add a sample game object with a clue to game_state.game_objects
+        # Note: initialize_from_raw_data already populates game_objects using self.sample_raw_game_objects
+        # We need to ensure one of them has hidden_clue_details
+
+        test_obj_id = "obj_clue_test"
+        self.game_state.game_objects[test_obj_id] = {
+            "id": test_obj_id, "name": "Dusty Scroll",
+            "description": "An old scroll, perhaps containing secrets.",
+            "hidden_clue_details": {
+                "clue_text": "The password is 'OpenSesame'",
+                "required_skill": "investigation",
+                "dc": 12,
+                "revealed": False
+            }
+        }
+        # Player needs investigation skill
+        self.player.ability_scores["intelligence"] = 15 # Modifier +2
+        self.player.proficiencies_map["skills"].append("investigation")
+
+        success, message = reveal_clue(self.player, test_obj_id, self.game_state)
+
+        # For this test, we can't guarantee success due to dice roll.
+        # Instead, we check if the logic runs and returns appropriate type of message.
+        if success:
+            self.assertEqual(message, "The password is 'OpenSesame'")
+            self.assertIn("The password is 'OpenSesame'", self.player.discovered_clues)
+            self.assertTrue(self.game_state.game_objects[test_obj_id]["hidden_clue_details"]["revealed"])
+        else:
+            self.assertIn("found nothing special", message)
+            self.assertFalse(self.game_state.game_objects[test_obj_id]["hidden_clue_details"]["revealed"])
+
 
 if __name__ == '__main__':
     unittest.main()
