@@ -1,0 +1,754 @@
+[
+  {
+    "id": "young_wolf",
+    "name": "Young Wolf",
+    "type": "monster",
+    "max_hp": 11,
+    "current_location": null,
+    "description": "A young, somewhat clumsy wolf, still learning to hunt effectively with its pack. Often found at the edges of forests and plains.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 3, "damage_bonus": 1, "initiative_bonus": 2 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+      { "name": "Bite", "description": "Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 4 (1d6+1) piercing damage." }
+    ],
+    "environment": ["forest", "plains"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "Young" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "forest_wolf",
+    "name": "Forest Wolf",
+    "type": "monster",
+    "max_hp": 18,
+    "current_location": null,
+    "description": "A common wolf found in temperate forests, known for its cunning and pack coordination.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 4, "damage_bonus": 2, "initiative_bonus": 2 },
+    "base_damage_dice": "2d4",
+    "special_abilities": [
+      { "name": "Bite", "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (2d4+2) piercing damage." },
+      { "name": "Pack Tactics", "description": "The wolf has advantage on an attack roll against a creature if at least one of the wolf's allies is within 5 feet of the creature and the ally isn't incapacitated." }
+    ],
+    "environment": ["forest"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "Standard" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "winterclaw_wolf",
+    "name": "Winterclaw Wolf",
+    "type": "monster",
+    "max_hp": 22,
+    "current_location": null,
+    "description": "Adapted to harsh, snowy environments, this wolf has a thick white coat and an unnervingly cold gaze. Its bite can chill foes to the bone.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 2 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+      { "name": "Frost Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 6 (1d8+2) piercing damage plus 3 (1d6) cold damage. Target must succeed on a DC 12 Constitution saving throw or its speed is reduced by 10 feet until the start of its next turn." }
+    ],
+    "environment": ["snowy forest", "tundra", "icy caves"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "Winterclaw" },
+    "vulnerabilities": ["fire"],
+    "resistances": ["cold"]
+  },
+  {
+    "id": "shadow_stalker_wolf",
+    "name": "Shadow Stalker Wolf",
+    "type": "monster",
+    "max_hp": 16,
+    "current_location": null,
+    "description": "A sleek, dark-furred wolf that hunts in low light or darkness, using shadows to its advantage.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 3 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+      { "name": "Shadow Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 6 (1d8+2) piercing damage." },
+      { "name": "Shadow Meld", "description": "While in dim light or darkness, the wolf can take the Hide action as a bonus action." }
+    ],
+    "environment": ["dark forest", "shadowlands", "underground passages"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "Shadow Stalker" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "dire_wolf_alpha",
+    "name": "Dire Wolf Alpha",
+    "type": "monster",
+    "max_hp": 37,
+    "current_location": null,
+    "description": "A massive, battle-scarred wolf that leads its pack with ferocity and cunning. Its howl can bolster allies and strike fear into enemies.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 6, "damage_bonus": 3, "initiative_bonus": 2 },
+    "base_damage_dice": "2d6",
+    "special_abilities": [
+      { "name": "Mauling Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 10 (2d6+3) piercing damage. If the target is a creature, it must succeed on a DC 13 Strength saving throw or be knocked prone." },
+      { "name": "Pack Leader Howl (1/Day)", "description": "As a bonus action, the alpha lets out a rallying howl. Allies within 30 feet that can hear it gain advantage on attack rolls and saving throws until the start of the alpha's next turn. Enemies within 30 feet that can hear it must succeed on a DC 12 Wisdom saving throw or become frightened for 1 minute. A frightened creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success." }
+    ],
+    "environment": ["forest", "mountains", "grasslands"],
+    "variant_info": { "base_monster_id": "dire_wolf", "variant_type": "Alpha" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "cave_spiderling_swarm",
+    "name": "Cave Spiderling Swarm",
+    "type": "monster",
+    "max_hp": 22,
+    "current_location": null,
+    "description": "A writhing mass of countless tiny cave spiders. Individually weak, but dangerous and unnerving in a swarm. Often found in dark, damp cave networks.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 3, "damage_bonus": 0, "initiative_bonus": 2 },
+    "base_damage_dice": "2d4",
+    "special_abilities": [
+        { "name": "Swarm Bites", "description": "Melee Weapon Attack: +3 to hit, reach 0 ft., one target in the swarm's space. Hit: 7 (2d4) piercing damage, or 3 (1d4) piercing damage if the swarm has half of its hit points or fewer. The target must make a DC 10 Constitution saving throw, taking 4 (1d8) poison damage on a failed save, or half as much damage on a successful one." },
+        { "name": "Swarm", "description": "The swarm can occupy another creature's space and vice versa, and the swarm can move through any opening large enough for a Tiny spider. The swarm can't regain hit points or gain temporary hit points." }
+    ],
+    "environment": ["caves", "underground ruins"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "Swarm" },
+    "vulnerabilities": ["fire", "bludgeoning"],
+    "resistances": ["piercing", "slashing", "charmed", "frightened", "grappled", "paralyzed", "petrified", "prone", "restrained", "stunned"]
+  },
+  {
+    "id": "venomfang_spider",
+    "name": "Venomfang Spider",
+    "type": "monster",
+    "max_hp": 30,
+    "current_location": null,
+    "description": "A medium-sized spider with distinctively large fangs dripping with a potent neurotoxin. It prefers to ambush prey in dark forests and swamps.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 3 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Potent Venom Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 7 (1d8 + 2) piercing damage, and the target must make a DC 13 Constitution saving throw, taking 9 (2d8) poison damage on a failed save, or half as much damage on a successful one. If the poison damage reduces the target to 0 hit points, the target is stable but poisoned for 1 hour, even after regaining hit points, and is paralyzed while poisoned in this way." }
+    ],
+    "environment": ["dark forest", "swamp", "ruined temples"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "Venomfang" },
+    "vulnerabilities": ["cold"],
+    "resistances": ["poison"]
+  },
+  {
+    "id": "webspinner_ambusher",
+    "name": "Webspinner Ambusher",
+    "type": "monster",
+    "max_hp": 26,
+    "current_location": null,
+    "description": "This cunning spider excels at creating intricate webs to trap unsuspecting victims. It's often found in dense forests or abandoned structures, waiting patiently.",
+    "combat_stats": { "armor_class": 15, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 4 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 6 (1d6 + 2) piercing damage." },
+        { "name": "Web Barrage (Recharge 5-6)", "description": "The spider shoots a volley of webs. Each creature in a 15-foot cone originating from the spider must make a DC 12 Dexterity saving throw. On a failed save, a creature is restrained by webbing. As an action, the restrained creature can make a DC 12 Strength check, freeing itself on a success. The webbing can also be attacked and destroyed (AC 10; hp 5; vulnerability to fire damage; immunity to bludgeoning, poison, and psychic damage)." },
+        { "name": "Web Walker", "description": "The spider ignores movement restrictions caused by webbing." }
+    ],
+    "environment": ["dense forest", "ruins", "cave entrances"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "Webspinner" },
+    "vulnerabilities": ["fire"],
+    "resistances": []
+  },
+  {
+    "id": "red_queen_spider",
+    "name": "Red Queen Spider",
+    "type": "monster",
+    "max_hp": 75,
+    "current_location": null,
+    "description": "A monstrously large spider with a blood-red hourglass marking on its abdomen. It commands lesser spiders and its venom causes terrifying hallucinations before a painful death. It makes its lair deep within treacherous cave systems or forgotten temples.",
+    "combat_stats": { "armor_class": 16, "attack_bonus": 7, "damage_bonus": 4, "initiative_bonus": 1 },
+    "base_damage_dice": "2d8",
+    "special_abilities": [
+        { "name": "Paralytic Venom Bite", "description": "Melee Weapon Attack: +7 to hit, reach 10 ft., one creature. Hit: 13 (2d8 + 4) piercing damage, and the target must succeed on a DC 15 Constitution saving throw or be poisoned for 1 hour. If the saving throw fails by 5 or more, the target is instead poisoned and paralyzed for the same duration." },
+        { "name": "Summon Spiderlings (1/Day)", "description": "The Red Queen Spider magically summons 2d4 Cave Spiderling Swarms or 1d4 Venomfang Spiders. The summoned spiders appear in unoccupied spaces within 60 feet of the Red Queen and act as its allies. They remain for 1 hour, or until the Red Queen dies, or until she dismisses them as a bonus action." },
+        { "name": "Legendary Resistance (1/Day)", "description": "If the Red Queen Spider fails a saving throw, it can choose to succeed instead." }
+    ],
+    "environment": ["deep caves", "spider lairs", "ancient temples"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "Boss_RedQueen" },
+    "vulnerabilities": [],
+    "resistances": ["poison", "necrotic"]
+  },
+  {
+    "id": "forest_bear",
+    "name": "Forest Bear",
+    "type": "monster",
+    "max_hp": 34,
+    "current_location": null,
+    "description": "A large, powerful omnivore commonly found in temperate forests. Generally solitary unless a mother with cubs, it is fiercely territorial.",
+    "combat_stats": { "armor_class": 11, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 0 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its bite and one with its claws." },
+        { "name": "Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) piercing damage." },
+        { "name": "Claws", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 10 (2d6 + 3) slashing damage." }
+    ],
+    "environment": ["forest", "hills"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "Standard" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "enraged_grizzly",
+    "name": "Enraged Grizzly",
+    "type": "monster",
+    "max_hp": 42,
+    "current_location": null,
+    "description": "A massive grizzly bear, easily provoked and terrifying when enraged. Its roars echo through the mountains and forests it calls home.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 6, "damage_bonus": 4, "initiative_bonus": 0 },
+    "base_damage_dice": "2d6",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its bite and one with its claws." },
+        { "name": "Mauling Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 11 (2d6 + 4) piercing damage." },
+        { "name": "Rending Claws", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 13 (2d8 + 4) slashing damage." },
+        { "name": "Berserk Charge (Recharges after a Short or Long Rest)", "description": "If the grizzly moves at least 15 feet straight toward a creature and then hits it with a claws attack on the same turn, that target must succeed on a DC 14 Strength saving throw or be knocked prone. If the target is prone, the bear can make one bite attack against it as a bonus action. When this ability is used, the grizzly gains +2 to its attack and damage rolls for 1 minute, but attacks against it have advantage." }
+    ],
+    "environment": ["mountains", "forests", "river valleys"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "EnragedGrizzly" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "ancient_cave_bear",
+    "name": "Ancient Cave Bear",
+    "type": "monster",
+    "max_hp": 60,
+    "current_location": null,
+    "description": "A colossal bear of immense age, often found slumbering in deep, secluded caves or ancient groves. Its hide is as tough as stone, and its power is legendary.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 7, "damage_bonus": 5, "initiative_bonus": -1 },
+    "base_damage_dice": "2d8",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks with its massive claws." },
+        { "name": "Crushing Claws", "description": "Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 16 (2d10 + 5) slashing damage. If the target is a Large or smaller creature, it must succeed on a DC 15 Strength saving throw or be grappled (escape DC 15)." },
+        { "name": "Stone Hide", "description": "The bear has resistance to nonmagical bludgeoning, piercing, and slashing damage." },
+        { "name": "Fearsome Roar (1/Day)", "description": "Each creature of the bear's choice that is within 60 feet of the bear and aware of it must succeed on a DC 14 Wisdom saving throw or become frightened for 1 minute. A creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success." }
+    ],
+    "environment": ["deep caves", "ancient groves", "mountain peaks"],
+    "variant_info": { "base_monster_id": "cave_bear", "variant_type": "Ancient" },
+    "vulnerabilities": [],
+    "resistances": ["cold"]
+  },
+  {
+    "id": "frostfang_bear",
+    "name": "Frostfang Bear",
+    "type": "monster",
+    "max_hp": 52,
+    "current_location": null,
+    "description": "This bear is adapted to the biting cold of arctic regions and icy caverns. Its fur is stark white, and its breath mists with frost. Its attacks can freeze foes in their tracks.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 6, "damage_bonus": 4, "initiative_bonus": 0 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its bite and one with its claws." },
+        { "name": "Icy Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 10 (1d10 + 4) piercing damage plus 4 (1d8) cold damage." },
+        { "name": "Freezing Claws", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 11 (2d6 + 4) slashing damage. Target must succeed on a DC 13 Constitution saving throw or its speed is halved until the end of its next turn." },
+        { "name": "Aura of Frost", "description": "At the start of each of the Frostfang Bear's turns, each creature within 5 feet of it takes 3 (1d6) cold damage." }
+    ],
+    "environment": ["arctic regions", "icy caves", "frozen forests"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "Frostfang" },
+    "vulnerabilities": ["fire"],
+    "resistances": ["cold"]
+  },
+  {
+    "id": "giant_bat",
+    "name": "Giant Bat",
+    "type": "monster",
+    "max_hp": 22,
+    "current_location": null,
+    "description": "A common nocturnal predator, this oversized bat uses its keen senses to hunt in the dark. Often found in caves, ruins, and old forests.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 4, "damage_bonus": 2, "initiative_bonus": 2 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Bite", "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 5 (1d6 + 2) piercing damage." },
+        { "name": "Echolocation", "description": "The bat has blindsight out to 60 feet as long as it's not deafened." },
+        { "name": "Keen Hearing", "description": "The bat has advantage on Wisdom (Perception) checks that rely on hearing." }
+    ],
+    "environment": ["caves", "ruins", "dark forests", "night skies"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "Giant" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "vampire_bat_swarm",
+    "name": "Vampire Bat Swarm",
+    "type": "monster",
+    "max_hp": 27,
+    "current_location": null,
+    "description": "A terrifying cloud of blood-drinking bats that can quickly overwhelm a single target. They are drawn to the scent of blood and often inhabit crypts or cursed forests.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 4, "damage_bonus": 0, "initiative_bonus": 2 },
+    "base_damage_dice": "2d6",
+    "special_abilities": [
+        { "name": "Swarm Bites", "description": "Melee Weapon Attack: +4 to hit, reach 0 ft., one target in the swarm's space. Hit: 7 (2d6) piercing damage, or 3 (1d6) piercing damage if the swarm has half of its hit points or fewer. The target's hit point maximum is reduced by an amount equal to the damage taken, and the swarm regains hit points equal to that amount. This reduction lasts until the target finishes a long rest." },
+        { "name": "Swarm", "description": "The swarm can occupy another creature's space and vice versa, and the swarm can move through any opening large enough for a Tiny bat. The swarm can't regain hit points or gain temporary hit points, except through its Swarm Bites." }
+    ],
+    "environment": ["crypts", "cursed forests", "ruined castles", "vampire lairs"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "VampireSwarm" },
+    "vulnerabilities": ["radiant", "bludgeoning"],
+    "resistances": ["piercing", "slashing", "charmed", "frightened", "grappled", "paralyzed", "petrified", "prone", "restrained", "stunned"]
+  },
+  {
+    "id": "screeching_cave_bat",
+    "name": "Screeching Cave Bat",
+    "type": "monster",
+    "max_hp": 18,
+    "current_location": null,
+    "description": "Larger than a typical giant bat, this cave dweller emits disorienting, high-pitched screeches that can incapacitate those with sensitive hearing or stun nearby foes.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 3, "damage_bonus": 1, "initiative_bonus": 3 },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+        { "name": "Bite", "description": "Melee Weapon Attack: +3 to hit, reach 5 ft., one creature. Hit: 4 (1d4 + 1) piercing damage." },
+        { "name": "Disorienting Screech (Recharge 5-6)", "description": "The bat emits a piercing screech in a 20-foot radius centered on itself. Each creature in that area that can hear the screech must make a DC 11 Constitution saving throw. On a failed save, the creature is deafened for 1 minute and has disadvantage on attack rolls and Wisdom (Perception) checks. A creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success." },
+        { "name": "Echolocation", "description": "The bat has blindsight out to 60 feet as long as it's not deafened." }
+    ],
+    "environment": ["deep caves", "underground chasms", "abandoned mines"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "ScreechingCave" },
+    "vulnerabilities": ["thunder"],
+    "resistances": []
+  },
+  {
+    "id": "lone_howler_wolf",
+    "name": "Lone Howler Wolf",
+    "type": "monster",
+    "max_hp": 15,
+    "current_location": null,
+    "description": "Separated from its pack, this wolf's mournful howls can unnerve its foes. It fights with a desperate edge when cornered.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 4, "damage_bonus": 2, "initiative_bonus": 2 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Bite", "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 6 (1d8+2) piercing damage." },
+        { "name": "Mournful Howl (1/Day)", "description": "As an action, the wolf targets one creature within 60 feet that can hear it. The target must succeed on a DC 11 Wisdom saving throw or have disadvantage on its next attack roll or ability check made before the end of its next turn." },
+        { "name": "Desperate Lunge", "description": "If the wolf has less than half its HP remaining and attacks a creature, it scores a critical hit on a roll of 19-20." }
+    ],
+    "environment": ["forest edges", "desolate plains", "abandoned trails"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "LoneHowler" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "plains_stalker_wolf",
+    "name": "Plains Stalker Wolf",
+    "type": "monster",
+    "max_hp": 17,
+    "current_location": null,
+    "description": "Lean and fast, this wolf is built for endurance running across open grasslands to chase down prey.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 4, "damage_bonus": 2, "initiative_bonus": 3, "speed": 50 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Hamstring Bite", "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6+2) piercing damage. If the target is a creature, it must succeed on a DC 12 Strength saving throw or its speed is reduced by 10 feet until the end of its next turn." },
+        { "name": "Endurance Runner", "description": "The wolf has advantage on saving throws against exhaustion due to forced marching or prolonged chases." }
+    ],
+    "environment": ["grasslands", "savannas", "open plains"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "PlainsStalker" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "timber_wolf_elder",
+    "name": "Timber Wolf Elder",
+    "type": "monster",
+    "max_hp": 28,
+    "current_location": null,
+    "description": "An old, grizzled wolf, wise in the ways of the wild. Its experience makes it a surprisingly tough and cunning survivor.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 1 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Grizzled Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8+3) piercing damage." },
+        { "name": "Survival Instinct", "description": "The elder wolf has advantage on saving throws against being charmed, frightened, or trapped by non-magical means." },
+        { "name": "Warning Howl (Recharge 5-6)", "description": "As a bonus action, the wolf lets out a sharp howl. Allies within 30 feet that can hear it gain a +1 bonus to AC and saving throws until the start of the elder wolf's next turn." }
+    ],
+    "environment": ["deep forests", "mountainous regions"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "TimberElder" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "frenzied_bloodfang_wolf",
+    "name": "Frenzied Bloodfang Wolf",
+    "type": "monster",
+    "max_hp": 20,
+    "current_location": null,
+    "description": "Driven by an insatiable hunger or dark influence, this wolf attacks with reckless abandon, its eyes glowing with a feral light.",
+    "combat_stats": { "armor_class": 11, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 3 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Bloodfang Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 8 (1d10+3) piercing damage, and the wolf regains hit points equal to half the damage dealt." },
+        { "name": "Reckless Frenzy", "description": "At the start of its turn, the wolf can choose to enter a frenzy. While frenzied, it gains advantage on melee attack rolls, but attack rolls against it have advantage. It can end its frenzy as a bonus action." }
+    ],
+    "environment": ["blighted forests", "cursed sites", "areas of famine"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "FrenziedBloodfang" },
+    "vulnerabilities": ["silvered weapons"],
+    "resistances": []
+  },
+  {
+    "id": "diseased_mire_wolf",
+    "name": "Diseased Mire Wolf",
+    "type": "monster",
+    "max_hp": 13,
+    "current_location": null,
+    "description": "A wretched creature from fetid swamps, its fur matted and its breath foul. Its bite carries a debilitating illness.",
+    "combat_stats": { "armor_class": 11, "attack_bonus": 3, "damage_bonus": 1, "initiative_bonus": 0 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Infected Bite", "description": "Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 4 (1d6+1) piercing damage. The target must succeed on a DC 10 Constitution saving throw or be infected with Mire Fever. An infected creature has disadvantage on Strength and Dexterity ability checks and saving throws, and regains only half the normal hit points from any healing. The disease can be cured by lesser restoration or similar magic." }
+    ],
+    "environment": ["swamps", "polluted waterways", "plague-stricken lands"],
+    "variant_info": { "base_monster_id": "wolf", "variant_type": "DiseasedMire" },
+    "vulnerabilities": ["fire"],
+    "resistances": ["poison"]
+  },
+  {
+    "id": "trapdoor_spider",
+    "name": "Trapdoor Spider",
+    "type": "monster",
+    "max_hp": 25,
+    "current_location": null,
+    "description": "This cunning spider digs a silk-lined burrow covered with a camouflaged lid, ambushing prey that wanders too close.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 3 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Venomous Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 7 (1d8 + 2) piercing damage plus 4 (1d8) poison damage." },
+        { "name": "Burrow", "description": "The spider can burrow underground and emerge as a bonus action. It has tremorsense 30 ft while burrowed." },
+        { "name": "Snatch Ambush", "description": "If the spider attacks a creature from its burrow that was unaware of it, the attack roll has advantage. If the attack hits a Medium or smaller creature, the target must succeed on a DC 13 Strength saving throw or be pulled 5 feet into the burrow and restrained (escape DC 13)." }
+    ],
+    "environment": ["loose soil", "forest floors", "sandy areas", "grasslands"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "Trapdoor" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "giant_jumping_spider",
+    "name": "Giant Jumping Spider",
+    "type": "monster",
+    "max_hp": 33,
+    "current_location": null,
+    "description": "An agile hunter with powerful legs for enormous leaps and keen eyesight to track prey from afar.",
+    "combat_stats": { "armor_class": 15, "attack_bonus": 6, "damage_bonus": 3, "initiative_bonus": 4 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Pounce Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 9 (1d10 + 3) piercing damage. If the spider moved at least 20 feet straight toward the target immediately before the hit, the target takes an extra 5 (1d10) piercing damage and must succeed on a DC 14 Strength saving throw or be knocked prone." },
+        { "name": "Powerful Leap", "description": "The spider's long jump is up to 30 feet and its high jump is up to 15 feet, with or without a running start." },
+        { "name": "Agile Dodge (Reaction)", "description": "When an attacker the spider can see hits it with an attack, the spider can halve the damage against it." }
+    ],
+    "environment": ["jungles", "rocky outcrops", "ruins", "tall forests"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "Jumping" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "crystal_web_spider",
+    "name": "Crystal-Web Spider",
+    "type": "monster",
+    "max_hp": 28,
+    "current_location": null,
+    "description": "Found in mineral-rich caves, its webs are laced with razor-sharp crystal shards that glitter menacingly.",
+    "combat_stats": { "armor_class": 16, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 2 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Crystal Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 5 (1d6 + 2) piercing damage plus 3 (1d6) slashing damage." },
+        { "name": "Crystal Webbing", "description": "The spider can cast Web (DC 12), but the strands are laced with sharp crystals. Any creature restrained by or moving through the crystal webs takes 5 (1d10) slashing damage at the start of its turn or for every 5 feet it moves within the webs. The webs are vulnerable to thunder damage (instead of fire)." },
+        { "name": "Razor Shard Shot (Recharge 5-6)", "description": "Ranged Weapon Attack: +5 to hit, range 30/60 ft., one target. Hit: 7 (2d6) piercing damage." }
+    ],
+    "environment": ["crystal caves", "geode caverns", "magical forests", "enchanted ruins"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "CrystalWeb" },
+    "vulnerabilities": ["thunder"],
+    "resistances": ["poison"]
+  },
+  {
+    "id": "broodmothers_guardian_spider",
+    "name": "Broodmother's Guardian",
+    "type": "monster",
+    "max_hp": 45,
+    "current_location": null,
+    "description": "A heavily armored spider with a thick carapace, dedicated to protecting its nest and broodmother at all costs.",
+    "combat_stats": { "armor_class": 17, "attack_bonus": 6, "damage_bonus": 3, "initiative_bonus": 1 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Defensive Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 9 (1d10+3) piercing damage." },
+        { "name": "Guardian Stance", "description": "As a bonus action, the spider can adopt a defensive stance. Until the start of its next turn, attack rolls against it have disadvantage, and it has advantage on Strength and Dexterity saving throws." },
+        { "name": "Threatening Hiss (1/short rest)", "description": "As an action, the spider lets out a loud hiss. Each enemy within 10 feet of it that can hear it must make a DC 12 Wisdom saving throw or have disadvantage on attack rolls against creatures other than the Broodmother's Guardian until the end of the spider's next turn." },
+        { "name": "Tough Carapace", "description": "The spider has resistance to nonmagical bludgeoning, piercing, and slashing damage." }
+    ],
+    "environment": ["spider lairs", "nesting grounds", "deep caves", "underground warrens"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "BroodGuardian" },
+    "vulnerabilities": [],
+    "resistances": ["poison"]
+  },
+  {
+    "id": "nightmare_weaver_spider",
+    "name": "Nightmare Weaver Spider",
+    "type": "monster",
+    "max_hp": 30,
+    "current_location": null,
+    "description": "This shadowy spider's venom and webs can induce terrifying hallucinations and exploit a victim's deepest fears.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 5, "damage_bonus": 2, "initiative_bonus": 3 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Terror Venom Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 5 (1d6 + 2) piercing damage plus 4 (1d8) psychic damage. Target must succeed on a DC 13 Wisdom saving throw or become frightened of the spider for 1 minute. The frightened creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success." },
+        { "name": "Web of Illusions (Recharge 6)", "description": "The spider casts Web (DC 12). The webs are infused with faint illusions, making the area heavily obscured by shadowy, shifting shapes. Creatures relying on sight have disadvantage on Perception checks within the web." }
+    ],
+    "environment": ["shadowy forests", "cursed ruins", "places with thin veils", "dreamscapes"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "NightmareWeaver" },
+    "vulnerabilities": ["radiant"],
+    "resistances": ["psychic", "necrotic"]
+  },
+  {
+    "id": "swamp_lurker_spider",
+    "name": "Swamp Lurker Spider",
+    "type": "monster",
+    "max_hp": 26,
+    "current_location": null,
+    "description": "Adapted for murky, wet environments, this spider uses camouflage and water to its advantage.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 4, "damage_bonus": 2, "initiative_bonus": 2 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Bog Toxin Bite", "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 6 (1d8 + 2) piercing damage. Target must succeed on a DC 11 Constitution saving throw or be poisoned for 1 minute. While poisoned in this way, the target's speed is halved." },
+        { "name": "Swamp Camouflage", "description": "The spider has advantage on Dexterity (Stealth) checks made to hide in swampy terrain." },
+        { "name": "Amphibious", "description": "The spider can breathe air and water." }
+    ],
+    "environment": ["marshes", "swamps", "mangrove forests", "flooded caves"],
+    "variant_info": { "base_monster_id": "spider", "variant_type": "SwampLurker" },
+    "vulnerabilities": ["lightning"],
+    "resistances": ["poison"]
+  },
+  {
+    "id": "honey_crazed_bear",
+    "name": "Honey-Crazed Bear",
+    "type": "monster",
+    "max_hp": 38,
+    "current_location": null,
+    "description": "This bear has gorged on magically potent honey, sending it into a sticky, unpredictable frenzy. It leaves a trail of sweet goo.",
+    "combat_stats": { "armor_class": 11, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 1 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its sticky claws and one with its bite." },
+        { "name": "Sticky Claws", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 8 (1d8 + 3) slashing damage. If the target is a creature, it must succeed on a DC 12 Dexterity saving throw or any weapon it is holding becomes stuck to its hand (it cannot drop or stow the weapon) for 1 minute or until it uses an action to make a DC 12 Strength check to free it." },
+        { "name": "Frenzied Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) piercing damage." },
+        { "name": "Sugar Rush (Recharge 5-6)", "description": "For 1 minute, the bear gains +10 feet to its speed and attacks recklessly (attacks against it have advantage, but its attacks have advantage). During this time, at the start of each of its turns, roll a d6: 1-2: The bear moves in a random direction. 3-4: The bear attacks the nearest creature. 5-6: The bear acts normally." }
+    ],
+    "environment": ["forests with unusual flora", "fey crossings", "abandoned apiaries"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "HoneyCrazed" },
+    "vulnerabilities": [],
+    "resistances": ["poison"]
+  },
+  {
+    "id": "spirit_bear_guardian",
+    "name": "Spirit Bear Guardian",
+    "type": "monster",
+    "max_hp": 50,
+    "current_location": null,
+    "description": "A rare, often pale-furred bear, considered a sacred protector of ancient forests. It radiates a calming, natural energy.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 6, "damage_bonus": 4, "initiative_bonus": 2 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks with its claws." },
+        { "name": "Spirit Claws", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 10 (1d10 + 4) slashing damage plus 4 (1d8) radiant damage." },
+        { "name": "Nature's Ward", "description": "The bear has advantage on saving throws against spells and other magical effects. It is immune to poison and resistant to non-magical physical damage." },
+        { "name": "Calming Presence (1/Day)", "description": "The bear can use its action to emit a calming aura. Hostile beasts within 30 feet that can see or hear it must succeed on a DC 13 Wisdom saving throw or be charmed by the bear for 1 minute. While charmed, they are pacified and will not attack. This effect ends if the spirit bear or its allies attack the charmed creature." }
+    ],
+    "environment": ["ancient forests", "sacred groves", "remote pristine wilderness"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "SpiritGuardian" },
+    "vulnerabilities": ["necrotic"],
+    "resistances": ["radiant", "poison", "bludgeoning, piercing, and slashing from nonmagical attacks"]
+  },
+  {
+    "id": "plague_ridden_bear",
+    "name": "Plague-Ridden Bear",
+    "type": "monster",
+    "max_hp": 40,
+    "current_location": null,
+    "description": "Afflicted by a vile contagion, this bear is a walking vessel of disease, its fur matted with sores and its breath heavy with sickness.",
+    "combat_stats": { "armor_class": 10, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 0 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Pestilent Swipe", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) slashing damage. The target must succeed on a DC 12 Constitution saving throw or be infected with Blight Fever. While infected, the target cannot regain hit points and its hit point maximum is reduced by 3 (1d6) every 24 hours. The disease can be cured by lesser restoration or similar magic." },
+        { "name": "Vomit Plague (Recharge 6)", "description": "The bear exhales a 15-foot cone of diseased bile. Each creature in that area must make a DC 12 Constitution saving throw, taking 14 (4d6) poison damage on a failed save and becoming poisoned for 1 minute, or half as much damage and not poisoned on a successful one. Creatures poisoned this way are also considered infected with Blight Fever." }
+    ],
+    "environment": ["blighted lands", "areas of pestilence", "polluted water sources"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "PlagueRidden" },
+    "vulnerabilities": ["fire", "radiant"],
+    "resistances": ["poison", "necrotic"]
+  },
+  {
+    "id": "mountain_patriarch_bear",
+    "name": "Mountain Patriarch Bear",
+    "type": "monster",
+    "max_hp": 65,
+    "current_location": null,
+    "description": "An immense, ancient bear that has ruled its mountain territory for decades. Its cunning is as formidable as its strength.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 7, "damage_bonus": 5, "initiative_bonus": 1 },
+    "base_damage_dice": "2d8",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its bite and one with its claws." },
+        { "name": "Crushing Bite", "description": "Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 14 (2d8 + 5) piercing damage." },
+        { "name": "Sweeping Claws", "description": "Melee Weapon Attack: +7 to hit, reach 5 ft., up to two targets within 5 feet of each other. Hit: 12 (2d6 + 5) slashing damage." },
+        { "name": "Avalanche Roar (1/Day, Mountainous Terrain Only)", "description": "The bear unleashes a mighty roar. If in mountains or cliffs, this may trigger a rockslide. All creatures on the ground within a 30-foot cone originating from the bear must make a DC 14 Dexterity saving throw, taking 18 (4d8) bludgeoning damage and being knocked prone on a failed save, or half damage and not prone on a success. The area becomes difficult terrain." },
+        { "name": "Cunning Survivor", "description": "The bear has advantage on Wisdom (Survival) checks and saving throws against being surprised." }
+    ],
+    "environment": ["high mountains", "alpine forests", "remote valleys"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "MountainPatriarch" },
+    "vulnerabilities": [],
+    "resistances": ["cold"]
+  },
+  {
+    "id": "young_cave_bear",
+    "name": "Young Cave Bear",
+    "type": "monster",
+    "max_hp": 40,
+    "current_location": null,
+    "description": "Not yet fully grown, this cave bear is still a formidable opponent, with thick hide and developing strength.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 6, "damage_bonus": 3, "initiative_bonus": 0 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its bite and one with its claws." },
+        { "name": "Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 9 (1d10 + 3) piercing damage." },
+        { "name": "Claws", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 10 (2d6 + 3) slashing damage." },
+        { "name": "Developing Hide", "description": "The bear has resistance to nonmagical bludgeoning damage." }
+    ],
+    "environment": ["caves", "foothills near cave systems", "underground passages"],
+    "variant_info": { "base_monster_id": "cave_bear", "variant_type": "Young" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "rivermouth_bear",
+    "name": "Rivermouth Bear",
+    "type": "monster",
+    "max_hp": 42,
+    "current_location": null,
+    "description": "This bear is an adept swimmer, primarily hunting fish and creatures along riverbanks and coastlines. Its fur is slick and water-repellent.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 6, "damage_bonus": 4, "initiative_bonus": 1, "swim_speed": 40 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Multiattack", "description": "The bear makes two attacks: one with its bite and one with its claws." },
+        { "name": "Fish-Hook Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 9 (1d8 + 4) piercing damage. If the target is a Medium or smaller creature, it is grappled (escape DC 14)." },
+        { "name": "Powerful Claws", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 11 (2d6 + 4) slashing damage." },
+        { "name": "Aquatic Ambush", "description": "If the bear attacks a creature that is in water or within 5 feet of water it is also in, the bear has advantage on the attack roll." }
+    ],
+    "environment": ["river deltas", "estuaries", "coastlines", "large rivers"],
+    "variant_info": { "base_monster_id": "bear", "variant_type": "Rivermouth" },
+    "vulnerabilities": ["lightning"],
+    "resistances": []
+  },
+  {
+    "id": "stone_skinned_bat",
+    "name": "Stone-Skinned Bat",
+    "type": "monster",
+    "max_hp": 25,
+    "current_location": null,
+    "description": "Roosting in mineral-rich caves has made this bat's hide unusually tough, like stone. It's slower but more resilient than common bats.",
+    "combat_stats": { "armor_class": 15, "attack_bonus": 3, "damage_bonus": 1, "initiative_bonus": 1, "fly_speed": 40 },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+        { "name": "Stone Bite", "description": "Melee Weapon Attack: +3 to hit, reach 5 ft., one creature. Hit: 4 (1d4 + 1) piercing damage." },
+        { "name": "Stone Hide", "description": "The bat has resistance to nonmagical bludgeoning, piercing, and slashing damage." },
+        { "name": "Heavy Wing Buffet", "description": "Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 3 (1d4+1) bludgeoning damage. If the target is Medium or smaller, it must succeed on a DC 11 Strength saving throw or be knocked prone." }
+    ],
+    "environment": ["mineral-rich caves", "geode caverns", "old quarries"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "StoneSkinned" },
+    "vulnerabilities": ["thunder"],
+    "resistances": []
+  },
+  {
+    "id": "razorwing_bat",
+    "name": "Razorwing Bat",
+    "type": "monster",
+    "max_hp": 18,
+    "current_location": null,
+    "description": "The leading edges of this bat's wings are sharp as razors, allowing it to make slicing flyby attacks.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 4, "damage_bonus": 2, "initiative_bonus": 3, "fly_speed": 60 },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+        { "name": "Razor Wing Slash", "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage. If the target is a creature, it takes an additional 2 (1d4) slashing damage at the start of its next turn from bleeding." },
+        { "name": "Flyby", "description": "The bat doesn't provoke an opportunity attack when it flies out of an enemy's reach." }
+    ],
+    "environment": ["dense forests", "canyons", "ruins with tight passages"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "Razorwing" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "deep_hunter_bat",
+    "name": "Deep Hunter Bat",
+    "type": "monster",
+    "max_hp": 28,
+    "current_location": null,
+    "description": "Adapted to the utter blackness of the deepest caverns, this large bat uses superior echolocation to hunt unseen.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 3, "fly_speed": 50 },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+        { "name": "Ambush Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 7 (1d8 + 3) piercing damage. If the bat attacks with advantage, it deals an extra 3 (1d6) piercing damage." },
+        { "name": "Perfected Echolocation", "description": "The bat has blindsight out to 120 feet and can navigate perfectly in total darkness. It can also perceive invisible creatures within this range unless they are succeeding on a Dexterity (Stealth) check against the bat's Wisdom (Perception) DC 13." },
+        { "name": "Silent Flight", "description": "The bat has advantage on Dexterity (Stealth) checks made to fly silently." }
+    ],
+    "environment": ["deepest caverns", "Underdark passages", "lightless grottos"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "DeepHunter" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "echo_diviner_bat",
+    "name": "Echo-Diviner Bat",
+    "type": "monster",
+    "max_hp": 15,
+    "current_location": null,
+    "description": "This rare bat's advanced echolocation borders on divination, allowing it to anticipate danger and find hidden things.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 3, "damage_bonus": 1, "initiative_bonus": 4, "fly_speed": 50 },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+        { "name": "Bite", "description": "Melee Weapon Attack: +3 to hit, reach 5 ft., one creature. Hit: 3 (1d4 + 1) piercing damage." },
+        { "name": "Precognitive Echo (1/Day)", "description": "As a reaction when an attacker the bat can see hits it with an attack, the bat can force the attacker to reroll the attack and use the lower result." },
+        { "name": "Pathfinder's Hum", "description": "The bat can spend 1 minute focusing its echolocation. If there are any secret doors, traps, or hidden objects within 60 feet, the bat becomes aware of their general direction and nature." }
+    ],
+    "environment": ["magical caves", "ancient sites", "prophetic grottos"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "EchoDiviner" },
+    "vulnerabilities": [],
+    "resistances": ["psychic"]
+  },
+  {
+    "id": "plague_spreader_bat",
+    "name": "Plague Spreader Bat",
+    "type": "monster",
+    "max_hp": 13,
+    "current_location": null,
+    "description": "A sickly bat that carries and spreads a debilitating illness through its bite and foul presence.",
+    "combat_stats": { "armor_class": 12, "attack_bonus": 2, "damage_bonus": 0, "initiative_bonus": 2, "fly_speed": 40 },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+        { "name": "Infectious Bite", "description": "Melee Weapon Attack: +2 to hit, reach 5 ft., one creature. Hit: 2 (1d4) piercing damage. The target must succeed on a DC 10 Constitution saving throw or contract Filth Fever. An infected creature suffers one level of exhaustion, and cannot remove this exhaustion until the disease is cured. At the end of each long rest, an infected creature must make a DC 10 Constitution saving throw. On a failed save, the creature suffers another level of exhaustion. The disease is cured on a successful save." },
+        { "name": "Aura of Sickness", "description": "Any creature (other than another Plague Spreader Bat) that starts its turn within 5 feet of the bat must succeed on a DC 10 Constitution saving throw or be poisoned until the start of its next turn." }
+    ],
+    "environment": ["blighted areas", "swamps", "sewers", "plague zones"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "PlagueSpreader" },
+    "vulnerabilities": ["radiant"],
+    "resistances": ["poison", "necrotic"]
+  },
+  {
+    "id": "albino_cave_terror_bat",
+    "name": "Albino Cave Terror",
+    "type": "monster",
+    "max_hp": 33,
+    "current_location": null,
+    "description": "A large, pale, and ferociously aggressive bat from isolated, lightless cave systems. Its eyes burn with a dull red.",
+    "combat_stats": { "armor_class": 13, "attack_bonus": 5, "damage_bonus": 3, "initiative_bonus": 2, "fly_speed": 50 },
+    "base_damage_dice": "2d6",
+    "special_abilities": [
+        { "name": "Ferocious Bite", "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 10 (2d6 + 3) piercing damage." },
+        { "name": "Terrifying Screech (Recharge 5-6)", "description": "The bat unleashes a terrifying screech at one creature within 30 feet that can hear it. The target must succeed on a DC 13 Wisdom saving throw or become frightened for 1 minute. A frightened creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success." },
+        { "name": "Sunlight Sensitivity", "description": "While in sunlight, the bat has disadvantage on attack rolls, as well as on Wisdom (Perception) checks that rely on sight." }
+    ],
+    "environment": ["secluded cave systems", "lightless grottos", "deep underground"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "AlbinoTerror" },
+    "vulnerabilities": [],
+    "resistances": []
+  },
+  {
+    "id": "ancient_bat_matriarch",
+    "name": "Ancient Bat Matriarch",
+    "type": "monster",
+    "max_hp": 55,
+    "current_location": null,
+    "description": "An immense, ancient bat of surprising cunning, often leading entire colonies. Its leathery wings span wider than a human is tall.",
+    "combat_stats": { "armor_class": 14, "attack_bonus": 6, "damage_bonus": 4, "initiative_bonus": 3, "fly_speed": 50 },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+        { "name": "Piercing Bite", "description": "Melee Weapon Attack: +6 to hit, reach 5 ft., one creature. Hit: 10 (1d10 + 4) piercing damage." },
+        { "name": "Command Bats (1/Day)", "description": "The matriarch can use a bonus action to magically command up to three Giant Bats or one Vampire Bat Swarm within 60 feet. The commanded bats act immediately after the matriarch in the initiative order and follow its telepathic commands (if no commands are given, they defend themselves). This control lasts for 1 hour, or until the matriarch is incapacitated or dismisses them." },
+        { "name": "Sonic Pulse (Recharge 6)", "description": "The matriarch emits a focused sonic pulse in a 30-foot cone. Each creature in that area must make a DC 13 Constitution saving throw, taking 14 (4d6) thunder damage and being deafened for 1 minute on a failed save, or half as much damage and not deafened on a successful one." },
+        { "name": "Resilience of Ages", "description": "The matriarch has advantage on saving throws against being charmed or frightened." }
+    ],
+    "environment": ["deepest caves", "forgotten temples", "ancient bat colonies"],
+    "variant_info": { "base_monster_id": "bat", "variant_type": "AncientMatriarch" },
+    "vulnerabilities": [],
+    "resistances": ["thunder"]
+  }
+]
