@@ -1,6 +1,9 @@
 import os
 import json
-from game_state import NPC # Keep for create_npc_from_data, which might be used by GameState or other modules
+import typing
+
+if typing.TYPE_CHECKING:
+    from game_state import NPC # For type hinting
 
 def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[dict | str]]:
     """
@@ -71,7 +74,7 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
             print(f"Warning: Source directory '{source_path}' not found or is not a directory.")
     return all_data
 
-def create_npc_from_data(npc_data: dict) -> NPC | None:
+def create_npc_from_data(npc_data: dict) -> 'NPC | None':
     """
     Creates an NPC instance from a dictionary of NPC data.
     This function is kept as a utility, potentially for GameState to use
@@ -80,34 +83,37 @@ def create_npc_from_data(npc_data: dict) -> NPC | None:
     Args:
         npc_data: A dictionary containing the NPC's attributes.
                   Expected keys include 'id', 'name', 'max_hp', 'combat_stats',
-                  'base_damage_dice', and optionally 'dialogue_responses'.
+                  'base_damage_dice', and optionally 'dialogue_responses',
+                  'active_time_periods', 'is_currently_active'.
 
     Returns:
-        An NPC object if creation is successful, None otherwise.
+        A dictionary with validated/processed NPC data if successful, None otherwise.
     """
     try:
-        # Ensure essential keys are present before trying to access them directly
         required_keys = ['id', 'name', 'max_hp', 'combat_stats', 'base_damage_dice']
         for key in required_keys:
             if key not in npc_data:
                 raise KeyError(f"Missing essential key '{key}'")
 
-        return NPC(
-            id=npc_data['id'],
-            name=npc_data['name'],
-            max_hp=npc_data['max_hp'],
-            combat_stats=npc_data['combat_stats'],
-            base_damage_dice=npc_data['base_damage_dice'],
-            dialogue_responses=npc_data.get("dialogue_responses") # Safely get optional key
-        )
+        # Prepare a dictionary for NPC instantiation, including optional fields
+        processed_data = {
+            'id': npc_data['id'],
+            'name': npc_data['name'],
+            'max_hp': npc_data['max_hp'],
+            'combat_stats': npc_data['combat_stats'],
+            'base_damage_dice': npc_data['base_damage_dice'],
+            'dialogue_responses': npc_data.get("dialogue_responses"),
+            'active_time_periods': npc_data.get("active_time_periods"),
+            'is_currently_active': npc_data.get("is_currently_active", True) # Default to True
+        }
+        return processed_data
     except KeyError as e:
-        # Error message now includes the specific NPC name/id if available for better debugging
         npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC'))
-        print(f"Warning: Missing essential data for NPC '{npc_identifier}'. Details: {e}. Skipping NPC creation.")
+        print(f"Warning: Missing essential data for NPC '{npc_identifier}'. Details: {e}. Skipping NPC data processing.")
         return None
     except Exception as e:
         npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC'))
-        print(f"Warning: Error creating NPC '{npc_identifier}' from data: {e}. Skipping.")
+        print(f"Warning: Error processing NPC data for '{npc_identifier}': {e}. Skipping.")
         return None
 
 # Old load_game_data and load_npcs_from_directory are now removed.
@@ -150,12 +156,13 @@ if __name__ == '__main__':
             first_npc_data = raw_data_loaded["NPCs"][0]
             if isinstance(first_npc_data, dict): # Should be a dict
                  print(json.dumps(first_npc_data, indent=2))
-                 # Test NPC instantiation using create_npc_from_data
-                 npc_instance = create_npc_from_data(first_npc_data)
-                 if npc_instance:
-                     print(f"\nSuccessfully instantiated NPC from raw data: {npc_instance.name} (ID: {npc_instance.id})")
+                 # Test NPC data processing using create_npc_from_data
+                 processed_npc_dict = create_npc_from_data(first_npc_data)
+                 if processed_npc_dict:
+                     print(f"\nSuccessfully processed NPC data for: {processed_npc_dict.get('name')} (ID: {processed_npc_dict.get('id')})")
+                     # game_state.py would then do: NPC(**processed_npc_dict)
                  else:
-                     print("\nFailed to instantiate NPC from raw data.")
+                     print("\nFailed to process NPC data.")
             else:
                 print("First NPC data was not a dictionary as expected.")
 

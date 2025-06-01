@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_mine_sapper_001",
+    "name": "고블린 지뢰병",
+    "type": "monster",
+    "max_hp": 8,
+    "current_location": null,
+    "description": "전투 전에 몰래 작은 폭발 함정을 설치하거나, 전투 중에 위험을 무릅쓰고 적에게 달려들어 소형 폭탄을 설치하려 합니다.",
+    "combat_stats": {
+      "armor_class": 13,
+      "attack_bonus": 2,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "폭발 함정 설치",
+        "description": "작은 지뢰를 설치합니다. 밟으면 범위 피해를 입힙니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["explosive_components", "digging_tools"]
+  }
+]

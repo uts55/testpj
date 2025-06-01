@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_netter_001",
+    "name": "고블린 그물꾼",
+    "type": "monster",
+    "max_hp": 10,
+    "current_location": null,
+    "description": "무거운 그물을 던져 적을 묶거나 이동을 방해합니다. 그물에 걸린 적은 잠시 동안 행동에 제약을 받습니다.",
+    "combat_stats": {
+      "armor_class": 12,
+      "attack_bonus": 3,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "0",
+    "special_abilities": [
+      {
+        "name": "그물 던지기",
+        "description": "대상을 그물로 묶어 이동 불가 및 공격 불리 상태로 만듭니다. 대상은 힘으로 벗어날 수 있습니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["sturdy_net", "rope"]
+  }
+]

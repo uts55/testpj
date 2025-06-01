@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_poisoner_001",
+    "name": "고블린 독병술사",
+    "type": "monster",
+    "max_hp": 9,
+    "current_location": null,
+    "description": "독이 묻은 단검이나 독침을 사용하여 적을 서서히 약화시킵니다.",
+    "combat_stats": {
+      "armor_class": 13,
+      "attack_bonus": 4,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "독 공격",
+        "description": "공격에 성공하면 대상은 중독 상태가 되어 지속적인 피해를 입거나 능력치에 불이익을 받습니다."
+      }
+    ],
+    "resistances": ["poison"],
+    "vulnerabilities": [],
+    "loot_table_tags": ["poison_vials", "strange_herbs"]
+  }
+]

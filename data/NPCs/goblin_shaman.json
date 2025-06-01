@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_shaman_001",
+    "name": "고블린 주술사",
+    "type": "monster",
+    "max_hp": 12,
+    "current_location": null,
+    "description": "이 고블린 주술사는 너덜너덜한 로브를 걸치고 있으며, 기괴한 주문을 중얼거리며 아군을 강화하거나 적을 약화시킵니다.",
+    "combat_stats": {
+      "armor_class": 11,
+      "attack_bonus": 3,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "주문 시전",
+        "description": "화염 화살 또는 약화의 손길 주문을 시전합니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["shaman_herbs", "crude_talisman"]
+  }
+]

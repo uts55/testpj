@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_sneak_001",
+    "name": "고블린 좀도둑",
+    "type": "monster",
+    "max_hp": 8,
+    "current_location": null,
+    "description": "그림자 속에 숨어 약탈할 기회를 노리는 교활한 고블린입니다. 주로 단검을 사용하며 기습을 선호합니다.",
+    "combat_stats": {
+      "armor_class": 14,
+      "attack_bonus": 4,
+      "damage_bonus": 2,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "기습 공격",
+        "description": "전투 첫 턴에 은신 상태에서 공격하면 추가 피해를 줍니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["stolen_trinkets", "lockpicks"]
+  }
+]

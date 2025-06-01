@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_berserker_001",
+    "name": "고블린 광전사",
+    "type": "monster",
+    "max_hp": 22,
+    "current_location": null,
+    "description": "이 고블린은 전투의 함성에 취해 무모하게 적에게 돌격하며, 커다란 양손 도끼를 휘두릅니다.",
+    "combat_stats": {
+      "armor_class": 12,
+      "attack_bonus": 4,
+      "damage_bonus": 3,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d12",
+    "special_abilities": [
+      {
+        "name": "광란",
+        "description": "생명력이 절반 이하로 떨어지면 공격에 추가 피해를 입힙니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": ["psychic"],
+    "loot_table_tags": []
+  }
+]

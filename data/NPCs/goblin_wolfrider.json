@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_wolfrider_001",
+    "name": "고블린 늑대기수",
+    "type": "monster",
+    "max_hp": 18,
+    "current_location": null,
+    "description": "사나운 늑대를 타고 빠르게 접근하여 창으로 공격합니다. 늑대와 기수는 하나의 개체로 취급될 수 있습니다.",
+    "combat_stats": {
+      "armor_class": 14,
+      "attack_bonus": 5,
+      "damage_bonus": 2,
+      "initiative_bonus": 2,
+      "speed": 50
+    },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+      {
+        "name": "기동성",
+        "description": "전장을 빠르게 이동하며 유리한 위치를 점합니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["wolf_pelt", "short_spear"]
+  }
+]

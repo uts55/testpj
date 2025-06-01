@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_war_chanter_001",
+    "name": "고블린 전투요강사",
+    "type": "monster",
+    "max_hp": 9,
+    "current_location": null,
+    "description": "기괴한 북을 치거나 전투의 노래를 불러 아군 고블린들의 사기를 북돋습니다. 직접적인 전투 능력은 낮습니다.",
+    "combat_stats": {
+      "armor_class": 10,
+      "attack_bonus": 1,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d2",
+    "special_abilities": [
+      {
+        "name": "사기 진작",
+        "description": "행동을 소모하여 주변 아군 고블린들에게 명중률 또는 피해량에 작은 보너스를 부여합니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["crude_drum", "tribal_paint"]
+  }
+]

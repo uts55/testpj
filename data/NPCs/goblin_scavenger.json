@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_scavenger_001",
+    "name": "고블린 폐품수집가",
+    "type": "monster",
+    "max_hp": 7,
+    "current_location": null,
+    "description": "전투 중에도 쓸만한 물건을 찾아 뒤적거립니다. 종종 이상한 물건을 던지거나 사용하기도 합니다.",
+    "combat_stats": {
+      "armor_class": 11,
+      "attack_bonus": 2,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "잡동사니 투척",
+        "description": "무작위 효과를 가진 물건(작은 돌, 끈끈이, 연막 등)을 던집니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["assorted_junk", "tattered_pouch"]
+  }
+]

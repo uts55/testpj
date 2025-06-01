@@ -7,6 +7,6 @@
         "inward": "gloomy_cave_passage1"
     },
     "item_ids": ["iron_sword"],
-    "npc_ids": ["giant_spider"],
+    "npc_ids": ["giant_spider", "goblin_scout", "goblin_shaman_001", "goblin_berserker_001", "goblin_archer_001", "goblin_wolfrider_001", "goblin_chief_001"],
     "game_object_ids": []
 }
