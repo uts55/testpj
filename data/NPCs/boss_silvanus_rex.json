@@ -1,0 +1,35 @@
+[
+  {
+    "id": "boss_silvanus_rex",
+    "name": "타락한 숲의 수호자 실바누스 렉스",
+    "type": "boss",
+    "max_hp": 300,
+    "current_location": null,
+    "description": "한때 숲을 지키던 강력한 정령이었으나, 어둠에 물들어 숲의 생명력을 흡수하는 거대한 나무 괴물입니다. 주기적으로 작은 나무 정령들을 소환하여 자신을 보호하며, 그의 심장은 타락한 에너지로 고동칩니다.",
+    "combat_stats": {
+      "armor_class": 18,
+      "attack_bonus": 8,
+      "damage_bonus": 6,
+      "initiative_bonus": 2,
+      "speed": 20
+    },
+    "base_damage_dice": "2d12",
+    "special_abilities": [
+      {
+        "name": "생명력 흡수 (Life Drain)",
+        "description": "근접 공격 성공 시, 피해량의 절반만큼 자신의 HP를 회복합니다."
+      },
+      {
+        "name": "정령 소환 (Summon Saplings)",
+        "description": "2턴에 한 번씩, 1d4 마리의 '타락한 묘목 정령 (Corrupted Sapling)'을 소환합니다. 이 정령들은 약하지만 수가 많습니다."
+      },
+      {
+        "name": "가시밭길 (Thorn Barrage)",
+        "description": "넓은 범위에 날카로운 가시를 발사하여 지속적인 지형 피해를 입힙니다. (DC 14 민첩 내성 굴림, 실패 시 이동 속도 절반 및 1d8 관통 피해)"
+      }
+    ],
+    "resistances": ["poison", "necrotic", "bludgeoning_non_magical"],
+    "vulnerabilities": ["fire", "slashing_magical_axe"],
+    "loot_table_tags": ["corrupted_heartwood", "living_vine_whip", "seed_of_darkness"]
+  }
+]

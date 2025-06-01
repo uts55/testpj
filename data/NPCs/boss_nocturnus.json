@@ -1,0 +1,39 @@
+[
+  {
+    "id": "boss_nocturnus",
+    "name": "그림자 왕국의 암살자 녹터누스",
+    "type": "boss",
+    "max_hp": 190,
+    "current_location": null,
+    "description": "어둠 속에 숨어 기습하고, 환영을 만들어 플레이어를 교란하는 인간형 암살자 보스. 독과 치명적인 단검 공격에 특화되어 있으며, 그의 움직임은 거의 포착하기 어렵습니다.",
+    "combat_stats": {
+      "armor_class": 17,
+      "attack_bonus": 10,
+      "damage_bonus": 5,
+      "initiative_bonus": 6,
+      "speed": 40
+    },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+      {
+        "name": "그림자 숨기 (Shadow Stealth)",
+        "description": "어두운 곳에서 보너스 행동으로 숨기를 시도할 수 있으며, 이점으로 판정합니다. 숨은 상태에서의 첫 공격은 치명타로 적중합니다."
+      },
+      {
+        "name": "환영 분신 (Illusory Decoys)",
+        "description": "1d3개의 환영 분신을 만들어 플레이어를 교란합니다. 분신은 공격할 수 없지만, 공격 대상으로 지정될 수 있습니다. (분신 HP 1)"
+      },
+      {
+        "name": "맹독 칼날 (Virulent Poison)",
+        "description": "공격에 명중된 대상은 건강 내성 굴림(DC 16)에 실패하면 중독 상태가 되고, 매 턴 추가로 2d8의 독 피해를 입습니다. (중첩 가능)"
+      },
+      {
+        "name": "죽음의 표식 (Mark for Death)",
+        "description": "한 대상을 표적으로 지정합니다. 다음 3턴 동안 녹터누스는 그 대상에 대한 모든 공격에 이점을 가집니다."
+      }
+    ],
+    "resistances": ["necrotic_minor"],
+    "vulnerabilities": ["radiant_light_reveals_true_form", "true_seeing_effects"],
+    "loot_table_tags": ["nocturnus_daggers_set", "shadow_essence_vial", "assassins_guild_insignia"]
+  }
+]

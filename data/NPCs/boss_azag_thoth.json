@@ -1,0 +1,40 @@
+[
+  {
+    "id": "boss_azag_thoth",
+    "name": "차원문 너머의 이형 아자그-쏘스",
+    "type": "boss",
+    "max_hp": 333,
+    "current_location": null,
+    "description": "형언할 수 없는 외형의 우주적 공포. 플레이어의 정신을 잠식하는 공격을 하며, 현실을 왜곡하는 능력을 사용합니다. 그를 직접 보는 것만으로도 광기에 휩싸일 수 있습니다.",
+    "combat_stats": {
+      "armor_class": 15,
+      "attack_bonus": 10,
+      "damage_bonus": 0,
+      "initiative_bonus": 7,
+      "speed": 0,
+      "fly_speed": 40
+    },
+    "base_damage_dice": "N/A",
+    "special_abilities": [
+      {
+        "name": "정신 파괴 (Mind Shatter)",
+        "description": "시야 내의 한 대상에게 지혜 내성 굴림(DC 19)을 강요합니다. 실패 시 5d10의 정신 피해를 입고, 지능과 지혜 점수가 1d4만큼 감소합니다 (저주 효과)."
+      },
+      {
+        "name": "현실 왜곡 (Reality Warp)",
+        "description": "무작위 효과를 발생시킵니다. (예: 중력 역전, 아군 오인 공격, 무작위 차원 이동, 주문 효과 반전 등) 매 2턴마다 발동."
+      },
+      {
+        "name": "광기의 시선 (Maddening Gaze)",
+        "description": "턴 시작 시, 아자그-쏘스를 볼 수 있는 모든 생물은 지혜 내성 굴림(DC 17)을 해야 합니다. 실패 시 짧은 시간 동안의 광기 상태(공격 불가, 비명 지르며 도망 등)에 빠집니다."
+      },
+      {
+        "name": "형상 없음 (Amorphous Form)",
+        "description": "치명타에 면역이며, 특정 물리적 상태이상(예: 속박, 넘어짐)에 면역입니다. 공격 시 명중 굴림에 불리점을 받습니다."
+      }
+    ],
+    "resistances": ["psychic", "all_non_magical_damage"],
+    "vulnerabilities": ["true_name_invocation", "reality_anchor_artifact"],
+    "loot_table_tags": ["fragment_of_madness_crystallized", "non_euclidean_geometry_shard", "whispers_from_the_void_echo"]
+  }
+]

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "boss_gromnash",
+    "name": "고대 트롤 군주 그롬나쉬",
+    "type": "boss",
+    "max_hp": 250,
+    "current_location": null,
+    "description": "거대한 몸집과 무시무시한 재생 능력을 가진 트롤 군주. 주변에 독 안개를 퍼뜨리며, 특정 부위를 집중 공격해야 그의 강력한 재생을 멈출 수 있다는 소문이 있습니다. 전투가 길어지면 더욱 광포해집니다.",
+    "combat_stats": {
+      "armor_class": 16,
+      "attack_bonus": 9,
+      "damage_bonus": 7,
+      "initiative_bonus": 1,
+      "speed": 30
+    },
+    "base_damage_dice": "2d10",
+    "special_abilities": [
+      {
+        "name": "재생 (Regeneration)",
+        "description": "매 턴 시작 시 20의 HP를 회복합니다. 화염 또는 산성 피해를 받으면 다음 턴까지 재생이 멈춥니다. 특정 신체 부위 (예: 심장 노출)를 공격하면 재생이 영구히 멈출 수 있습니다."
+      },
+      {
+        "name": "독성 안개 (Toxic Fumes)",
+        "description": "3턴에 한 번씩, 그롬나쉬가 주변 15피트 반경에 독 안개를 내뿜습니다. 범위 내의 모든 생물은 건강 내성 굴림(DC 15)에 실패하면 중독 상태가 되고 턴마다 1d6의 독 피해를 입습니다."
+      },
+      {
+        "name": "광폭화 (Enrage)",
+        "description": "HP가 50% 이하로 떨어지면 공격력과 공격 횟수가 증가합니다."
+      }
+    ],
+    "resistances": ["bludgeoning", "piercing", "slashing_non_magical"],
+    "vulnerabilities": ["fire", "acid"],
+    "loot_table_tags": ["troll_heart_gem", "ancient_troll_hide", "gromnashs_greatclub_fragment"]
+  }
+]

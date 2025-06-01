@@ -1,0 +1,35 @@
+[
+  {
+    "id": "boss_ragnarr_ironfang",
+    "name": "강철송곳니 부족장 라크나르",
+    "type": "boss",
+    "max_hp": 270,
+    "current_location": null,
+    "description": "북부 황무지를 지배하는 오크 부족의 무자비한 족장. 거대한 양손 도끼 '스컬클리버'를 휘두르며, 전투 중 분노가 극에 달하면 멈출 수 없는 파괴력을 보여줍니다. 그의 부족은 그를 반신처럼 숭배합니다.",
+    "combat_stats": {
+      "armor_class": 18,
+      "attack_bonus": 10,
+      "damage_bonus": 9,
+      "initiative_bonus": 2,
+      "speed": 35
+    },
+    "base_damage_dice": "2d12",
+    "special_abilities": [
+      {
+        "name": "부족장의 격노 (Chieftain's Rage)",
+        "description": "HP가 50% 이하로 떨어지거나, 3턴마다 분노를 폭발시켜 2턴 동안 모든 공격에 이점을 갖고, 피해 저항(모든 피해)을 얻으며, 추가 공격을 한 번 더 합니다. 격노 상태에서는 도발에 쉽게 넘어갑니다."
+      },
+      {
+        "name": "스컬클리버 투척 (Skullcleaver Throw)",
+        "description": "자신의 양손 도끼를 최대 60피트 거리의 대상에게 투척합니다. 명중 시 3d10의 피해를 입히고, 대상은 힘 내성 굴림(DC 16)에 실패하면 넘어진 상태가 됩니다. 도끼는 다음 턴에 그의 손으로 돌아옵니다."
+      },
+      {
+        "name": "전투의 함성: 격려 (War Cry: Inspire Ferocity)",
+        "description": "주변 30피트 내의 모든 아군 오크(또는 부족원)에게 1턴 동안 공격 굴림에 +2 보너스와 10의 임시 HP를 부여합니다."
+      }
+    ],
+    "resistances": ["cold_minor", "fear_effects_while_raging"],
+    "vulnerabilities": ["taunts_exploiting_orcish_pride", "magic_weapon_blessed_by_rival_spirit"],
+    "loot_table_tags": ["ragnarrs_skullcleaver_replica", "ironfang_clan_banner_torn", "chieftains_warpaint_recipe"]
+  }
+]

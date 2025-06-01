@@ -1,0 +1,39 @@
+[
+  {
+    "id": "boss_lich_arcanius",
+    "name": "잊혀진 도서관의 사서 리치 아르카니우스",
+    "type": "boss",
+    "max_hp": 150,
+    "current_location": null,
+    "description": "강력한 고대 마법을 사용하는 리치. 다양한 주문을 구사하며, 자신의 지식을 보호하기 위해 마법 함정과 수호물을 소환합니다. 그의 영혼은 특정 유물에 봉인되어 있을 수 있습니다.",
+    "combat_stats": {
+      "armor_class": 13,
+      "attack_bonus": 9,
+      "damage_bonus": 0,
+      "initiative_bonus": 3,
+      "speed": 30
+    },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+      {
+        "name": "고대 마법 시전 (Ancient Spellcasting)",
+        "description": "매 턴 강력한 주문(예: 연쇄 번개, 마력탄 폭풍, 시간 정지 준비)을 시전합니다. 주문 목록은 다양하며 예측하기 어렵습니다."
+      },
+      {
+        "name": "수호물 소환 (Summon Guardians)",
+        "description": "전투 중 '마법서 수호병(Animated Spellbook)'이나 '지식의 정령(Knowledge Elemental)'을 소환하여 자신을 돕게 합니다."
+      },
+      {
+        "name": "영혼 단지 (Phylactery)",
+        "description": "리치가 쓰러져도, 그의 영혼 단지가 파괴되지 않으면 일정 시간 후 부활합니다. 영혼 단지는 도서관 어딘가에 숨겨져 있을 것입니다."
+      },
+      {
+        "name": "마법 함정 (Magical Traps)",
+        "description": "도서관 곳곳에 보이지 않는 마법 함정(룬 폭발, 역중력 지대 등)을 설치해두었습니다."
+      }
+    ],
+    "resistances": ["necrotic", "cold", "bludgeoning_piercing_slashing_non_magical"],
+    "vulnerabilities": ["radiant_damage_on_phylactery", "silence_effects"],
+    "loot_table_tags": ["arcanius_spellbook_rare", "phylactery_fragment_inert", "key_to_forbidden_section"]
+  }
+]

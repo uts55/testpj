@@ -1,0 +1,40 @@
+[
+  {
+    "id": "boss_voidwurm",
+    "name": "굶주린 공허의 포식자 보이드웜",
+    "type": "boss",
+    "max_hp": 320,
+    "current_location": null,
+    "description": "모든 것을 삼키려는 공허의 존재. 차원을 찢고 나타나 대상을 빨아들이려 하며, 예측 불가능한 공격 패턴과 함께 존재 자체로 주변의 마력을 흡수합니다.",
+    "combat_stats": {
+      "armor_class": 16,
+      "attack_bonus": 9,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 0,
+      "fly_speed": 50
+    },
+    "base_damage_dice": "2d10",
+    "special_abilities": [
+      {
+        "name": "공허 흡수 (Void Suction)",
+        "description": "60피트 원뿔 범위 내의 모든 생물을 자신 쪽으로 20피트 끌어당깁니다. (DC 15 힘 내성 굴림 저항). 보이드웜과 5피트 내에 있는 생물은 턴 시작 시 2d6의 역장 피해를 입습니다."
+      },
+      {
+        "name": "차원 균열 (Dimensional Rift)",
+        "description": "무작위 위치에 일시적인 차원 균열을 엽니다. 균열 근처의 생물은 무작위 효과(예: 단기 차원 이동, 무작위 버프/디버프)를 겪거나, 균열에서 작은 공허 생물(Voidling)이 나타날 수 있습니다."
+      },
+      {
+        "name": "마력 고갈 (Mana Drain Aura)",
+        "description": "30피트 반경 내의 주문 시전자는 주문 시전에 필요한 주문 슬롯 레벨이 1 증가하거나, 주문 시전 시 추가로 자신의 HP를 소모해야 합니다."
+      },
+      {
+        "name": "존재 말소 시도 (Attempt Annihilation)",
+        "description": "HP가 25% 이하로 떨어진 대상을 향해 강력한 에너지를 집중합니다. 대상은 건강 내성 굴림(DC 18)에 실패하면 즉시 HP가 0이 되고 먼지로 변합니다. (하루 1회)"
+      }
+    ],
+    "resistances": ["force", "necrotic_minor"],
+    "vulnerabilities": ["creative_use_of_positive_energy", "reality_stabilizing_fields"],
+    "loot_table_tags": ["voidwurm_core_unstable", "shard_of_torn_reality", "essence_of_the_void_contained"]
+  }
+]
