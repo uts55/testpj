@@ -1,0 +1,93 @@
+[
+  {
+    "id": "orc",
+    "name_kr": "오크",
+    "description_base": "녹색 피부의 호전적인 종족인",
+    "base_combat_stats": {
+      "hp": 60,
+      "ac": 13,
+      "attack_bonus": 5,
+      "damage_dice": "1d12+3",
+      "speed": 30
+    },
+    "inherent_abilities": ["격노 가능성", "강인함"],
+    "possible_attribute_tags": ["strong", "armored", "berserker"],
+    "possible_role_tags": ["warrior", "brute"]
+  },
+  {
+    "id": "kobold",
+    "name_kr": "코볼트",
+    "description_base": "작고 교활한 파충류 인간인",
+    "base_combat_stats": {
+      "hp": 20,
+      "ac": 12,
+      "attack_bonus": 4,
+      "damage_dice": "1d6+2",
+      "speed": 30
+    },
+    "inherent_abilities": ["무리 전술", "빛에 민감함"],
+    "possible_attribute_tags": ["swift", "venomous", "sly"],
+    "possible_role_tags": ["scout", "archer", "trapper"]
+  },
+  {
+    "id": "skeleton",
+    "name_kr": "스켈레톤",
+    "description_base": "뼈만 남은 언데드인",
+    "base_combat_stats": {
+      "hp": 30,
+      "ac": 13,
+      "attack_bonus": 3,
+      "damage_dice": "1d8+1",
+      "speed": 30
+    },
+    "inherent_abilities": ["둔기에 약함", "독 및 상태이상 면역"],
+    "possible_attribute_tags": ["brittle", "ancient", "magic_resistant"],
+    "possible_role_tags": ["warrior", "archer", "guard"]
+  },
+  {
+    "id": "wolf",
+    "name_kr": "늑대",
+    "description_base": "사나운 육식 동물인",
+    "base_combat_stats": {
+      "hp": 35,
+      "ac": 13,
+      "attack_bonus": 5,
+      "damage_dice": "2d4+3",
+      "speed": 40
+    },
+    "inherent_abilities": ["무리 사냥", "뛰어난 후각"],
+    "possible_attribute_tags": ["alpha", "dire", "swift"],
+    "possible_role_tags": ["hunter", "pack_leader"]
+  },
+  {
+    "id": "spider",
+    "name_kr": "거미",
+    "description_base": "거대한 독 거미인",
+    "base_combat_stats": {
+      "hp": 25,
+      "ac": 14,
+      "attack_bonus": 4,
+      "damage_dice": "1d8+2",
+      "speed": 30,
+      "climb_speed": 30
+    },
+    "inherent_abilities": ["독 공격", "거미줄 보행"],
+    "possible_attribute_tags": ["giant", "venomous", "webspinner"],
+    "possible_role_tags": ["ambusher", "skulker"]
+  },
+  {
+    "id": "golem_stone",
+    "name_kr": "돌 골렘",
+    "description_base": "마법으로 움직이는 돌 구조물인",
+    "base_combat_stats": {
+      "hp": 100,
+      "ac": 17,
+      "attack_bonus": 7,
+      "damage_dice": "2d10+5",
+      "speed": 20
+    },
+    "inherent_abilities": ["마법 면역 (특정 주문 제외)", "구조물 특성", "둔기 공격에 취약"],
+    "possible_attribute_tags": ["ancient", "magic_resistant", "sturdy"],
+    "possible_role_tags": ["guardian", "juggernaut"]
+  }
+]

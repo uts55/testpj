@@ -183,6 +183,28 @@ if __name__ == '__main__':
             else:
                 print("First Item data was not a dictionary as expected.")
 
+        new_categories_to_check = ["RaceTemplates", "AttributeTraits", "RoleTemplates"]
+        for category in new_categories_to_check:
+            if category in raw_data_loaded and raw_data_loaded[category]:
+                print(f"\n--- Example: First loaded {category} raw data ---")
+                # Check if the data is a list (expected for these JSONs)
+                if isinstance(raw_data_loaded[category], list) and len(raw_data_loaded[category]) > 0:
+                    # The actual data for these categories is the list itself, where each item is a template.
+                    # The loader wraps this list inside another list. So raw_data_loaded[category][0] is the list of templates.
+                    first_item_list = raw_data_loaded[category][0]
+                    if isinstance(first_item_list, list) and len(first_item_list) > 0:
+                        first_item_data = first_item_list[0] # Get the first template from the list
+                        if isinstance(first_item_data, dict): # Should be a dict
+                            print(json.dumps(first_item_data, indent=2, ensure_ascii=False)) # ensure_ascii=False for Korean characters
+                        else:
+                            print(f"First {category} data item was not a dictionary as expected. Type: {type(first_item_data)}")
+                    else:
+                        print(f"{category} data content is not a list or is empty. Type: {type(first_item_list)}")
+                else:
+                    print(f"{category} data structure is not a list or is empty. Type: {type(raw_data_loaded[category])}")
+            else:
+                print(f"\n--- No data loaded for category: {category} ---")
+
     except ImportError:
         print("Could not import RAG_DOCUMENT_SOURCES from config.py. Make sure it's accessible.")
     except Exception as e:

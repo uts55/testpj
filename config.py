@@ -19,7 +19,10 @@ RAG_DOCUMENT_SOURCES = [
     './data/Factions',
     './data/Technology',
     './data/MagicSystems',
-    './data/Races'
+    './data/Races',
+    './data/RaceTemplates',
+    './data/AttributeTraits',
+    './data/RoleTemplates'
 ]
 
 # Fields to extract text from for RAG embedding.
