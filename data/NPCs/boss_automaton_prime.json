@@ -1,0 +1,42 @@
+[
+  {
+    "id": "boss_automaton_prime",
+    "name": "기계 장치의 거신 오토마톤 프라임",
+    "type": "boss",
+    "max_hp": 400,
+    "current_location": null,
+    "description": "고대 문명의 기술로 만들어진 거대한 기계 골렘. 다양한 무기를 변형하여 사용하며, 특정 부위를 파괴하면 약화되거나 공격 패턴이 변하는 기믹을 보유하고 있습니다.",
+    "combat_stats": {
+      "armor_class": 20,
+      "attack_bonus": 10,
+      "damage_bonus": 8,
+      "initiative_bonus": 0,
+      "speed": 25
+    },
+    "base_damage_dice": "3d8",
+    "special_abilities": [
+      {
+        "name": "무기 시스템 변환 (Weapon System Shift)",
+        "description": "매 2턴마다 무기 시스템을 변경합니다. (예: Siege Fist -> Gatling Laser -> Missile Barrage). 각 시스템은 다른 공격 방식과 범위를 가집니다."
+      },
+      {
+        "name": "부위 파괴 (Targetable Components)",
+        "description": "팔, 다리, 코어 등 특정 부위를 집중 공격하여 파괴할 수 있습니다. 부위 파괴 시 해당 부위의 기능이 정지되거나 보스 전체가 약화됩니다. (예: Arm Cannon 파괴 시 해당 무기 사용 불가, Leg Actuator 파괴 시 이동 속도 감소)"
+      },
+      {
+        "name": "에너지 방출 (Energy Overload)",
+        "description": "HP가 특정 임계점(예: 50%) 이하로 떨어지거나, 특정 부위가 파괴되면 강력한 에너지 파동을 방출하여 주변에 광역 피해(4d10 역장 피해, DC 16 민첩 내성)를 입힙니다."
+      }
+    ],
+    "resistances": ["poison", "psychic", "fire_minor", "cold_minor"],
+    "vulnerabilities": ["lightning_to_core_exposed", "adamantine_weapons_breach_armor"],
+    "loot_table_tags": ["automaton_core_ancient", "prime_actuator_module", "blueprint_archaic_weaponry"],
+    "additional_info": {
+      "component_hp": {
+        "arm_cannon": 100,
+        "leg_actuator": 75,
+        "core_exposure_threshold_hp_percentage": 50
+      }
+    }
+  }
+]

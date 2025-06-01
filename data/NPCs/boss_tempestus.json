@@ -1,0 +1,36 @@
+[
+  {
+    "id": "boss_tempestus",
+    "name": "하늘을 가르는 폭풍용 템페스투스",
+    "type": "boss",
+    "max_hp": 350,
+    "current_location": null,
+    "description": "번개와 폭풍을 자유자재로 다루는 거대한 용입니다. 비행하며 예측 불가능한 공격을 가하고, 광역 번개 공격으로 지상을 초토화시킵니다. 그의 비늘은 폭풍의 에너지를 머금고 있습니다.",
+    "combat_stats": {
+      "armor_class": 19,
+      "attack_bonus": 11,
+      "damage_bonus": 9,
+      "initiative_bonus": 5,
+      "speed": 40,
+      "fly_speed": 80
+    },
+    "base_damage_dice": "2d10",
+    "special_abilities": [
+      {
+        "name": "번개 숨결 (Lightning Breath)",
+        "description": "90피트 직선 범위에 강력한 번개를 내뿜습니다. 대상은 민첩 내성 굴림(DC 18)에 실패하면 12d6의 번개 피해를 입고, 성공 시 절반의 피해를 입습니다. (재충전 5-6)"
+      },
+      {
+        "name": "날개 공격 (Wing Attack)",
+        "description": "보너스 행동으로 거대한 날개를 휘둘러 주변 15피트 내의 적들을 밀쳐내고 2d6+힘 수정치의 피해를 입힙니다. (DC 17 힘 내성 굴림으로 저항)"
+      },
+      {
+        "name": "폭풍 소환 (Summon Storm)",
+        "description": "전투 지역에 강력한 폭풍우를 소환하여 시야를 방해하고, 매 턴 무작위 대상에게 낙뢰(3d10 번개 피해)를 떨어뜨립니다."
+      }
+    ],
+    "resistances": ["lightning", "thunder"],
+    "vulnerabilities": ["piercing_ballista_bolt_to_wing_joint"],
+    "loot_table_tags": ["storm_dragon_scale_charged", "heart_of_the_tempest", "tempestus_fang_lightning_infused"]
+  }
+]

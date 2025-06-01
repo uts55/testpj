@@ -1,0 +1,40 @@
+[
+  {
+    "id": "boss_krakens_shadow",
+    "name": "심해의 악몽 크라켄의 그림자",
+    "type": "boss",
+    "description": "거대한 촉수와 강력한 정신 공격으로 플레이어를 괴롭히는 심해의 존재. 본체는 어둠 속에 숨겨져 있으며, 여러 개의 촉수를 먼저 파괴해야 본체에 피해를 줄 수 있는 기회가 생길지도 모릅니다.",
+    "max_hp": 400,
+    "current_location": null,
+    "combat_stats": {
+      "armor_class": 14,
+      "attack_bonus": 10,
+      "damage_bonus": 7,
+      "initiative_bonus": 3,
+      "speed": 0
+    },
+    "base_damage_dice": "2d8",
+    "special_abilities": [
+      {
+        "name": "다중 촉수 공격 (Multi-Tentacle Assault)",
+        "description": "매 턴 2개의 촉수로 각각 다른 대상을 공격하거나 한 대상을 집중 공격합니다. (개별 촉수는 HP 80, AC 17을 가지며, 파괴 가능. 모든 촉수가 파괴되면 본체가 1턴간 취약해집니다.)"
+      },
+      {
+        "name": "정신 붕괴 (Mind Crush)",
+        "description": "(본체 능력) 시야 내의 한 대상에게 강력한 정신 공격을 가합니다. 대상은 지혜 내성 굴림(DC 17)에 실패하면 2d10의 정신 피해를 입고 1턴 동안 행동 불능 상태가 됩니다."
+      },
+      {
+        "name": "심연의 장막 (Abyssal Shroud)",
+        "description": "본체는 짙은 어둠과 마법적 장막으로 보호받아 직접 공격하기 어렵습니다. 특정 조건을 만족하거나 촉수를 모두 파괴하면 일시적으로 드러납니다."
+      }
+    ],
+    "resistances": ["cold", "psychic_unless_shroud_is_broken"],
+    "vulnerabilities": ["lightning_on_tentacles", "light_magic_on_shroud"],
+    "loot_table_tags": ["kraken_ink_sac_potent", "shadow_pearl_abyssal", "tentacle_fragment_pulsing"],
+    "additional_info": {
+      "tentacle_hp": 80,
+      "tentacle_ac": 17,
+      "main_body_vulnerable_duration_turns": 1
+    }
+  }
+]

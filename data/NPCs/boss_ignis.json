@@ -1,0 +1,36 @@
+[
+  {
+    "id": "boss_ignis",
+    "name": "화산 심장의 불사조 이그니스",
+    "type": "boss",
+    "max_hp": 180,
+    "current_location": null,
+    "description": "죽어도 잿더미에서 부활하는 강력한 불사조입니다. 부활할 때마다 더욱 강력한 화염 공격을 사용하며, 특정 조건을 만족해야 완전한 소멸이 가능합니다. 그 존재 자체가 화산 활동을 촉진시킵니다.",
+    "combat_stats": {
+      "armor_class": 15,
+      "attack_bonus": 9,
+      "damage_bonus": 5,
+      "initiative_bonus": 4,
+      "speed": 20,
+      "fly_speed": 60
+    },
+    "base_damage_dice": "2d8",
+    "special_abilities": [
+      {
+        "name": "잿더미 부활 (Rebirth from Ashes)",
+        "description": "HP가 0이 되면 잿더미로 변합니다. 1d4 턴 후, 잿더미에서 최대 HP로 부활하며, 모든 화염 공격이 1d6만큼 강화됩니다 (최대 3회 중첩). 잿더미 상태에서 신성한 물이나 극寒의 마법으로 정화하면 영구히 소멸시킬 수 있습니다."
+      },
+      {
+        "name": "화염 폭풍 (Firestorm)",
+        "description": "거대한 화염 폭풍을 일으켜 지정된 지역에 3d10의 화염 피해를 입힙니다. (DC 16 민첩 내성 굴림, 성공 시 절반 피해)"
+      },
+      {
+        "name": "불꽃 날개 (Wings of Flame)",
+        "description": "비행 중일 때, 주변 10피트 내의 적들은 턴 시작 시 1d6의 화염 피해를 입습니다."
+      }
+    ],
+    "resistances": ["fire", "poison"],
+    "vulnerabilities": ["cold_during_ash_form", "holy_water_on_ashes"],
+    "loot_table_tags": ["phoenix_feather_eternal", "heart_of_ignis_core", "ashes_of_rebirth"]
+  }
+]

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "boss_asterion",
+    "name": "저주받은 미궁의 파수꾼 아스테리온",
+    "type": "boss",
+    "max_hp": 220,
+    "current_location": null,
+    "description": "강철로 된 뿔과 거대한 도끼를 휘두르는 미노타우로스. 복잡한 지형을 이용한 전투에 능하며, 플레이어를 혼란시키는 우렁찬 포효를 사용합니다. 그의 미궁에서는 길을 잃기 쉽습니다.",
+    "combat_stats": {
+      "armor_class": 17,
+      "attack_bonus": 10,
+      "damage_bonus": 8,
+      "initiative_bonus": 3,
+      "speed": 40
+    },
+    "base_damage_dice": "2d12",
+    "special_abilities": [
+      {
+        "name": "미궁의 포효 (Labyrinthine Roar)",
+        "description": "30피트 반경 내의 모든 적에게 지혜 내성 굴림(DC 16)을 강요합니다. 실패 시 1턴 동안 혼란 상태(공격 불가, 무작위 이동)에 빠집니다."
+      },
+      {
+        "name": "맹렬한 돌진 (Gore Charge)",
+        "description": "직선으로 40피트 돌진하여 경로상의 모든 적에게 공격을 가합니다. 명중 시 3d6의 추가 피해를 입히고 대상을 넘어뜨립니다. (DC 15 힘 내성 굴림으로 저항)"
+      },
+      {
+        "name": "지형 활용 (Terrain Master)",
+        "description": "미궁과 같은 복잡한 지형에서 이동 및 공격에 이점을 가집니다. (예: 보너스 액션으로 숨기 시도 가능)"
+      }
+    ],
+    "resistances": ["fear"],
+    "vulnerabilities": ["psychic_damage_after_solving_maze_puzzle"],
+    "loot_table_tags": ["asterions_steel_horn", "minotaur_greataxe_fragment", "map_of_the_cursed_maze"]
+  }
+]
