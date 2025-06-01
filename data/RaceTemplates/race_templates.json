@@ -56,7 +56,7 @@
       "speed": 40
     },
     "inherent_abilities": ["무리 사냥", "뛰어난 후각"],
-    "possible_attribute_tags": ["alpha", "dire", "swift"],
+    "possible_attribute_tags": ["beast_common", "beast_pack_animal", "wolf_specific_attr", "swift"],
     "possible_role_tags": ["hunter", "pack_leader"]
   },
   {
@@ -72,7 +72,7 @@
       "climb_speed": 30
     },
     "inherent_abilities": ["독 공격", "거미줄 보행"],
-    "possible_attribute_tags": ["giant", "venomous", "webspinner"],
+    "possible_attribute_tags": ["beast_common", "beast_ambusher", "spider_specific_attr", "giant", "venomous", "webspinner"],
     "possible_role_tags": ["ambusher", "skulker"]
   },
   {
@@ -89,5 +89,36 @@
     "inherent_abilities": ["마법 면역 (특정 주문 제외)", "구조물 특성", "둔기 공격에 취약"],
     "possible_attribute_tags": ["ancient", "magic_resistant", "sturdy"],
     "possible_role_tags": ["guardian", "juggernaut"]
+  },
+  {
+    "id": "bear",
+    "name_kr": "곰",
+    "description_base": "커다랗고 강력한 발톱을 가진",
+    "base_combat_stats": {
+      "hp": 50,
+      "ac": 12,
+      "attack_bonus": 6,
+      "damage_dice": "1d10+4",
+      "speed": 35
+    },
+    "inherent_abilities": ["위협적인 포효", "강인한 체력"],
+    "possible_attribute_tags": ["beast_common", "beast_large_powerful", "bear_specific_attr", "tough"],
+    "possible_role_tags": ["brute", "guardian"]
+  },
+  {
+    "id": "bat",
+    "name_kr": "박쥐",
+    "description_base": "어둠 속을 날아다니는 작은",
+    "base_combat_stats": {
+      "hp": 15,
+      "ac": 13,
+      "attack_bonus": 4,
+      "damage_dice": "1d4+2",
+      "speed": 10,
+      "fly_speed": 40
+    },
+    "inherent_abilities": ["날카로운 비명", "흡혈 공격 가능성"],
+    "possible_attribute_tags": ["beast_common", "beast_flying", "bat_specific_attr", "swift"],
+    "possible_role_tags": ["scout", "ambusher"]
   }
 ]

@@ -97,5 +97,68 @@
     "added_abilities": [],
     "added_resistances": ["piercing"],
     "added_vulnerabilities": ["bludgeoning"]
+  },
+  {
+    "id": "starving_beast",
+    "name_prefix_kr": "굶주린",
+    "description_fragment": "먹이를 찾아 혈안이 된",
+    "stat_modifiers": { "hp_multiplier": 0.8, "damage_bonus_add": 2, "attack_bonus_add": 1 },
+    "added_abilities": ["광란 (체력 낮을 시 추가 공격 시도)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "pack_leader_beast",
+    "name_prefix_kr": "무리 우두머리",
+    "description_fragment": "무리를 이끄는 카리스마를 지닌",
+    "stat_modifiers": { "hp_multiplier": 1.2, "attack_bonus_add": 1, "damage_bonus_add": 1 },
+    "added_abilities": ["무리의 격려 (주변 동일 종족 아군에게 명중률 +1 부여)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "monstrous_size_beast",
+    "name_prefix_kr": "초거대",
+    "description_fragment": "산처럼 거대한 체구를 자랑하는",
+    "stat_modifiers": { "hp_multiplier": 1.8, "damage_bonus_add": 4, "speed_add": -10, "ac_add": -1 },
+    "added_abilities": ["강타 (공격 시 일정 확률로 대상 넘어뜨림)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "predatory_swiftness_beast",
+    "name_prefix_kr": "포식자의 날렵함을 지닌",
+    "description_fragment": "눈으로 쫓기 힘든 속도의",
+    "stat_modifiers": { "speed_add": 15, "ac_add": 2 },
+    "added_abilities": ["질주 공격 (이동 후 첫 공격에 추가 피해)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "poison_fanged_beast",
+    "name_prefix_kr": "독송곳니를 가진",
+    "description_fragment": "치명적인 독액을 머금은 송곳니의",
+    "stat_modifiers": {},
+    "added_abilities": ["맹독 공격 (기본 공격 시 추가 1d6 독 피해, 중독 상태 부여 가능성)"],
+    "added_resistances": ["poison"],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "thick_skinned_beast",
+    "name_prefix_kr": "두꺼운 가죽의",
+    "description_fragment": "왠만한 공격은 튕겨낼 듯한 가죽을 지닌",
+    "stat_modifiers": { "ac_add": 2, "hp_add": 10 },
+    "added_abilities": [],
+    "added_resistances": ["bludgeoning_non_magical"],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "cave_dwelling_beast",
+    "name_prefix_kr": "동굴에 서식하는",
+    "description_fragment": "어둠에 익숙한",
+    "stat_modifiers": { "speed_add": -5 },
+    "added_abilities": ["암흑 시야 (어둠 속에서 시야 제한 없음)", "매복 전문가 (첫 공격 시 추가 명중률)"],
+    "added_resistances": [],
+    "added_vulnerabilities": ["bright_light_sensitivity"]
   }
 ]
