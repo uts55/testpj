@@ -5,6 +5,8 @@ from magic import SPELLBOOK, Spell # Import necessary spellcasting components
 from gemini_dm import notify_dm # Import for DM notifications
 from quests import ALL_QUESTS # Import for accessing quest details
 from factions import Faction # Added import
+from monster_generator import MonsterGenerator
+from generated_monster import GeneratedMonster # For type hinting if needed
 
 # Import necessary functions/classes from data_loader and config for the main block
 import json # For main block example printing
@@ -494,6 +496,13 @@ class GameState:
         # Turn count
         self.turn_count: int = 0
 
+        # Monster Generation related
+        self.monster_race_templates: list = []
+        self.monster_attribute_templates: list = []
+        self.monster_role_templates: list = []
+        self.monster_generator: MonsterGenerator | None = None
+        self.generated_monsters: dict[str, GeneratedMonster] = {} # To store generated monsters
+
     def check_for_events(self, current_location_id: str | None = None):
         """
         Checks for and triggers predefined events based on game state conditions.
@@ -727,6 +736,29 @@ class GameState:
                 logging.error(f"Error loading faction '{faction_id}': {e}. Data: {faction_data}")
 
     def initialize_from_raw_data(self, all_raw_data: dict[str, list[dict | str]]):
+        # Load monster generation templates
+        raw_race_templates = all_raw_data.get('RaceTemplates', [])
+        if raw_race_templates and isinstance(raw_race_templates, list) and len(raw_race_templates) > 0:
+            # Assuming the first element is the actual list of templates if the JSON root is a list
+            self.monster_race_templates = raw_race_templates[0] if isinstance(raw_race_templates[0], list) else raw_race_templates
+        else:
+            logging.warning("No 'RaceTemplates' data found or data is not in expected list format.")
+            self.monster_race_templates = [] # Ensure it's an empty list if not found or malformed
+
+        raw_attr_templates = all_raw_data.get('AttributeTraits', [])
+        if raw_attr_templates and isinstance(raw_attr_templates, list) and len(raw_attr_templates) > 0:
+            self.monster_attribute_templates = raw_attr_templates[0] if isinstance(raw_attr_templates[0], list) else raw_attr_templates
+        else:
+            logging.warning("No 'AttributeTraits' data found or data is not in expected list format.")
+            self.monster_attribute_templates = []
+
+        raw_role_templates = all_raw_data.get('RoleTemplates', [])
+        if raw_role_templates and isinstance(raw_role_templates, list) and len(raw_role_templates) > 0:
+            self.monster_role_templates = raw_role_templates[0] if isinstance(raw_role_templates[0], list) else raw_role_templates
+        else:
+            logging.warning("No 'RoleTemplates' data found or data is not in expected list format.")
+            self.monster_role_templates = []
+
         self.load_items(all_raw_data.get('Items', []))
         self.load_locations(all_raw_data.get('Regions', []))
         self.load_npcs(all_raw_data.get('NPCs', []))
@@ -768,6 +800,17 @@ class GameState:
         # Let's assume for now self.world_data will be populated from self.game_objects for those functions.
         self.world_data = self.game_objects # Point world_data to the new game_objects dict
 
+        # Initialize Monster Generator
+        if self.monster_race_templates and self.monster_attribute_templates and self.monster_role_templates:
+            self.monster_generator = MonsterGenerator(
+                race_templates=self.monster_race_templates,
+                attribute_templates=self.monster_attribute_templates,
+                role_templates=self.monster_role_templates
+            )
+            logging.info("MonsterGenerator initialized successfully.")
+        else:
+            logging.warning("MonsterGenerator could not be initialized due to missing templates (Race, Attribute, or Role).")
+
     def start_dialogue(self, npc_id: str, initial_key: str = "greetings"):
         if npc_id not in self.npcs: logging.warning(f"Dialogue with non-existent NPC ID: {npc_id}"); return
         self.current_dialogue_npc_id = npc_id; self.current_dialogue_key = initial_key
@@ -786,6 +829,29 @@ class GameState:
         for item_id in pc.inventory: item_obj=self.items.get(item_id); inv_names.append(item_obj.name if item_obj else item_id)
         inv_s = ', '.join(inv_names) if inv_names else "empty"
         return f"Player: {pc.name}, HP: {pc.current_hp}/{pc.max_hp}, Inv: [{inv_s}]"
+
+    def spawn_monster(self, race_id: str | None = None,
+                      attribute_ids: list[str] | None = None,
+                      role_id: str | None = None,
+                      difficulty_level: int | None = None) -> GeneratedMonster | None:
+        if not self.monster_generator:
+            logging.error("MonsterGenerator not initialized. Cannot spawn monster.")
+            return None
+
+        monster = self.monster_generator.generate_monster(
+            race_id=race_id,
+            attribute_ids=attribute_ids,
+            role_id=role_id,
+            difficulty_level=difficulty_level
+        )
+
+        if monster:
+            self.generated_monsters[monster.id] = monster
+            # Optionally add to self.npcs if it needs to be treated like a regular NPC for some systems
+            # self.npcs[monster.id] = monster
+            logging.info(f"Spawned monster: {monster.name} (ID: {monster.id})")
+            notify_dm(f"A wild {monster.name} appears!") # Notify DM
+        return monster
 
 def determine_initiative(participants:list[Character])->list[str]:
     if not participants: return []
@@ -1052,5 +1118,50 @@ if __name__ == '__main__':
     else:
         print("Game object 'sunstone' not found in game.game_objects. Skipping reveal_clue test.")
 
+    print("\n--- Monster Generation Test ---")
+    if game.monster_generator:
+        print("MonsterGenerator is available.")
+        # Test generating a random monster
+        random_monster = game.spawn_monster(difficulty_level=3)
+        if random_monster:
+            print(f"Generated Random Monster: ID: {random_monster.id}, Name: {random_monster.name}, HP: {random_monster.max_hp}, AC: {random_monster.combat_stats.get('armor_class')}")
+            print(f"  Description: {random_monster.description_kr}")
+            print(f"  Abilities: {random_monster.special_abilities}")
+            print(f"  Stats: {random_monster.combat_stats}")
+            print(f"  Stored in game.generated_monsters: {random_monster.id in game.generated_monsters}")
+
+        # Test generating a specific monster
+        specific_monster = game.spawn_monster(race_id="orc", attribute_ids=["strong"], role_id="warrior", difficulty_level=5)
+        if specific_monster:
+            print(f"Generated Specific Monster: ID: {specific_monster.id}, Name: {specific_monster.name}, HP: {specific_monster.max_hp}, AC: {specific_monster.combat_stats.get('armor_class')}")
+            print(f"  Stored in game.generated_monsters: {specific_monster.id in game.generated_monsters}")
+
+        # Example of adding a generated monster to combat participants (conceptual)
+        if random_monster and random_monster.id in game.generated_monsters:
+            # game.participants_in_combat.append(random_monster)
+            # print(f"Added {random_monster.name} to combat participants (conceptual).")
+            # To make it attackable in the existing __main__ combat test, it could be added to game.npcs
+            game.npcs[random_monster.id] = random_monster # Add to npcs so it can be a target in existing test logic
+            print(f"Added {random_monster.name} to game.npcs for testing in combat.")
+
+    else:
+        print("MonsterGenerator is NOT available. Check logs for errors.")
+
+    # Modify the Goblin Combat Test to potentially include a generated monster
+    # Find the line: goblins_to_fight = [npc for npc in cave_npc_objects if "goblin" in npc.id.lower()]
+    # Add the generated monster to this list if it exists
+    # This part is more complex to inject into existing __main__ and might be better as a separate test block.
+    # For now, the print statements above and adding to game.npcs is a good verification.
+    # The existing goblin combat test uses npc_ids from location data.
+    # A simple way to include a generated monster in a similar test would be:
+    # if random_monster and random_monster.id in game.npcs:
+    #    print(f"\n--- Combat Test with Generated Monster ({random_monster.name}) ---")
+    #    player.current_hp = player.max_hp # Heal player for new fight
+    #    print(f"{player.name} (HP: {player.current_hp}) vs {random_monster.name} (HP: {random_monster.current_hp})")
+    #    attack_msg_p = player.attack(random_monster, game)
+    #    print(f"Player action: {attack_msg_p}")
+    #    if random_monster.is_alive():
+    #        attack_msg_m = random_monster.attack(player, game)
+    #        print(f"Monster action: {attack_msg_m}")
 
     print("\n--- End of GameState Demonstration ---")
