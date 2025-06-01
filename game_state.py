@@ -16,13 +16,45 @@ from config import RAG_DOCUMENT_SOURCES
 # These class definitions are assumed to be the same as provided in the previous successful step.
 # For brevity in this tool call, I will not repeat them here, but they are part of the file.
 
+TIME_PERIODS = ['새벽', '오전', '정오', '오후', '저녁', '밤', '자정']
+WEATHER_STATES = ['맑음', '흐림', '비', '안개', '눈']
+
+PREDEFINED_EVENTS = [
+    {
+        "id": "first_visit_town_square",
+        "condition_type": "first_location_visit",
+        "location_id": "starter_town_square", # Placeholder ID
+        "description": "마을 광장에 들어서자, 한 노인이 당신에게 다가와 도움을 요청합니다."
+    },
+    {
+        "id": "quest_complete_sample",
+        "condition_type": "quest_completed",
+        "quest_id": "sample_quest_001", # Placeholder ID
+        "description": "'샘플 퀘스트'를 완료하자 숨겨진 보상에 대한 쪽지를 발견했습니다."
+    },
+    {
+        "id": "turn_count_milestone_50",
+        "condition_type": "turn_count_reached",
+        "turn_count": 50,
+        "description": "50턴이 지나자, 하늘에서 이상한 빛이 관측되었습니다."
+    }
+    # Example for item_acquired (implementation in a later step)
+    # {
+    #     "id": "item_acquired_special_orb",
+    #     "condition_type": "item_acquired",
+    #     "item_id": "special_orb_id", # Placeholder ID
+    #     "description": "특별한 오브를 손에 넣자 강력한 기운이 느껴집니다."
+    # }
+]
+
 class Location:
     """
     Represents a game location or region.
     JSON structure: (as previously defined)
     """
     def __init__(self, id: str, name: str, description: str, exits: dict[str, str],
-                 item_ids: list[str] = None, npc_ids: list[str] = None, game_object_ids: list[str] = None):
+                 item_ids: list[str] = None, npc_ids: list[str] = None, game_object_ids: list[str] = None,
+                 operating_hours: list[str] | None = None, is_currently_open: bool = True):
         self.id = id
         self.name = name
         self.description = description
@@ -30,6 +62,8 @@ class Location:
         self.item_ids = item_ids if item_ids is not None else []
         self.npc_ids = npc_ids if npc_ids is not None else []
         self.game_object_ids = game_object_ids if game_object_ids is not None else []
+        self.operating_hours = operating_hours
+        self.is_currently_open = is_currently_open
     def __repr__(self): return f"<Location(id='{self.id}', name='{self.name}')>"
 
 class Item:
@@ -188,6 +222,7 @@ class Player(Character):
         self.base_armor_class = self.combat_stats.get('armor_class',10)
         self.active_quests = player_data.get("active_quests",{})
         self.completed_quests = player_data.get("completed_quests",[])
+        self.visited_locations: set[str] = set(player_data.get("visited_locations", []))
     def _get_item_from_game_state(self, item_id:str, game_state:'GameState')->Item|None:
         if not item_id: return None
         item = game_state.items.get(item_id)
@@ -405,9 +440,13 @@ class Player(Character):
         return False, f"Quest '{q_id}' not active/already done."
 
 class NPC(Character):
-    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str, dialogue_responses: dict = None):
+    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str,
+                 dialogue_responses: dict = None, active_time_periods: list[str] | None = None,
+                 is_currently_active: bool = True):
         super().__init__(id, name, max_hp, combat_stats, base_damage_dice)
         self.dialogue_responses = dialogue_responses if dialogue_responses else {}
+        self.active_time_periods = active_time_periods
+        self.is_currently_active = is_currently_active
     def get_dialogue_node(self, key: str) -> dict | None: return self.dialogue_responses.get(key)
 
 class GameState:
@@ -438,6 +477,119 @@ class GameState:
         self.is_in_combat = False
         self.current_dialogue_npc_id: str | None = None
         self.current_dialogue_key: str | None = "greetings"
+
+        # Time of day attributes
+        self.action_count_for_time_change = 10
+        self.current_action_count = 0
+        self.world_variables['time_of_day'] = TIME_PERIODS[1] # '오전'
+
+        # Weather attributes
+        self.weather_change_interval = 5 # Number of times advance_time_of_day needs to be called for a weather change check
+        self.turns_since_last_weather_change = 0 # Counter for weather change interval
+        self.world_variables['weather'] = WEATHER_STATES[0] # '맑음'
+
+        # Event system attributes
+        self.triggered_events: set[str] = set()
+
+        # Turn count
+        self.turn_count: int = 0
+
+    def check_for_events(self, current_location_id: str | None = None):
+        """
+        Checks for and triggers predefined events based on game state conditions.
+        """
+        for event_data in PREDEFINED_EVENTS:
+            if event_data["id"] in self.triggered_events:
+                continue
+
+            condition_met = False
+            condition_type = event_data["condition_type"]
+
+            if condition_type == "first_location_visit":
+                if current_location_id and current_location_id == event_data["location_id"]:
+                    condition_met = True
+            elif condition_type == "quest_completed":
+                if event_data["quest_id"] in self.player_character.completed_quests:
+                    condition_met = True
+            elif condition_type == "turn_count_reached":
+                # turn_count attribute will be added in a later step (step 7)
+                if hasattr(self, 'turn_count') and self.turn_count >= event_data["turn_count"]:
+                    condition_met = True
+            # Add other condition types here as they are implemented (e.g., item_acquired)
+
+            if condition_met:
+                self.triggered_events.add(event_data["id"])
+                notify_dm(f"특별한 이벤트가 발생했습니다: {event_data['description']}")
+                # Optionally, log or return event_data["id"] or event_data
+
+    def update_weather(self) -> bool:
+        """
+        Updates the weather based on a defined interval.
+        Notifies the DM if the weather changes.
+        Returns True if the weather changed, False otherwise.
+        """
+        # This method is intended to be called periodically, for example, by advance_time_of_day or the main game loop.
+        # For this subtask, we assume it's called when appropriate (e.g. after time advances).
+        # The prompt mentions self.weather_change_interval = 5 (time advances), so it implies this might be called by advance_time_of_day
+        # or that turns_since_last_weather_change is incremented elsewhere.
+        # For now, this method itself will handle the increment and check.
+
+        self.turns_since_last_weather_change += 1 # This assumes this method itself is the trigger for checking
+        weather_changed = False
+        if self.turns_since_last_weather_change >= self.weather_change_interval:
+            self.turns_since_last_weather_change = 0
+            new_weather = random.choice(WEATHER_STATES)
+            if self.world_variables.get('weather') != new_weather:
+                self.world_variables['weather'] = new_weather
+                notify_dm(f"날씨가 {self.world_variables['weather']}로 바뀌었습니다.")
+                weather_changed = True
+        return weather_changed
+
+    def update_world_based_on_time(self):
+        """Updates NPC availability and shop hours based on the current time of day."""
+        current_time = self.world_variables.get('time_of_day')
+        if not current_time:
+            logging.warning("Time of day not set in world_variables. Cannot update world based on time.")
+            return
+
+        # Update NPC availability
+        for npc in self.npcs.values():
+            if npc.active_time_periods: # Check if list is not None and not empty
+                npc.is_currently_active = current_time in npc.active_time_periods
+            else: # Always active if no specific periods are defined
+                npc.is_currently_active = True
+
+        # Update Shop/Location hours
+        for loc in self.locations.values():
+            if loc.operating_hours: # Check if list is not None and not empty
+                loc.is_currently_open = current_time in loc.operating_hours
+            else: # Always open if no specific hours are defined
+                loc.is_currently_open = True
+
+    def advance_time_of_day(self) -> bool:
+        """
+        Advances the time of day based on action counts.
+        Notifies the DM if the time period changes.
+        Returns True if the time of day changed, False otherwise.
+        """
+        self.current_action_count += 1
+        time_changed = False
+        if self.current_action_count >= self.action_count_for_time_change:
+            self.current_action_count = 0
+            current_time = self.world_variables.get('time_of_day')
+            try:
+                current_index = TIME_PERIODS.index(current_time)
+                next_index = (current_index + 1) % len(TIME_PERIODS)
+                self.world_variables['time_of_day'] = TIME_PERIODS[next_index]
+                notify_dm(f"시간이 흘러 {self.world_variables['time_of_day']}(이)가 되었습니다.")
+                time_changed = True
+            except ValueError:
+                # Handle case where current_time is not in TIME_PERIODS (e.g., corrupted save)
+                logging.warning(f"Current time_of_day '{current_time}' is invalid. Resetting to default.")
+                self.world_variables['time_of_day'] = TIME_PERIODS[1] # Default to '오전'
+                notify_dm(f"시간이 흘러 {self.world_variables['time_of_day']}(이)가 되었습니다. (시간 초기화됨)")
+                time_changed = True # Considered a change
+        return time_changed
 
     def load_items(self, items_raw_data: list[dict]):
         for item_data in items_raw_data:
