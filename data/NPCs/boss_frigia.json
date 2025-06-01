@@ -1,0 +1,39 @@
+[
+  {
+    "id": "boss_frigia",
+    "name": "얼음 성채의 여왕 프리지아",
+    "type": "boss",
+    "max_hp": 200,
+    "current_location": null,
+    "description": "냉기 마법의 대가인 강력한 마녀. 주변을 얼려버리거나 얼음 창을 소환하여 공격하며, 냉기 정령들을 부립니다. 그녀의 심장은 순수한 얼음으로 되어있다는 소문이 있습니다.",
+    "combat_stats": {
+      "armor_class": 14,
+      "attack_bonus": 8,
+      "damage_bonus": 0,
+      "initiative_bonus": 3,
+      "speed": 30
+    },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+      {
+        "name": "얼음 폭발 (Glacial Spike)",
+        "description": "지정된 지점에서 거대한 얼음 가시가 솟아오릅니다. 범위 내의 적들은 4d8의 냉기 피해를 입고 이동 속도가 절반이 됩니다. (DC 15 민첩 내성, 성공 시 절반 피해 및 속도 감소 없음)"
+      },
+      {
+        "name": "냉기 정령 소환 (Summon Ice Mephits)",
+        "description": "1d4+1 마리의 '얼음 메피트(Ice Mephit)'를 소환하여 전투를 돕게 합니다."
+      },
+      {
+        "name": "서리 방패 (Frost Shield)",
+        "description": "자신에게 냉기 피해를 흡수하는 보호막을 겁니다. 보호막은 50의 임시 HP를 제공하며, 근접 공격자에게 1d6의 냉기 피해를 반사합니다."
+      },
+      {
+        "name": "빙하 감옥 (Frozen Prison)",
+        "description": "한 대상을 얼음 감옥에 가둡니다. 대상은 힘 내성 굴림(DC 16)에 실패하면 1d4 턴 동안 행동 불가 상태가 되고 매 턴 1d10의 냉기 피해를 입습니다. 화염 마법으로 더 빨리 녹일 수 있습니다."
+      }
+    ],
+    "resistances": ["cold"],
+    "vulnerabilities": ["fire_melts_ice_armor_and_constructs", "bludgeoning_shatters_ice_prison"],
+    "loot_table_tags": ["frigias_ice_heart_orb", "eternal_frost_shard", "spellbook_cryomancy_secrets"]
+  }
+]

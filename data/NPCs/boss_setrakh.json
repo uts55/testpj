@@ -1,0 +1,40 @@
+[
+  {
+    "id": "boss_setrakh",
+    "name": "모래 폭풍의 지배자 세트라크",
+    "type": "boss",
+    "max_hp": 280,
+    "current_location": null,
+    "description": "사막을 지배하는 거대한 뱀 형상의 괴물. 모래 폭풍을 일으켜 시야를 가리고, 강력한 독니와 조이기 공격을 사용합니다. 모래 속을 자유자재로 이동합니다.",
+    "combat_stats": {
+      "armor_class": 17,
+      "attack_bonus": 9,
+      "damage_bonus": 6,
+      "initiative_bonus": 4,
+      "speed": 40,
+      "burrow_speed": 30
+    },
+    "base_damage_dice": "2d8",
+    "special_abilities": [
+      {
+        "name": "모래 무덤 (Sand Tomb)",
+        "description": "대상을 지정하여 거대한 모래 함정을 만듭니다. 대상은 힘 내성 굴림(DC 15)에 실패하면 속박되고 매 턴 2d6의 압착 피해를 입습니다. 모래 밖으로 나오려면 힘(운동) 체크(DC 15)에 성공해야 합니다."
+      },
+      {
+        "name": "독액 분출 (Venom Spit)",
+        "description": "30피트 거리의 대상에게 독액을 뱉습니다. 명중 시 3d10의 독 피해를 입히고 중독시킵니다. (DC 16 건강 내성)"
+      },
+      {
+        "name": "모래 폭풍 소환 (Summon Sandstorm)",
+        "description": "전투 지역 전체에 강력한 모래 폭풍을 일으킵니다. 모든 시야가 10피트로 제한되고, 매 턴 모든 생물은 1d4의 베기 피해를 입습니다. 세트라크는 모래 폭풍 속에서 이점을 가집니다."
+      },
+      {
+        "name": "조이기 (Constrict)",
+        "description": "공격에 명중한 큰 크기 이하의 대상을 휘감을 수 있습니다. (탈출 DC 16). 휘감긴 대상은 매 턴 시작 시 2d8+힘 수정치의 압착 피해를 입습니다."
+      }
+    ],
+    "resistances": ["fire_minor"],
+    "vulnerabilities": ["thunder_disrupts_sand_movement", "water_solidifies_sand_armor"],
+    "loot_table_tags": ["setrakhs_venom_gland_potent", "sandstorm_heartstone", "ancient_serpent_scale_map"]
+  }
+]

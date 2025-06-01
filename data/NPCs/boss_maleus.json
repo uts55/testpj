@@ -1,0 +1,39 @@
+[
+  {
+    "id": "boss_maleus",
+    "name": "타락한 성기사단장 말레우스",
+    "type": "boss",
+    "max_hp": 260,
+    "current_location": null,
+    "description": "한때 정의로웠으나 타락한 강력한 기사. 신성력과 암흑 마법을 동시에 사용하며, 강력한 검술과 방어 기술을 보유하고 있습니다. 그의 타락은 배신과 절망에서 비롯되었습니다.",
+    "combat_stats": {
+      "armor_class": 20,
+      "attack_bonus": 11,
+      "damage_bonus": 8,
+      "initiative_bonus": 3,
+      "speed": 30
+    },
+    "base_damage_dice": "1d10",
+    "special_abilities": [
+      {
+        "name": "암흑 강타 (Umbral Smite)",
+        "description": "근접 무기 공격에 명중 시, 추가로 3d8의 사령 또는 신성 피해(매번 선택)를 입힙니다."
+      },
+      {
+        "name": "절망의 오라 (Aura of Despair)",
+        "description": "30피트 반경 내의 적들은 모든 내성 굴림에 -2 패널티를 받습니다."
+      },
+      {
+        "name": "타락한 치유 (Corrupted Healing)",
+        "description": "보너스 행동으로 자신 또는 아군 언데드 하나의 HP를 2d8+매력 수정치만큼 회복합니다. 이 능력은 살아있는 생물에게 사용 시 같은 양의 사령 피해를 입힙니다."
+      },
+      {
+        "name": "배신의 방패 (Shield of Betrayal)",
+        "description": "반응 행동으로, 자신을 향한 단일 대상 주문을 근처의 다른 생물에게로 방향을 바꿀 수 있습니다. (하루 3회)"
+      }
+    ],
+    "resistances": ["necrotic", "radiant_while_not_in_consecrated_ground"],
+    "vulnerabilities": ["silvered_weapons_of_former_order", "atonement_ritual_weakens_him"],
+    "loot_table_tags": ["maleus_corrupted_sword", "shattered_holy_symbol_of_betrayal", "fallen_knights_helm"]
+  }
+]

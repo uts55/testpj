@@ -1,0 +1,40 @@
+[
+  {
+    "id": "boss_behemoth_primus",
+    "name": "고대 지하도시의 괴물 베헤모스 프라이머스",
+    "type": "boss",
+    "max_hp": 500,
+    "current_location": null,
+    "description": "땅을 뒤흔드는 거대한 지하 괴수. 육중한 몸으로 돌진하거나 지면을 강타하여 광역 피해를 입히며, 두꺼운 갑피는 일반적인 공격을 거의 무효화합니다. 특정 진동 주파수에 약하다는 전설이 있습니다.",
+    "combat_stats": {
+      "armor_class": 21,
+      "attack_bonus": 12,
+      "damage_bonus": 10,
+      "initiative_bonus": -1,
+      "speed": 30,
+      "burrow_speed": 20
+    },
+    "base_damage_dice": "4d10",
+    "special_abilities": [
+      {
+        "name": "지면 강타 (Earthquake Stomp)",
+        "description": "강력하게 지면을 내리쳐 30피트 반경 내의 모든 생물에게 3d12의 타격 피해를 입히고 넘어뜨립니다. (DC 18 민첩 내성 굴림, 성공 시 절반 피해 및 넘어지지 않음)"
+      },
+      {
+        "name": "돌진 (Rampage Charge)",
+        "description": "직선으로 60피트 돌진하며 경로상의 모든 구조물과 생물에게 4d10의 타격 피해를 입힙니다. (DC 16 힘 내성 굴림, 성공 시 절반 피해)"
+      },
+      {
+        "name": "삼키기 (Swallow Whole)",
+        "description": "자신보다 한 단계 작은 크기의 대상을 공격하여 명중 시, 대상은 다시 힘 내성 굴림(DC 17)을 해야 하며 실패 시 삼켜집니다. 삼켜진 대상은 매 턴 3d6의 산성 피해를 입습니다. 내부에서 일정량의 피해를 입히면 탈출할 수 있습니다."
+      },
+      {
+        "name": "두꺼운 갑피 (Impenetrable Hide)",
+        "description": "치명타를 제외한 모든 물리 피해(베기, 관통, 타격)를 10만큼 감소시킵니다."
+      }
+    ],
+    "resistances": ["poison", "fear"],
+    "vulnerabilities": ["sonic_high_frequency_attacks", "adamantine_siege_weapons"],
+    "loot_table_tags": ["behemoth_heartstone_massive", "primordial_scale_plate", "earthquake_tremor_gland"]
+  }
+]
