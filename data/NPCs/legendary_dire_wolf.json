@@ -1,0 +1,19 @@
+{
+  "id": "legendary_dire_wolf_frostfang",
+  "name": "서리송곳니 다이어울프 (전설)",
+  "max_hp": 150,
+  "combat_stats": {
+    "armor_class": 17,
+    "attack_bonus": 9,
+    "damage_bonus": 6,
+    "speed": 45,
+    "initiative_bonus": 3
+  },
+  "base_damage_dice": "2d10+6",
+  "inherent_abilities": ["전설적인 포효 (공포 유발)", "서리 숨결 (광역 냉기 피해)", "끈질긴 추적자"],
+  "description_base": "북부 황무지를 배회하는 거대한 전설적인 다이어울프입니다. 그 털은 눈처럼 희고, 송곳니에서는 냉기가 서립니다.",
+  "dialogue_responses": {},
+  "active_time_periods": ["밤", "자정"],
+  "is_currently_active": true,
+  "loot_tags": ["legendary_beast_pelt", "frost_wolf_heart", "unique_monster_essence"]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "ancient_cave_bear_stoneclaw",
+  "name": "돌발톱 고대 동굴곰 (희귀)",
+  "max_hp": 200,
+  "combat_stats": {
+    "armor_class": 15,
+    "attack_bonus": 8,
+    "damage_bonus": 7,
+    "speed": 30
+  },
+  "base_damage_dice": "2d12+7",
+  "inherent_abilities": ["바위같은 피부 (물리 피해 저항)", "동굴의 분노 (피해 시 공격력 증가)", "땅울림 강타"],
+  "description_base": "수 세기 동안 깊은 동굴 속에서 살아온 거대한 고대 곰입니다. 그 발톱은 바위처럼 단단합니다.",
+  "dialogue_responses": {},
+  "active_time_periods": null,
+  "is_currently_active": true,
+  "loot_tags": ["ancient_bear_hide", "stoneclaw_fragment", "rare_monster_essence"]
+}
