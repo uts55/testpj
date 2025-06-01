@@ -597,16 +597,41 @@ class GameState:
             if not item_id:
                 logging.warning(f"Item data missing 'id'. Skipping: {item_data.get('name', 'Unknown Item')}")
                 continue
-            item_type = item_data.get("type")
+            original_item_type_from_json = item_data.get("type") # This is 'weapon', 'armor', etc.
+
+            # Create a copy of item_data to modify for **kwargs, removing the 'type' key
+            # as it's not an expected keyword argument for the constructors.
+            # The actual item_type for the Item base class is handled by the subclass constructors
+            # or set to 'generic' for the base Item class.
+            kwargs_data = item_data.copy()
+            if "type" in kwargs_data:
+                del kwargs_data["type"]
+
+            # Consolidate price fields (buy_price, sell_price) into value dict
+            if "buy_price" in kwargs_data or "sell_price" in kwargs_data:
+                if "value" not in kwargs_data:
+                    kwargs_data["value"] = {}
+                if "buy_price" in kwargs_data:
+                    kwargs_data["value"]["buy"] = kwargs_data.pop("buy_price")
+                if "sell_price" in kwargs_data:
+                    kwargs_data["value"]["sell"] = kwargs_data.pop("sell_price")
+
             try:
                 item_instance: Item | None = None
-                if item_type == "weapon": item_instance = Weapon(**item_data)
-                elif item_type == "armor": item_instance = Armor(**item_data)
-                elif item_type == "consumable": item_instance = Consumable(**item_data)
-                elif item_type == "key_item": item_instance = KeyItem(**item_data)
+                if original_item_type_from_json == "weapon":
+                    item_instance = Weapon(**kwargs_data)
+                elif original_item_type_from_json == "armor":
+                    item_instance = Armor(**kwargs_data)
+                elif original_item_type_from_json == "shield": # Treat shield as a type of Armor
+                    kwargs_data["armor_type"] = "shield" # Ensure armor_type is set for Armor constructor
+                    item_instance = Armor(**kwargs_data)
+                elif original_item_type_from_json == "consumable":
+                    item_instance = Consumable(**kwargs_data)
+                elif original_item_type_from_json == "key_item":
+                    item_instance = KeyItem(**kwargs_data)
                 else: # Default to generic Item
-                    item_data["item_type"] = "generic" # Ensure type is set
-                    item_instance = Item(**item_data)
+                    kwargs_data["item_type"] = item_data.get("item_type", "generic")
+                    item_instance = Item(**kwargs_data)
 
                 if item_instance: self.items[item_instance.id] = item_instance
             except Exception as e:
@@ -623,17 +648,38 @@ class GameState:
             except Exception as e:
                 logging.error(f"Error loading location '{loc_id}': {e}. Data: {loc_data}")
 
-    def load_npcs(self, npcs_raw_data: list[dict]):
-        for npc_data in npcs_raw_data:
-            npc_id = npc_data.get("id")
-            if not npc_id:
-                logging.warning(f"NPC data missing 'id'. Skipping: {npc_data.get('name', 'Unknown NPC')}")
-                continue
-            # Use create_npc_from_data from data_loader.py
-            npc_instance = create_npc_from_data(npc_data)
-            if npc_instance:
-                self.npcs[npc_instance.id] = npc_instance
-            # create_npc_from_data already logs errors
+    def load_npcs(self, npcs_raw_data: list[dict | list]): # Modified type hint
+        for item_from_file in npcs_raw_data: # item_from_file can be a dict or a list
+            if isinstance(item_from_file, list):
+                # This handles JSON files structured as a list of NPCs (e.g., [{"id":...}, {"id":...}])
+                # or more commonly, a list containing a single NPC dict: [{"id":...}]
+                for npc_data_dict in item_from_file:
+                    if not isinstance(npc_data_dict, dict):
+                        logging.warning(f"Skipping non-dictionary item in NPC list: {npc_data_dict}")
+                        continue
+                    self._process_and_add_npc(npc_data_dict)
+            elif isinstance(item_from_file, dict):
+                # This handles JSON files structured as a single NPC object at the root
+                self._process_and_add_npc(item_from_file)
+            else:
+                logging.warning(f"Skipping unexpected data type in NPCs raw data: {type(item_from_file)}")
+
+    def _process_and_add_npc(self, npc_data: dict):
+        """Helper function to process a single NPC dictionary and add it to self.npcs."""
+        npc_id = npc_data.get("id")
+        if not npc_id:
+            logging.warning(f"NPC data missing 'id'. Skipping: {npc_data.get('name', 'Unknown NPC')}")
+            return
+
+        processed_npc_data = create_npc_from_data(npc_data)
+        if processed_npc_data:
+            try:
+                npc_object = NPC(**processed_npc_data)
+                self.npcs[npc_object.id] = npc_object
+            except Exception as e:
+                npc_identifier = processed_npc_data.get('name', processed_npc_data.get('id', 'Unknown NPC'))
+                logging.error(f"Error instantiating NPC '{npc_identifier}' from processed data: {e}. Data: {processed_npc_data}")
+        # create_npc_from_data logs errors during its processing phase
 
     def load_factions(self, factions_raw_data: list[dict]):
         for faction_data in factions_raw_data:
@@ -687,15 +733,28 @@ class GameState:
         self.load_factions(all_raw_data.get('Factions', [])) # Added call
 
         # Load GameObjects as raw dicts
-        raw_game_objects = all_raw_data.get('GameObjects', [])
-        for go_dict in raw_game_objects:
-            go_id = go_dict.get('id')
-            if isinstance(go_id, str): # Ensure id is a string
-                self.game_objects[go_id] = go_dict
-            elif isinstance(go_dict, dict): # Check if go_dict is a dictionary
-                 logging.warning(f"GameObject data missing 'id' or 'id' is not a string: {go_dict.get('name', 'Unknown GameObject')}")
-            # If go_dict is not a dict (e.g. if load_raw_data_from_sources put a string there by mistake), skip.
-            # load_raw_data_from_sources should only put dicts for JSON files.
+        raw_game_objects_from_files = all_raw_data.get('GameObjects', [])
+        for item_from_file in raw_game_objects_from_files:
+            if isinstance(item_from_file, list):
+                # Handles JSON files structured as a list of game objects
+                for go_dict in item_from_file:
+                    if isinstance(go_dict, dict):
+                        go_id = go_dict.get('id')
+                        if isinstance(go_id, str):
+                            self.game_objects[go_id] = go_dict
+                        else:
+                            logging.warning(f"GameObject data in list missing 'id' or 'id' is not a string: {go_dict.get('name', 'Unknown GameObject in list')}")
+                    else:
+                        logging.warning(f"Skipping non-dictionary item in GameObject list: {go_dict}")
+            elif isinstance(item_from_file, dict):
+                # Handles JSON files structured as a single game object
+                go_id = item_from_file.get('id')
+                if isinstance(go_id, str):
+                    self.game_objects[go_id] = item_from_file
+                else:
+                    logging.warning(f"GameObject data missing 'id' or 'id' is not a string: {item_from_file.get('name', 'Unknown GameObject')}")
+            else:
+                logging.warning(f"Skipping unexpected data type in GameObjects raw data: {type(item_from_file)}")
 
         # Store other categories for RAG
         for category, data_list in all_raw_data.items():
@@ -741,7 +800,7 @@ def player_buys_item(player:Player,npc:NPC,item_id:str,game_state:GameState)->tu
     if price is None or price<=0: return False, f"Item '{item.name}' no buy price/not buyable."
     gold=player.equipment.get("currency",{}).get("gold",0)
     if gold<price: return False, f"'{item.name}' needs {price} gold, has {gold}."
-    if not player.change_currency(gold_delta=-price): return False, "Currency error."
+    if not player.change_currency(gold_d=-price): return False, "Currency error." # Fixed gold_delta to gold_d
     player.add_to_inventory(item_id)
     new_gold=player.equipment.get("currency",{}).get("gold",0)
     notify_dm(f"{player.name} bought {item.name} from {npc.name} for {price} gold. Gold left: {new_gold}.")
@@ -756,7 +815,7 @@ def player_sells_item(player:Player,npc:NPC,item_id:str,game_state:GameState)->t
     price=item.value.get("sell") if item.value else 0
     if price is None or price<=0: return False, f"Item '{item.name}' no sell price/not sellable."
     if not player.remove_from_inventory(item_id): return False, f"'{item.name}' remove fail."
-    if not player.change_currency(gold_delta=price): player.add_to_inventory(item_id); return False, f"'{item.name}' sell currency error."
+    if not player.change_currency(gold_d=price): player.add_to_inventory(item_id); return False, f"'{item.name}' sell currency error." # Fixed gold_delta to gold_d
     new_gold=player.equipment.get("currency",{}).get("gold",0)
     notify_dm(f"{player.name} sold {item.name} to {npc.name} for {price} gold. Gold now: {new_gold}.")
     return True, f"Sold '{item.name}' for {price} gold."
@@ -911,17 +970,69 @@ if __name__ == '__main__':
     else:
         print("Merchant Jane (npc_merchant_jane) not found in game.npcs. Skipping trade tests.")
 
-    # --- Test NPC Interaction (Attack) ---
-    # Find a hostile NPC if any were loaded, or use a known one for testing.
-    # For now, we'll just check if merchant is attackable.
-    if merchant_npc and merchant_npc.is_alive():
-        print(f"\n--- Combat Test (vs {merchant_npc.name}) ---")
-        print(f"{player.name} (HP: {player.current_hp}) vs {merchant_npc.name} (HP: {merchant_npc.current_hp})")
-        attack_msg_p = player.attack(merchant_npc, game)
-        print(attack_msg_p)
-        if merchant_npc.is_alive():
-            attack_msg_n = merchant_npc.attack(player, game)
-            print(attack_msg_n)
+    # --- Test NPC Interaction (Attack) --- - This section is replaced by Goblin Combat Test below
+    # # Find a hostile NPC if any were loaded, or use a known one for testing.
+    # # For now, we'll just check if merchant is attackable.
+    # if merchant_npc and merchant_npc.is_alive():
+    #     print(f"\n--- Combat Test (vs {merchant_npc.name}) ---")
+    #     print(f"{player.name} (HP: {player.current_hp}) vs {merchant_npc.name} (HP: {merchant_npc.current_hp})")
+    #     attack_msg_p = player.attack(merchant_npc, game)
+    #     print(attack_msg_p)
+    #     if merchant_npc.is_alive():
+    #         attack_msg_n = merchant_npc.attack(player, game)
+    #         print(attack_msg_n)
+
+    print("\n--- Goblin Combat Test ---")
+    cave_location_id = "gloomy_cave_entrance"
+    cave_location = game.locations.get(cave_location_id)
+    if cave_location:
+        print(f"Found location: {cave_location.name}")
+
+        # Retrieve NPC objects from the location
+        cave_npc_objects = []
+        for npc_id in cave_location.npc_ids:
+            npc_obj = game.npcs.get(npc_id)
+            if npc_obj and npc_obj.is_alive(): # Ensure NPC exists and is alive
+                cave_npc_objects.append(npc_obj)
+
+        if cave_npc_objects:
+            goblins_to_fight = [npc for npc in cave_npc_objects if "goblin" in npc.id.lower()]
+
+            if not goblins_to_fight:
+                print("No goblins found in the gloomy cave for this test.")
+
+            for i, goblin_target in enumerate(goblins_to_fight):
+                if i >= 3: # Fight up to 3 goblins for this test
+                    break
+                if not goblin_target.is_alive():
+                    continue
+
+                print(f"\nRound {i+1} of combat: Player vs {goblin_target.name} (ID: {goblin_target.id})")
+                print(f"{player.name} (HP: {player.current_hp}) vs {goblin_target.name} (HP: {goblin_target.current_hp})")
+
+                attack_msg_p = player.attack(goblin_target, game)
+                print(f"Player action: {attack_msg_p}")
+
+                if goblin_target.is_alive():
+                    attack_msg_g = goblin_target.attack(player, game)
+                    print(f"Goblin action: {attack_msg_g}")
+                else:
+                    print(f"{goblin_target.name} was defeated by the player.")
+
+                if not player.is_alive():
+                    print(f"{player.name} was defeated!")
+                    break
+
+            if not player.is_alive():
+                 print("Player was defeated during the goblin encounters.")
+            elif not goblins_to_fight:
+                 print("No goblins were available to fight in the cave entrance.")
+            else:
+                 print("\nGoblin combat test finished.")
+        else:
+            print(f"No NPCs found or alive in {cave_location.name} for combat test.")
+    else:
+        print(f"Location {cave_location_id} not found. Skipping goblin combat test.")
 
     # Test reveal_clue with a game object
     print("\n--- Reveal Clue Test ---")

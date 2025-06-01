@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_archer_001",
+    "name": "고블린 궁수",
+    "type": "monster",
+    "max_hp": 10,
+    "current_location": null,
+    "description": "조잡한 짧은 활을 사용하여 원거리에서 아군을 지원하거나 약한 적을 노립니다.",
+    "combat_stats": {
+      "armor_class": 13,
+      "attack_bonus": 4,
+      "damage_bonus": 1,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+      {
+        "name": "조준 사격",
+        "description": "한 턴 동안 조준하여 다음 공격의 명중률을 높입니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": []
+  }
+]

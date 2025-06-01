@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_rockthrower_001",
+    "name": "고블린 투석병",
+    "type": "monster",
+    "max_hp": 11,
+    "current_location": null,
+    "description": "안전한 거리에서 바위나 날카로운 돌을 던져 적을 괴롭힙니다.",
+    "combat_stats": {
+      "armor_class": 12,
+      "attack_bonus": 3,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d6",
+    "special_abilities": [
+      {
+        "name": "탄막",
+        "description": "한 지역에 돌을 집중적으로 던져 해당 지역의 이동을 어렵게 만듭니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": []
+  }
+]

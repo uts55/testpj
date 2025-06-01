@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_chief_001",
+    "name": "고블린 대장",
+    "type": "monster",
+    "max_hp": 30,
+    "current_location": null,
+    "description": "가장 크고 교활한 이 고블린은 조잡한 왕관을 쓰고 있으며, 다른 고블린들에게 명령을 내립니다.",
+    "combat_stats": {
+      "armor_class": 15,
+      "attack_bonus": 5,
+      "damage_bonus": 2,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d8",
+    "special_abilities": [
+      {
+        "name": "전투 함성",
+        "description": "주변 고블린들의 사기를 높여 일시적으로 공격 보너스를 부여합니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["crude_crown", "scimitar", "goblin_banner_fragment"]
+  }
+]

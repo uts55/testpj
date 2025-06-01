@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_shieldbearer_001",
+    "name": "고블린 방패병",
+    "type": "monster",
+    "max_hp": 15,
+    "current_location": null,
+    "description": "커다란 나무 방패나 철제 방패 뒤에 숨어 아군을 보호하거나 전선을 유지합니다. 공격보다는 방어에 치중합니다.",
+    "combat_stats": {
+      "armor_class": 17,
+      "attack_bonus": 2,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 25
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "방패 벽",
+        "description": "방어 행동을 취하면 자신과 인접한 아군 하나의 AC를 일시적으로 높입니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["battered_shield", "broken_sword"]
+  }
+]

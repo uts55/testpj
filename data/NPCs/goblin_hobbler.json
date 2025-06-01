@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_hobbler_001",
+    "name": "고블린 다리절단꾼",
+    "type": "monster",
+    "max_hp": 13,
+    "current_location": null,
+    "description": "이 음흉한 고블린은 적의 다리를 노려 이동을 방해하려 합니다. 주로 갈고리 달린 사슬이나 올가미를 사용합니다.",
+    "combat_stats": {
+      "armor_class": 14,
+      "attack_bonus": 3,
+      "damage_bonus": 1,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "다리 걸기",
+        "description": "공격에 성공하면 대상의 이동 속도를 절반으로 줄입니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["rope", "rusty_hook"]
+  }
+]

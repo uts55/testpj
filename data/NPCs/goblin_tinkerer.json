@@ -1,0 +1,27 @@
+[
+  {
+    "id": "goblin_tinkerer_001",
+    "name": "고블린 기술자",
+    "type": "monster",
+    "max_hp": 10,
+    "current_location": null,
+    "description": "기름때 묻은 가죽을 걸친 이 고블린은 언제 터질지 모르는 불안정한 폭탄이나 기계 장치를 만지작거립니다.",
+    "combat_stats": {
+      "armor_class": 12,
+      "attack_bonus": 2,
+      "damage_bonus": 0,
+      "initiative_bonus": 2,
+      "speed": 30
+    },
+    "base_damage_dice": "1d4",
+    "special_abilities": [
+      {
+        "name": "폭탄 투척",
+        "description": "작은 폭탄을 던져 범위 피해를 입힙니다. 가끔 불발되거나 자신에게 피해를 줄 수도 있습니다."
+      }
+    ],
+    "resistances": [],
+    "vulnerabilities": [],
+    "loot_table_tags": ["scrap_metal", "crude_explosives"]
+  }
+]
