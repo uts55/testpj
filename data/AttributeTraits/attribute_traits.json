@@ -1,0 +1,101 @@
+[
+  {
+    "id": "swift",
+    "name_prefix_kr": "재빠른",
+    "description_fragment": "날렵한 움직임을 자랑하는",
+    "stat_modifiers": { "speed_add": 10, "ac_add": 1 },
+    "added_abilities": ["기습 공격 가능성"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "tough",
+    "name_prefix_kr": "강인한",
+    "description_fragment": "쉽사리 쓰러지지 않는",
+    "stat_modifiers": { "hp_multiplier": 1.2, "ac_add": 1 },
+    "added_abilities": [],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "intelligent",
+    "name_prefix_kr": "지능적인",
+    "description_fragment": "교활한 전략을 사용하는",
+    "stat_modifiers": { "attack_bonus_add": 1 },
+    "added_abilities": ["전술적 움직임", "약점 간파 시도"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "venomous",
+    "name_prefix_kr": "맹독의",
+    "description_fragment": "치명적인 독을 품은",
+    "stat_modifiers": {},
+    "added_abilities": ["독 공격 (추가 1d4 독 데미지, 내성 굴림 필요)"],
+    "added_resistances": ["poison"],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "fiery",
+    "name_prefix_kr": "화염의",
+    "description_fragment": "불타는 오라를 두른",
+    "stat_modifiers": {},
+    "added_abilities": ["화염 공격 (추가 1d6 화염 데미지)", "주변에 약한 화염 데미지"],
+    "added_resistances": ["fire"],
+    "added_vulnerabilities": ["cold"]
+  },
+  {
+    "id": "frost",
+    "name_prefix_kr": "얼어붙은",
+    "description_fragment": "냉기를 내뿜는",
+    "stat_modifiers": {},
+    "added_abilities": ["냉기 공격 (추가 1d6 냉기 데미지)", "느려짐 효과 부여 가능성"],
+    "added_resistances": ["cold"],
+    "added_vulnerabilities": ["fire"]
+  },
+  {
+    "id": "giant",
+    "name_prefix_kr": "거대한",
+    "description_fragment": "엄청난 크기를 자랑하는",
+    "stat_modifiers": { "hp_multiplier": 1.5, "damage_bonus_add": 2, "speed_add": -5 },
+    "added_abilities": ["광역 공격 (휘두르기)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "alpha",
+    "name_prefix_kr": "우두머리",
+    "description_fragment": "무리를 이끄는 강력한",
+    "stat_modifiers": { "hp_multiplier": 1.3, "attack_bonus_add": 1, "damage_bonus_add": 1 },
+    "added_abilities": ["무리에 명령 (아군 강화 또는 추가 행동 유도)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "elite",
+    "name_suffix_kr": "정예",
+    "description_fragment": "정예 훈련을 받은",
+    "stat_modifiers": { "hp_add": 20, "ac_add": 2, "attack_bonus_add": 1 },
+    "added_abilities": ["특수 기술 사용 (예: 반격)"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "berserker",
+    "name_suffix_kr": "광전사",
+    "description_fragment": "분노에 찬",
+    "stat_modifiers": { "attack_bonus_add": 2, "ac_add": -2, "damage_bonus_add": 2},
+    "added_abilities": ["체력 낮을수록 공격력 증가", "무모한 공격"],
+    "added_resistances": [],
+    "added_vulnerabilities": []
+  },
+  {
+    "id": "armored",
+    "name_prefix_kr": "중무장한",
+    "description_fragment": "두꺼운 갑피로 덮인",
+    "stat_modifiers": { "ac_add": 3, "speed_add": -5 },
+    "added_abilities": [],
+    "added_resistances": ["piercing"],
+    "added_vulnerabilities": ["bludgeoning"]
+  }
+]

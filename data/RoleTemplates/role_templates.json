@@ -1,0 +1,58 @@
+[
+  {
+    "id": "warrior",
+    "name_kr": "전사",
+    "description_fragment": "근접 전투에 능숙한",
+    "stat_modifiers": { "attack_bonus_melee_add": 2, "hp_add": 10 },
+    "preferred_weapon_tags": ["sword", "axe", "mace"],
+    "abilities": ["강타 (추가 데미지 및 적 잠시 기절)", "방어 태세 (AC 증가)"]
+  },
+  {
+    "id": "archer",
+    "name_kr": "궁수",
+    "description_fragment": "원거리에서 화살을 쏘는",
+    "stat_modifiers": { "attack_bonus_ranged_add": 2, "perception_add": 2 },
+    "preferred_weapon_tags": ["bow", "crossbow"],
+    "abilities": ["정밀 사격 (명중률 증가)", "속사 (한 턴에 여러 발 발사, 데미지 감소)"]
+  },
+  {
+    "id": "shaman",
+    "name_kr": "주술사",
+    "description_fragment": "신비한 주술을 사용하는",
+    "stat_modifiers": { "magic_power_add": 2 },
+    "preferred_weapon_tags": ["staff", "totem", "wand"],
+    "abilities": ["치유 주문 (약)", "원소 공격 (작은 불꽃 또는 냉기 화살)", "저주 (적 약화)"]
+  },
+  {
+    "id": "scout",
+    "name_kr": "척후병",
+    "description_fragment": "은밀하게 움직이며 정찰하는",
+    "stat_modifiers": { "stealth_add": 3, "speed_add": 5 },
+    "preferred_weapon_tags": ["dagger", "short_sword", "sling"],
+    "abilities": ["숨기", "기습 공격 (숨은 상태에서 공격 시 추가 데미지)", "함정 발견"]
+  },
+  {
+    "id": "brute",
+    "name_kr": "투사",
+    "description_fragment": "강력한 힘으로 밀어붙이는",
+    "stat_modifiers": { "strength_add": 2, "hp_add": 15, "attack_bonus_melee_add": 1 },
+    "preferred_weapon_tags": ["club", "great_axe", "heavy_mace"],
+    "abilities": ["돌진 (적에게 달려들어 공격)", "내려치기 (강력한 단일 공격)"]
+  },
+  {
+    "id": "shield_bearer",
+    "name_kr": "방패병",
+    "description_fragment": "견고한 방패로 아군을 보호하는",
+    "stat_modifiers": { "ac_shield_bonus_add": 2, "constitution_add": 2 },
+    "preferred_weapon_tags": ["short_sword", "spear", "shield"],
+    "abilities": ["방패 올리기 (AC 일시적 대폭 증가)", "도발 (적의 공격을 자신에게 유도)", "보호 (인접 아군 AC 보너스)"]
+  },
+  {
+    "id": "assassin",
+    "name_kr": "암살자",
+    "description_fragment": "그림자 속에서 치명적인 일격을 날리는",
+    "stat_modifiers": { "dexterity_add": 2, "attack_bonus_add": 1, "crit_chance_add": 0.1 },
+    "preferred_weapon_tags": ["dagger", "rapier", "poisoned_weapon"],
+    "abilities": ["암살 (특정 조건 하 즉사 또는 막대한 데미지)", "은신 강화", "독 사용 전문가"]
+  }
+]
