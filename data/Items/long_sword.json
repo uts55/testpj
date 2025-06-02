@@ -1,0 +1,15 @@
+{
+    "id": "long_sword",
+    "name": "Long Sword",
+    "type": "weapon",
+    "description": "A standard long sword, well-balanced for offense and defense.",
+    "damage_dice": "1d8",
+    "attack_bonus": 1,
+    "damage_bonus": 1,
+    "weapon_type": "sword",
+    "weight": 3.0,
+    "value": {
+        "buy": 50,
+        "sell": 25
+    }
+}

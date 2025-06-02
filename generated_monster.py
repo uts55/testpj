@@ -1,4 +1,4 @@
-from game_state import Character
+from characters import Character
 
 class GeneratedMonster(Character):
     def __init__(self, id: str, name_kr: str, description_kr: str,
