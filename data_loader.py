@@ -1,6 +1,10 @@
 import os
 import json
 import typing
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if typing.TYPE_CHECKING:
     from game_state import NPC # For type hinting
@@ -30,10 +34,25 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
 
         all_data[category_name] = []
 
-        if os.path.exists(source_path) and os.path.isdir(source_path):
+        # Check if path exists
+        if not os.path.exists(source_path):
+            logging.warning(f"Source path does not exist: {source_path}")
+            continue
+        
+        # Check if path is a directory
+        if not os.path.isdir(source_path):
+            logging.warning(f"Source path is not a directory: {source_path}")
+            continue
+        
+        try:
             for filename in os.listdir(source_path):
                 filepath = os.path.join(source_path, filename)
                 if os.path.isdir(filepath): # Skip subdirectories
+                    continue
+                
+                # Check if file exists before attempting to open
+                if not os.path.exists(filepath):
+                    logging.warning(f"File does not exist: {filepath}")
                     continue
 
                 if filename.endswith(".json"):
@@ -54,10 +73,16 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
                                     processed_list.append(item)
                                 data = processed_list # Replace data with the list of items
                             all_data[category_name].append(data)
-                    except json.JSONDecodeError:
-                        print(f"Warning: Could not parse JSON from {filepath}, skipping.")
+                    except json.JSONDecodeError as e:
+                        logging.warning(f"Could not parse JSON from {filepath}: {e}, skipping.")
+                    except UnicodeDecodeError as e:
+                        logging.error(f"Encoding error reading {filepath}: {e}, skipping.")
+                    except PermissionError as e:
+                        logging.error(f"Permission denied reading {filepath}: {e}, skipping.")
+                    except IOError as e:
+                        logging.error(f"IO error reading {filepath}: {e}, skipping.")
                     except Exception as e:
-                        print(f"Warning: An unexpected error occurred while processing JSON {filepath}: {e}, skipping.")
+                        logging.error(f"Unexpected error while processing JSON {filepath}: {e}, skipping.")
                 elif filename.endswith(".txt"):
                     try:
                         with open(filepath, 'r', encoding='utf-8') as f:
@@ -68,10 +93,18 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
                                 "text_content": content,
                                 "source_category": category_name # Add category for context
                             })
+                    except UnicodeDecodeError as e:
+                        logging.error(f"Encoding error reading {filepath}: {e}, skipping.")
+                    except PermissionError as e:
+                        logging.error(f"Permission denied reading {filepath}: {e}, skipping.")
+                    except IOError as e:
+                        logging.error(f"IO error reading {filepath}: {e}, skipping.")
                     except Exception as e:
-                        print(f"Warning: An unexpected error occurred while processing TXT {filepath}: {e}, skipping.")
-        else:
-            print(f"Warning: Source directory '{source_path}' not found or is not a directory.")
+                        logging.error(f"Unexpected error while processing TXT {filepath}: {e}, skipping.")
+        except PermissionError:
+            logging.error(f"Permission denied accessing: {source_path}")
+        except Exception as e:
+            logging.error(f"Unexpected error loading from {source_path}: {e}")
     return all_data
 
 def create_npc_from_data(npc_data: dict) -> 'NPC | None':
@@ -90,10 +123,24 @@ def create_npc_from_data(npc_data: dict) -> 'NPC | None':
         A dictionary with validated/processed NPC data if successful, None otherwise.
     """
     try:
+        # Validate input type
+        if not isinstance(npc_data, dict):
+            raise TypeError(f"Expected dict, got {type(npc_data).__name__}")
+        
         required_keys = ['id', 'name', 'max_hp', 'combat_stats', 'base_damage_dice']
         for key in required_keys:
             if key not in npc_data:
                 raise KeyError(f"Missing essential key '{key}'")
+
+        # Validate data types for critical fields
+        if not isinstance(npc_data['max_hp'], (int, float)):
+            raise TypeError(f"max_hp must be numeric, got {type(npc_data['max_hp']).__name__}")
+        
+        if not isinstance(npc_data['combat_stats'], dict):
+            raise TypeError(f"combat_stats must be dict, got {type(npc_data['combat_stats']).__name__}")
+        
+        if not isinstance(npc_data['base_damage_dice'], str):
+            raise TypeError(f"base_damage_dice must be string, got {type(npc_data['base_damage_dice']).__name__}")
 
         # Prepare a dictionary for NPC instantiation, including optional fields
         processed_data = {
@@ -108,12 +155,16 @@ def create_npc_from_data(npc_data: dict) -> 'NPC | None':
         }
         return processed_data
     except KeyError as e:
-        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC'))
-        print(f"Warning: Missing essential data for NPC '{npc_identifier}'. Details: {e}. Skipping NPC data processing.")
+        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC')) if isinstance(npc_data, dict) else 'Unknown NPC'
+        logging.warning(f"Missing essential data for NPC '{npc_identifier}'. Details: {e}. Skipping NPC data processing.")
+        return None
+    except TypeError as e:
+        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC')) if isinstance(npc_data, dict) else 'Unknown NPC'
+        logging.error(f"Type validation error for NPC '{npc_identifier}': {e}. Skipping.")
         return None
     except Exception as e:
-        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC'))
-        print(f"Warning: Error processing NPC data for '{npc_identifier}': {e}. Skipping.")
+        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC')) if isinstance(npc_data, dict) else 'Unknown NPC'
+        logging.error(f"Error processing NPC data for '{npc_identifier}': {e}. Skipping.")
         return None
 
 # Old load_game_data and load_npcs_from_directory are now removed.

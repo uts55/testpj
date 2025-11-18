@@ -149,6 +149,7 @@ class Player(Character):
         self.active_quests = player_data.get("active_quests",{})
         self.completed_quests = player_data.get("completed_quests",[])
         self.visited_locations: set[str] = set(player_data.get("visited_locations", []))
+        self.faction_reputations: dict[str, int] = player_data.get("faction_reputations", {})
     def _get_item_from_game_state(self, item_id:str, game_state:'GameState')->Item|None:
         if not item_id: return None
         item = game_state.items.get(item_id)
@@ -364,6 +365,27 @@ class Player(Character):
             notify_dm(desc)
             return True, f"Quest '{q_id}' completed."
         return False, f"Quest '{q_id}' not active/already done."
+    
+    def change_faction_reputation(self, faction_id: str, amount: int, game_state: 'GameState'):
+        """
+        Change the player's reputation with a specific faction.
+        
+        Args:
+            faction_id: The ID of the faction
+            amount: The amount to change the reputation by (can be positive or negative)
+            game_state: The game state object to access faction data
+        """
+        if not hasattr(self, 'faction_reputations'):
+            self.faction_reputations = {}
+        
+        current_rep = self.faction_reputations.get(faction_id, 0)
+        new_rep = current_rep + amount
+        self.faction_reputations[faction_id] = new_rep
+        
+        faction = game_state.factions.get(faction_id)
+        faction_name = faction.name if faction else faction_id
+        
+        notify_dm(f"{self.name}'s reputation with {faction_name} changed by {amount} (now {new_rep})")
 
 class NPC(Character):
     def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str,
@@ -426,6 +448,14 @@ class GameState:
         self.monster_role_templates: list = []
         self.monster_generator: MonsterGenerator | None = None
         self.generated_monsters: dict[str, GeneratedMonster] = {} # To store generated monsters
+
+    @property
+    def ITEM_DATABASE(self) -> dict[str, Item]:
+        """
+        Backward compatibility property for accessing items.
+        Returns the items dictionary.
+        """
+        return self.items
 
     def check_for_events(self, current_location_id: str | None = None):
         """

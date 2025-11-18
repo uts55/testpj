@@ -1,8 +1,7 @@
 import re # For skill command parsing and cast command
 from game_state import PlayerState, determine_initiative, Player, NPC, Character
 import os # Ensure os is imported early for getenv
-
-import os # Ensure os is imported early for getenv
+from gemini_dm import GeminiDM
 
 # Conditional imports for Tkinter based on test mode
 is_test_mode_check_for_import = (os.getenv("RUNNING_INTERACTIVE_TEST") == "true")
@@ -318,39 +317,7 @@ def check_combat_end_condition(player: Player, npcs: list[NPC], current_player_s
 
     return (False, "")
 
-# import google.generativeai as genai # This will be needed eventually
-import os
-
-# Placeholder for actual DM interaction
-class GeminiDM:
-    def __init__(self, model_name="gemini-1.5-flash-latest"):
-        # For now, we won't initialize the actual API
-        # genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        # self.model = genai.GenerativeModel(model_name)
-        # self.chat = self.model.start_chat(history=[])
-        print("GeminiDM initialized (mocked).")
-
-    def send_message(self, message, stream=False):
-        # Adjusted to handle potential multi-line messages better for console readability
-        print(f"DM Received (stream={stream}):\n---\n{message}\n---")
-        # Mocked response based on input
-        if "hello" in message.lower():
-            response = "Hello there! How can I help you today?"
-        elif "fight" in message.lower() and not main_player_state.is_in_combat: # Check global state for this mock
-            response = "A wild goblin appears!" # This will be overridden by combat logic if it starts
-        elif main_player_state.is_in_combat:
-            response = f"DM acknowledges the turn events." # Generic ack for multi-line
-        else:
-            response = f"DM echoes: {message}"
-
-        print(f"DM Responds:\n---\n{response}\n---")
-        if stream:
-            # Streaming a multi-line response might look odd here, but for testing it's fine.
-            # Real streaming would handle chunks of the actual response.
-            for chunk in response.replace('\n', ' ').split(): # Replace newlines for stream test
-                print(chunk, end=" ", flush=True)
-            print()
-        return response
+# GeminiDM class is now imported from gemini_dm.py
 
 def notify_dm_event(dm_manager, message: str):
     """Sends a formatted game event message to the DM."""
@@ -445,7 +412,7 @@ def process_player_input(input_text: str):
                 dynamic_choices_for_buy = []
                 if sells_item_ids:
                     for item_id in sells_item_ids:
-                        item_data = game_state.ITEM_DATABASE.get(item_id)
+                        item_data = game.items.get(item_id)
                         if item_data:
                             dynamic_choices_for_buy.append({
                                 "text": f"{item_data.get('name', item_id)} ({item_data.get('buy_price', 'N/A')} Gold)",
@@ -460,7 +427,7 @@ def process_player_input(input_text: str):
                 dynamic_choices_for_sell = []
                 if player_inventory:
                     for item_id in player_inventory:
-                        item_data = game_state.ITEM_DATABASE.get(item_id)
+                        item_data = game.items.get(item_id)
                         if item_data and item_data.get("sell_price") is not None: # Only show sellable items
                             dynamic_choices_for_sell.append({
                                 "text": f"{item_data.get('name', item_id)} ({item_data.get('sell_price', 'N/A')} Gold)",
@@ -480,7 +447,7 @@ def process_player_input(input_text: str):
                     sells_item_ids = getattr(npc, 'sells_item_ids', [])
                     if sells_item_ids:
                         for item_id in sells_item_ids:
-                            item_data = game_state.ITEM_DATABASE.get(item_id)
+                            item_data = game.items.get(item_id)
                             if item_data:
                                 active_choices.append({
                                     "text": f"{item_data.get('name', item_id)} ({item_data.get('buy_price', 'N/A')} Gold)",
@@ -491,7 +458,7 @@ def process_player_input(input_text: str):
                     player_inventory = hero.inventory
                     if player_inventory:
                         for item_id in player_inventory:
-                            item_data = game_state.ITEM_DATABASE.get(item_id)
+                            item_data = game.items.get(item_id)
                             if item_data and item_data.get("sell_price") is not None:
                                 active_choices.append({
                                     "text": f"{item_data.get('name', item_id)} ({item_data.get('sell_price', 'N/A')} Gold)",
@@ -517,7 +484,7 @@ def process_player_input(input_text: str):
                         dynamic_choices_refresh = []
                         if sells_item_ids_refresh:
                             for item_id_refresh in sells_item_ids_refresh:
-                                item_data_refresh = game_state.ITEM_DATABASE.get(item_id_refresh)
+                                item_data_refresh = game.items.get(item_id_refresh)
                                 if item_data_refresh:
                                     dynamic_choices_refresh.append({
                                         "text": f"{item_data_refresh.get('name', item_id_refresh)} ({item_data_refresh.get('buy_price', 'N/A')} Gold)",
@@ -539,7 +506,7 @@ def process_player_input(input_text: str):
                         dynamic_choices_refresh = []
                         if player_inventory_refresh:
                             for item_id_refresh in player_inventory_refresh:
-                                item_data_refresh = game_state.ITEM_DATABASE.get(item_id_refresh)
+                                item_data_refresh = game.items.get(item_id_refresh)
                                 if item_data_refresh and item_data_refresh.get("sell_price") is not None:
                                     dynamic_choices_refresh.append({
                                         "text": f"{item_data_refresh.get('name', item_id_refresh)} ({item_data_refresh.get('sell_price', 'N/A')} Gold)",

@@ -7,6 +7,46 @@ if not is_test_mode_for_ui:
     from tkinter import scrolledtext
     BaseFrame = tk.Frame
 else:
+    # In test mode, create a mock tk module with necessary constants
+    class MockTk:
+        """Mock tkinter module for test mode"""
+        # Constants
+        BOTH = "both"
+        WORD = "word"
+        END = "end"
+        DISABLED = "disabled"
+        NORMAL = "normal"
+        LEFT = "left"
+        TOP = "top"
+        X = "x"
+        
+        # Exception
+        TclError = Exception
+        
+        # Mock widget classes (not used in test mode, but defined for completeness)
+        class Frame:
+            pass
+        
+        class Entry:
+            pass
+        
+        class Button:
+            pass
+        
+        class Label:
+            pass
+        
+        class Tk:
+            pass
+    
+    tk = MockTk()
+    
+    # Mock scrolledtext module
+    class MockScrolledText:
+        class ScrolledText:
+            pass
+    
+    scrolledtext = MockScrolledText()
     BaseFrame = object # Inherit from object in test mode
 
 class GamePlayFrame(BaseFrame):
@@ -24,6 +64,7 @@ class GamePlayFrame(BaseFrame):
             self.pack(fill=tk.BOTH, expand=True)
         else: # Test mode
             self.master = None # No actual master window in test mode
+            self._test_destroyed_flag = False # Initialize test mode destroyed flag
             # super() for object doesn't need arguments and is implicitly called.
             print("UI_LOG: GamePlayFrame initialized in TEST MODE (inherits from object).")
 
@@ -211,6 +252,12 @@ class GamePlayFrame(BaseFrame):
             return True
         except AttributeError:
             return True
+    
+    def destroy_test_mode(self):
+        """Method to properly destroy the frame in test mode"""
+        if self.is_test_mode:
+            self._test_destroyed_flag = True
+            print("UI_LOG: GamePlayFrame destroyed in TEST MODE.")
 
 if __name__ == "__main__":
     # This direct execution block will run with Tkinter as is_test_mode will be False
