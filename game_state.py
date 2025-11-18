@@ -5,7 +5,6 @@ from magic import SPELLBOOK, Spell # Import necessary spellcasting components
 from gemini_dm import notify_dm # Import for DM notifications
 from quests import ALL_QUESTS # Import for accessing quest details
 from factions import Faction # Added import
-from monster_generator import MonsterGenerator
 from generated_monster import GeneratedMonster # For type hinting if needed
 
 # Import necessary functions/classes from data_loader and config for the main block
@@ -128,82 +127,7 @@ class KeyItem(Item):
         self.unlocks = unlocks if unlocks is not None else []
     def __repr__(self): return f"<KeyItem(id='{self.id}', name='{self.name}')>"
 
-class Character:
-    def __init__(self, id: str, name: str, max_hp: int, combat_stats: dict, base_damage_dice: str):
-        if not isinstance(id, str) or not id.strip(): raise ValueError("Character ID must be a non-empty string.")
-        if not isinstance(name, str) or not name.strip(): raise ValueError("Character name must be a non-empty string.")
-        if not isinstance(max_hp, int) or max_hp <= 0: raise ValueError("max_hp must be a positive integer.")
-        if not isinstance(combat_stats, dict): raise TypeError("combat_stats must be a dictionary.")
-        if not isinstance(base_damage_dice, str) or not base_damage_dice.strip(): raise ValueError("base_damage_dice must be a non-empty string.")
-        self.id = id
-        self.name = name
-        self.max_hp = max_hp
-        self.current_hp = max_hp
-        self.combat_stats = combat_stats
-        self.base_damage_dice = base_damage_dice
-        self.status_effects = []
-    def add_status_effect(self, effect_name: str, duration: int, potency: int):
-        for effect in self.status_effects:
-            if effect['name'] == effect_name:
-                effect['duration'] = duration; effect['potency'] = potency
-                return f"{self.name}'s {effect_name} refreshed to {duration} turns."
-        self.status_effects.append({'name': effect_name, 'duration': duration, 'potency': potency})
-        return f"{self.name} is now {effect_name} for {duration} turns."
-    def remove_status_effect(self, effect_name: str):
-        self.status_effects = [e for e in self.status_effects if e['name'] != effect_name]
-    def tick_status_effects(self) -> list[str]:
-        msgs = []
-        for effect in list(self.status_effects):
-            if effect['name'] == 'poison':
-                self.take_damage(effect['potency'])
-                msgs.append(f"{self.name} took {effect['potency']} from poison.")
-                if not self.is_alive(): msgs.append(f"{self.name} succumbed to poison."); break
-            effect['duration'] -= 1
-            if effect['duration'] <= 0: self.remove_status_effect(effect['name']); msgs.append(f"{self.name} no longer {effect['name']}.")
-        return msgs
-    def take_damage(self, amount: int):
-        if not isinstance(amount, int): raise TypeError("Damage amount int.")
-        if amount < 0: raise ValueError("Damage amount non-negative.")
-        self.current_hp = max(0, self.current_hp - amount)
-    def heal(self, amount: int):
-        if not isinstance(amount, int): raise TypeError("Heal amount int.")
-        if amount < 0: raise ValueError("Heal amount non-negative.")
-        self.current_hp = min(self.max_hp, self.current_hp + amount)
-    def is_alive(self) -> bool: return self.current_hp > 0
-    def attack(self, target: 'Character', game_state: 'GameState') -> str:
-        if not isinstance(target, Character): raise TypeError("Target must be Character.")
-        if self == target: return f"{self.name} cannot attack themselves."
-        dm_msg = f"{self.name} attacks {target.name}."
-        atk_roll = roll_dice(sides=20)
-        cur_atk_bonus = self.combat_stats.get('attack_bonus', 0)
-        cur_dmg_bonus = self.combat_stats.get('damage_bonus', 0)
-        cur_dmg_dice = self.base_damage_dice
-        if isinstance(self, Player):
-            wp_stats = self.get_equipped_weapon_stats(game_state)
-            cur_dmg_dice = wp_stats["damage_dice"]
-            cur_atk_bonus += wp_stats["attack_bonus"]
-            cur_dmg_bonus += wp_stats["damage_bonus"]
-        total_atk = atk_roll + cur_atk_bonus
-        target_ac = target.get_effective_armor_class(game_state) if isinstance(target, Player) else target.combat_stats.get('armor_class', 10)
-        if total_atk >= target_ac:
-            dm_msg += f" d20({atk_roll})+ATK({cur_atk_bonus})={total_atk} vs AC({target_ac}). HIT!"
-            try:
-                parts = cur_dmg_dice.lower().split('d')
-                num_dice, dice_sides = (1,4)
-                if len(parts)==2: num_dice,dice_sides = (int(parts[0]) if parts[0] else 1), int(parts[1])
-                elif len(parts)==1 and parts[0].isdigit(): num_dice,dice_sides = 1,int(parts[0]); cur_dmg_dice=f"1d{dice_sides}"
-                else: raise ValueError("Invalid XdY or dY.")
-                if num_dice<=0 or dice_sides<=0: raise ValueError("Dice/sides positive.")
-            except ValueError as e: raise ValueError(f"Parse error '{cur_dmg_dice}' for {self.name}: {e}")
-            dmg_roll = roll_dice(sides=dice_sides, num_dice=num_dice)
-            total_dmg = max(0, dmg_roll + cur_dmg_bonus)
-            target.take_damage(total_dmg)
-            dm_msg += f" Deals {num_dice}d{dice_sides}({dmg_roll})+DMG({cur_dmg_bonus})={total_dmg} damage."
-            dm_msg += f" {target.name} HP: {target.current_hp}/{target.max_hp}."
-            if target.is_alive() and random.randint(1,100)<=10: target.add_status_effect('poison',3,2); dm_msg+=f" {target.name} poisoned!"
-            if not target.is_alive(): dm_msg+=f" {target.name} defeated!"
-        else: dm_msg+=f" d20({atk_roll})+ATK({cur_atk_bonus})={total_atk} vs AC({target_ac}). MISS!"
-        return dm_msg
+from character import Character
 
 class Player(Character):
     def __init__(self, player_data: dict, equipment_data: dict = None): # equipment_data is legacy, not actively used for init
