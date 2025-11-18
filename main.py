@@ -33,6 +33,15 @@ else:
         def update_hp(self, hp_value: str):
             print(f"UI_MOCK_UPDATE_HP: {hp_value}")
 
+        def update_location(self, location_name: str):
+            print(f"UI_MOCK_UPDATE_LOCATION: {location_name}")
+
+        def update_inventory(self, inventory_string: str):
+            print(f"UI_MOCK_UPDATE_INVENTORY: {inventory_string}")
+
+        def update_npcs(self, npc_string: str):
+            print(f"UI_MOCK_UPDATE_NPCS: {npc_string}")
+
         def enable_input(self):
             print("UI_MOCK_ACTION: Input enabled.")
 
@@ -41,6 +50,11 @@ else:
 
         def is_destroyed(self):
             return self._test_destroyed_flag
+
+        def destroy_test_mode(self):
+            """Method to properly destroy the frame in test mode"""
+            self._test_destroyed_flag = True
+            print("UI_MOCK: MockGamePlayFrame destroyed in TEST MODE.")
 
     GamePlayFrame = MockGamePlayFrame # Use the mock class as GamePlayFrame in test mode
 
@@ -344,6 +358,60 @@ import data_loader # Import the data_loader module
 from data_loader import load_raw_data_from_sources # Specific import
 from config import RAG_DOCUMENT_SOURCES # Specific import for RAG sources
 
+# GameManager class to encapsulate global state
+class GameManager:
+    """
+    Manages all game state including player, NPCs, DM, UI, and game state.
+    
+    This class encapsulates what were previously global variables to improve:
+    - Testability: Easier to create isolated test instances
+    - Maintainability: Clear ownership of state
+    - Thread safety: Potential for future multi-instance support
+    
+    Usage:
+        manager = GameManager()
+        manager.initialize_dm()
+        manager.initialize_player(player_data)
+        manager.initialize_game_state()
+        manager.load_game_data()
+    """
+    def __init__(self):
+        self.hero: Player = None
+        self.mock_npcs_in_encounter: list[NPC] = []
+        self.main_player_state: PlayerState = None
+        self.dm: GeminiDM = None
+        self.app: GamePlayFrame = None
+        self.game: GameState = None
+    
+    def initialize_dm(self):
+        """Initialize the DM instance."""
+        self.dm = GeminiDM()
+    
+    def initialize_player(self, player_data: dict):
+        """Initialize the player character."""
+        self.hero = Player(player_data=player_data)
+        self.main_player_state = PlayerState(player_character=self.hero)
+    
+    def initialize_game_state(self):
+        """Initialize the game state with the player."""
+        self.game = GameState(player_character=self.hero)
+    
+    def load_game_data(self):
+        """Load all game data from sources."""
+        print("Loading all game data for GameState initialization...")
+        all_game_raw_data = load_raw_data_from_sources(RAG_DOCUMENT_SOURCES)
+        self.game.initialize_from_raw_data(all_game_raw_data)
+        print(f"GameState initialized. Items loaded: {len(self.game.items)}, NPCs: {len(self.game.npcs)}, Locations: {len(self.game.locations)}")
+    
+    def refresh_npcs(self):
+        """Refresh NPCs in the encounter."""
+        self.mock_npcs_in_encounter = get_fresh_npcs()
+
+# Global GameManager instance
+game_manager = GameManager()
+
+# Legacy global variables for backward compatibility (will be deprecated)
+# These reference the GameManager instance
 hero: Player = None
 mock_npcs_in_encounter: list[NPC] = []
 main_player_state: PlayerState = None
@@ -740,13 +808,9 @@ def main():
     global hero, mock_npcs_in_encounter, main_player_state, dm, app, game # Added game
     print("Starting game...")
 
-    dm = GeminiDM()
-    # Initialize GameState early, needs to be populated after data loading
-    # For now, just creating an instance. Data loading will be separate.
-    # This addresses the `game.items` access.
-    # Actual data loading into `game` instance needs to happen after player init
-    # and before game loop or any command that might need game.items.
-
+    # Initialize using GameManager
+    game_manager.initialize_dm()
+    
     hero_player_data = {
         "id": "hero_1", "name": "Hero", "max_hp": 100,
         "combat_stats": {'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 3},
@@ -756,19 +820,18 @@ def main():
         "proficiencies": {"skills": ["athletics", "lockpicking", "stealth"]},
         "equipment": {"weapon": "long_sword", "armor": "leather_armor"}
     }
-    hero = Player(player_data=hero_player_data)
-    mock_npcs_in_encounter = get_fresh_npcs() # This now uses data_loader
-    main_player_state = PlayerState(player_character=hero) # PlayerState initialized
-
-    game = GameState(player_character=hero) # Initialize GameState with the player
-
-    # Load all raw game data using the imported function and config
-    print("Loading all game data for GameState initialization...")
-    all_game_raw_data = load_raw_data_from_sources(RAG_DOCUMENT_SOURCES)
-
-    # Initialize the game instance with this data
-    game.initialize_from_raw_data(all_game_raw_data)
-    print(f"GameState initialized. Items loaded: {len(game.items)}, NPCs: {len(game.npcs)}, Locations: {len(game.locations)}")
+    
+    game_manager.initialize_player(hero_player_data)
+    game_manager.initialize_game_state()
+    game_manager.load_game_data()
+    game_manager.refresh_npcs()
+    
+    # Update legacy global variables for backward compatibility
+    hero = game_manager.hero
+    mock_npcs_in_encounter = game_manager.mock_npcs_in_encounter
+    main_player_state = game_manager.main_player_state
+    dm = game_manager.dm
+    game = game_manager.game
     # The TODO is now addressed. game.items should be populated if data files exist.
 
     # Add new lore items to inventory for testing the 'read' command

@@ -2,6 +2,7 @@ import os # Ensure os is imported for getenv
 
 # Conditionally import tkinter and define BaseFrame
 is_test_mode_for_ui = (os.getenv("RUNNING_INTERACTIVE_TEST") == "true")
+
 if not is_test_mode_for_ui:
     import tkinter as tk
     from tkinter import scrolledtext
@@ -48,6 +49,9 @@ else:
     
     scrolledtext = MockScrolledText()
     BaseFrame = object # Inherit from object in test mode
+
+# Export module-level variables (defined after conditional blocks)
+__all__ = ['GamePlayFrame', 'tk', 'scrolledtext', 'BaseFrame', 'is_test_mode_for_ui']
 
 class GamePlayFrame(BaseFrame):
     def __init__(self, master=None, process_input_callback=None, 
@@ -274,37 +278,38 @@ if __name__ == "__main__":
     else:
         print("Running ui.py in normal Tkinter mode for direct testing.")
         root = tk.Tk()
-    # Example of running ui.py directly with a dummy callback
-    def dummy_process_input(text):
-        print(f"Dummy process_input_callback received: {text}")
-        app.add_narration(f"DM (dummy): You said '{text}'\n")
-    
-    def dummy_save():
-        print("Dummy save_game_callback called")
-        app.add_narration("Game Saved (Dummy).\n")
+        
+        # Example of running ui.py directly with a dummy callback
+        def dummy_process_input(text):
+            print(f"Dummy process_input_callback received: {text}")
+            app.add_narration(f"DM (dummy): You said '{text}'\n")
+        
+        def dummy_save():
+            print("Dummy save_game_callback called")
+            app.add_narration("Game Saved (Dummy).\n")
 
-    def dummy_load():
-        print("Dummy load_game_callback called")
-        app.add_narration("Game Loaded (Dummy).\n")
-        app.update_hp("HP from Dummy Load")
-        app.update_location("Dummy Loaded Location")
-        app.update_inventory("Dummy Loaded Inventory")
-        app.update_npcs("Dummy Loaded NPCs")
+        def dummy_load():
+            print("Dummy load_game_callback called")
+            app.add_narration("Game Loaded (Dummy).\n")
+            app.update_hp("HP from Dummy Load")
+            app.update_location("Dummy Loaded Location")
+            app.update_inventory("Dummy Loaded Inventory")
+            app.update_npcs("Dummy Loaded NPCs")
 
-    def dummy_exit():
-        print("Dummy exit_callback called")
-        app.add_narration("Exiting (Dummy).\n")
-        if app.master:
-            app.master.destroy()
+        def dummy_exit():
+            print("Dummy exit_callback called")
+            app.add_narration("Exiting (Dummy).\n")
+            if app.master:
+                app.master.destroy()
 
-    app = GamePlayFrame(master=root, 
-                      process_input_callback=dummy_process_input,
-                      save_game_callback=dummy_save,
-                      load_game_callback=dummy_load,
-                      exit_callback=dummy_exit)
-    app.add_narration("This is ui.py running directly with dummy action callbacks.\n")
-    app.update_hp("[HP]") # Initial placeholder values
-    app.update_location("[Location]")
-    app.update_inventory("[Inventory]")
-    app.update_npcs("[NPCs]")
-    app.mainloop()
+        app = GamePlayFrame(master=root, 
+                          process_input_callback=dummy_process_input,
+                          save_game_callback=dummy_save,
+                          load_game_callback=dummy_load,
+                          exit_callback=dummy_exit)
+        app.add_narration("This is ui.py running directly with dummy action callbacks.\n")
+        app.update_hp("[HP]") # Initial placeholder values
+        app.update_location("[Location]")
+        app.update_inventory("[Inventory]")
+        app.update_npcs("[NPCs]")
+        app.mainloop()

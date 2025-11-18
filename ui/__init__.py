@@ -1,9 +1,24 @@
 # This file makes the 'ui' directory a Python package.
 
-# Placeholder for GamePlayFrame to allow main.py to import
-# The test script (test_save_game.py) will mock main.GamePlayFrame more thoroughly.
-class GamePlayFrame:
-    pass
+# Import GamePlayFrame from the parent ui.py module
+import sys
+import os
+import importlib.util
+
+# Get the parent directory path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ui_py_path = os.path.join(parent_dir, 'ui.py')
+
+# Import GamePlayFrame from ui.py if it exists
+if os.path.exists(ui_py_path):
+    spec = importlib.util.spec_from_file_location("ui_module", ui_py_path)
+    ui_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ui_module)
+    GamePlayFrame = ui_module.GamePlayFrame
+else:
+    # Fallback placeholder if ui.py doesn't exist
+    class GamePlayFrame:
+        pass
 
 # Attempt to import other known classes to make them available if needed by main.py directly from ui
 try:
