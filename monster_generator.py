@@ -1,7 +1,8 @@
 import random
 import uuid # For generating unique IDs
-from generated_monster import GeneratedMonster # Import the new class
-from typing import Any, Dict, List, Optional, Tuple
+from generated_monster import GeneratedMonster
+from typing import Any, Dict, List, Optional
+from character import Character
 
 # Helper function to safely get nested dictionary values
 def get_nested_value(data_dict: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
@@ -50,13 +51,8 @@ class MonsterGenerator:
         if not eligible_attributes:
              eligible_attributes = list(self.attribute_templates.values())
 
-        for _ in range(min(num_attributes, len(eligible_attributes))):
-            chosen_attr = random.choice(eligible_attributes)
-            if chosen_attr not in selected_attributes:
-                 selected_attributes.append(chosen_attr)
-            if len(selected_attributes) == len(eligible_attributes):
-                break
-        return selected_attributes
+        k = min(num_attributes, len(eligible_attributes))
+        return random.sample(eligible_attributes, k)
 
     def _select_role(self, selected_race: Dict[str, Any],
                      role_id: Optional[str] = None,
@@ -107,7 +103,7 @@ class MonsterGenerator:
             return f"{base} {modifiers}"
         return desc_parts[0]
 
-    def _calculate_combat_stats(self, race: Dict[str, Any], attributes: List[Dict[str, Any]], role: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any], int, str]:
+    def _calculate_combat_stats(self, race: Dict[str, Any], attributes: List[Dict[str, Any]], role: Optional[Dict[str, Any]]) -> tuple[Dict[str, Any], int, str]:
         final_stats = {k: v for k, v in get_nested_value(race, ['base_combat_stats'], {}).items()}
 
         final_stats.setdefault('hp', 10)
@@ -160,7 +156,7 @@ class MonsterGenerator:
 
         return final_stats, max_hp, base_damage_dice
 
-    def _collect_abilities_etc(self, race: Dict[str, Any], attributes: List[Dict[str, Any]], role: Optional[Dict[str, Any]]) -> Tuple[List[str], List[str], List[str]]:
+    def _collect_abilities_etc(self, race: Dict[str, Any], attributes: List[Dict[str, Any]], role: Optional[Dict[str, Any]]) -> tuple[List[str], List[str], List[str]]:
         special_abilities = get_nested_value(race, ['inherent_abilities'], [])[:]
         resistances = get_nested_value(race, ['inherent_resistances'], [])[:]
         vulnerabilities = get_nested_value(race, ['inherent_vulnerabilities'], [])[:]

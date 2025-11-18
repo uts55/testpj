@@ -192,5 +192,36 @@ class TestMonsterGenerator(unittest.TestCase):
         self.assertFalse(has_role)
 
 
+    def test_attribute_selection_uniqueness_and_quantity(self):
+        # This race can have 3 attributes
+        race_id = "orc"
+        eligible_attributes = MOCK_RACE_TEMPLATES[0]["possible_attribute_tags"]
+        self.assertEqual(len(eligible_attributes), 3)
+
+        # Force the selection of the maximum number of attributes
+        # With difficulty 7+, it should try to pick 2 or 3 attributes
+        # The bug occurs when random.choice picks the same attribute multiple times
+        for _ in range(50): # Run multiple times to increase chance of encountering the random bug
+            monster = self.generator.generate_monster(race_id=race_id, difficulty_level=10)
+
+            # Extract selected attribute IDs from loot tags
+            selected_attr_ids = [
+                tag.replace("attr_", "")
+                for tag in monster.loot_table_tags
+                if tag.startswith("attr_")
+            ]
+
+            # Verify that the number of unique attributes is correct
+            # For an orc with 3 possible attributes and difficulty 10, we expect 2 or 3
+            self.assertIn(len(set(selected_attr_ids)), [2, 3],
+                        f"Test failed: Incorrect number of attributes generated. "
+                        f"Expected 2 or 3, but got {len(set(selected_attr_ids))} "
+                        f"for monster {monster.name} with tags {monster.loot_table_tags}")
+
+            # Also verify that there are no duplicates in the first place
+            self.assertEqual(len(selected_attr_ids), len(set(selected_attr_ids)),
+                             f"Test failed: Duplicate attributes were selected. "
+                             f"Tags: {monster.loot_table_tags}")
+
 if __name__ == '__main__':
     unittest.main()
