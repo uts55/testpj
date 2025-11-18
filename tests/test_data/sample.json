@@ -1,8 +1,0 @@
-{
-  "name": "Test Object",
-  "description": "This is a test JSON object.",
-  "details": {
-    "type": "sample",
-    "value": 100
-  }
-}
