@@ -52,9 +52,16 @@ class GamePlayFrame(BaseFrame):
         self.choice_buttons = []
 
         # Input Entry
-        self.input_entry = tk.Entry(self, bg=entry_bg, fg="#ffffff", insertbackground='white', font=("Segoe UI", 10))
+        self.placeholder_text = "Enter command..."
+        self.placeholder_color = "#888888"
+        self.entry_fg_color = "#ffffff"
+
+        self.input_entry = tk.Entry(self, bg=entry_bg, fg=self.placeholder_color, insertbackground='white', font=("Segoe UI", 10))
+        self.input_entry.insert(0, self.placeholder_text)
         self.input_entry.pack(padx=10, pady=5, fill=tk.X)
         self.input_entry.bind("<Return>", lambda event: self.handle_send_button())
+        self.input_entry.bind("<FocusIn>", self.on_entry_focus_in)
+        self.input_entry.bind("<FocusOut>", self.on_entry_focus_out)
 
         # Send Button
         self.send_button = tk.Button(self, text="Send", command=self.handle_send_button, 
@@ -103,11 +110,22 @@ class GamePlayFrame(BaseFrame):
                                      bg="#800000", fg="#ffffff", activebackground="#a00000", activeforeground="#ffffff", relief=tk.FLAT)
         self.exit_button.pack(side=tk.LEFT, padx=5, pady=5)
 
+    def on_entry_focus_in(self, event):
+        if self.input_entry.get() == self.placeholder_text:
+            self.input_entry.delete(0, tk.END)
+            self.input_entry.config(fg=self.entry_fg_color)
+
+    def on_entry_focus_out(self, event):
+        if not self.input_entry.get():
+            self.input_entry.insert(0, self.placeholder_text)
+            self.input_entry.config(fg=self.placeholder_color)
+
     def handle_send_button(self):
         input_text = self.input_entry.get()
-        if input_text:
+        if input_text and input_text != self.placeholder_text:
             self.add_narration(f"> {input_text}")
             self.input_entry.delete(0, tk.END)
+            self.input_entry.focus_set() # Restore focus to entry
             if self.process_input_callback:
                 self.process_input_callback(input_text)
             else:
