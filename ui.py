@@ -29,58 +29,79 @@ class GamePlayFrame(BaseFrame):
         self.create_widgets()
 
     def create_widgets(self):
+        # Theme Colors
+        bg_color = "#2b2b2b"
+        fg_color = "#dcdcdc"
+        accent_color = "#4a4a4a"
+        text_bg = "#1e1e1e"
+        entry_bg = "#3c3f41"
+        button_bg = "#444444"
+        button_fg = "#ffffff"
+
+        self.configure(bg=bg_color)
+
         # Narration Text Area
-        self.narration_area = scrolledtext.ScrolledText(self, wrap=tk.WORD, state='disabled')
+        self.narration_area = scrolledtext.ScrolledText(self, wrap=tk.WORD, state='disabled',
+                                                        bg=text_bg, fg=fg_color, insertbackground='white',
+                                                        font=("Consolas", 10))
         self.narration_area.pack(padx=10, pady=(10,5), fill=tk.BOTH, expand=True)
 
         # Dialogue Choices Frame (initially empty)
-        self.dialogue_choices_frame = tk.Frame(self)
-        self.dialogue_choices_frame.pack(padx=10, pady=2, fill=tk.X) # Less pady than input_entry
+        self.dialogue_choices_frame = tk.Frame(self, bg=bg_color)
+        self.dialogue_choices_frame.pack(padx=10, pady=2, fill=tk.X) 
         self.choice_buttons = []
 
         # Input Entry
-        self.input_entry = tk.Entry(self)
+        self.input_entry = tk.Entry(self, bg=entry_bg, fg="#ffffff", insertbackground='white', font=("Segoe UI", 10))
         self.input_entry.pack(padx=10, pady=5, fill=tk.X)
+        self.input_entry.bind("<Return>", lambda event: self.handle_send_button())
 
         # Send Button
-        self.send_button = tk.Button(self, text="Send", command=self.handle_send_button)
+        self.send_button = tk.Button(self, text="Send", command=self.handle_send_button, 
+                                     bg=button_bg, fg=button_fg, activebackground=accent_color, activeforeground=button_fg, relief=tk.FLAT)
         self.send_button.pack(padx=10, pady=5)
 
         # Game State Frame
-        self.state_frame = tk.Frame(self, borderwidth=2, relief="groove")
-        self.state_frame.pack(padx=10, pady=5, fill=tk.X) # pady uniform
+        self.state_frame = tk.Frame(self, borderwidth=1, relief="solid", bg=accent_color)
+        self.state_frame.pack(padx=10, pady=5, fill=tk.X)
+
+        # Status Labels Style
+        label_style = {"bg": accent_color, "fg": "#ffffff", "font": ("Segoe UI", 9, "bold")}
 
         # HP Label
-        self.hp_label = tk.Label(self.state_frame, text="HP: [HP]")
-        self.hp_label.pack(side=tk.LEFT, padx=5, pady=5)
+        self.hp_label = tk.Label(self.state_frame, text="HP: [HP]", **label_style)
+        self.hp_label.pack(side=tk.LEFT, padx=10, pady=5)
 
         # Location Label
-        self.location_label = tk.Label(self.state_frame, text="Location: [Location]")
-        self.location_label.pack(side=tk.LEFT, padx=5, pady=5)
+        self.location_label = tk.Label(self.state_frame, text="Location: [Location]", **label_style)
+        self.location_label.pack(side=tk.LEFT, padx=10, pady=5)
 
         # Inventory Label
-        self.inventory_label = tk.Label(self.state_frame, text="Inventory: [Inventory]")
-        self.inventory_label.pack(side=tk.LEFT, padx=5, pady=5)
+        self.inventory_label = tk.Label(self.state_frame, text="Inventory: [Inventory]", **label_style)
+        self.inventory_label.pack(side=tk.LEFT, padx=10, pady=5)
 
         # NPCs Label
-        self.npcs_label = tk.Label(self.state_frame, text="NPCs: [NPCs]")
-        self.npcs_label.pack(side=tk.LEFT, padx=5, pady=5)
+        self.npcs_label = tk.Label(self.state_frame, text="NPCs: [NPCs]", **label_style)
+        self.npcs_label.pack(side=tk.LEFT, padx=10, pady=5)
 
         # Action Buttons Frame
-        self.actions_frame = tk.Frame(self)
-        self.actions_frame.pack(padx=10, pady=5, fill=tk.X) # pady uniform
+        self.actions_frame = tk.Frame(self, bg=bg_color)
+        self.actions_frame.pack(padx=10, pady=5, fill=tk.X)
 
         # Save Game Button
-        self.save_button = tk.Button(self.actions_frame, text="Save Game", command=self.save_game_callback)
-        self.save_button.pack(side=tk.LEFT, padx=5, pady=5) # Added pady here
+        self.save_button = tk.Button(self.actions_frame, text="Save Game", command=self.save_game_callback,
+                                     bg=button_bg, fg=button_fg, activebackground=accent_color, activeforeground=button_fg, relief=tk.FLAT)
+        self.save_button.pack(side=tk.LEFT, padx=5, pady=5)
         
         # Load Game Button
-        self.load_button = tk.Button(self.actions_frame, text="Load Game", command=self.load_game_callback)
-        self.load_button.pack(side=tk.LEFT, padx=5, pady=5) # Added pady here
+        self.load_button = tk.Button(self.actions_frame, text="Load Game", command=self.load_game_callback,
+                                     bg=button_bg, fg=button_fg, activebackground=accent_color, activeforeground=button_fg, relief=tk.FLAT)
+        self.load_button.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Exit Button
-        self.exit_button = tk.Button(self.actions_frame, text="Exit", command=self.exit_callback)
-        self.exit_button.pack(side=tk.LEFT, padx=5, pady=5) # Added pady here
+        self.exit_button = tk.Button(self.actions_frame, text="Exit", command=self.exit_callback,
+                                     bg="#800000", fg="#ffffff", activebackground="#a00000", activeforeground="#ffffff", relief=tk.FLAT)
+        self.exit_button.pack(side=tk.LEFT, padx=5, pady=5)
 
     def handle_send_button(self):
         input_text = self.input_entry.get()
@@ -103,7 +124,7 @@ class GamePlayFrame(BaseFrame):
             self.input_entry.config(state=tk.NORMAL)
         if hasattr(self, 'send_button'):
             self.send_button.config(state=tk.NORMAL)
-        if hasattr(self, 'input_entry'): # Check again before focus
+        if hasattr(self, 'input_entry'): 
             self.input_entry.focus_set()
 
     def display_dialogue(self, npc_name: str, npc_text: str, player_choices: list[dict]):

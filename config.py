@@ -58,6 +58,18 @@ INITIAL_BACKOFF_SECONDS = 1.0
 SAVE_GAME_DIR = "./Save/"
 SAVE_GAME_FILENAME = "autosave.json"
 
+# Default Hero Data
+HERO_DEFAULT_DATA = {
+    "id": "hero_1", "name": "Hero", "max_hp": 100,
+    "combat_stats": {'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 3},
+    "base_damage_dice": "1d8",
+    "ability_scores": {"strength": 16, "dexterity": 14, "constitution": 15, "intelligence": 10, "wisdom": 12, "charisma": 13},
+    "skills": ["athletics", "perception", "lockpicking", "persuasion", "stealth"],
+    "proficiencies": {"skills": ["athletics", "lockpicking", "stealth"]},
+    "equipment": {"weapon": "long_sword", "armor": "leather_armor"},
+    "inventory": [] # Initial empty inventory
+}
+
 # Other
 INITIAL_PROMPT_TEXT = "당신은 Dungeons & Dragons 5판 게임의 숙련된 던전 마스터입니다. 플레이어의 첫 행동을 기다리는 상황을 가정하고, 모험의 시작을 알리는 흥미로운 도입부를 묘사해주세요."
 

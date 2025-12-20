@@ -1,28 +1,16 @@
-import re # For skill command parsing and cast command
-from game_state import PlayerState, determine_initiative, Player, NPC, Character
-import os # Ensure os is imported early for getenv
-from gemini_dm import GeminiDM
-import game_state # Required for module-level function calls
-from combat_system import start_combat, process_combat_turn, check_combat_end_condition, notify_dm_event
-
-# Conditional imports for Tkinter based on test mode
+import re
+import os
 import tkinter as tk
-from ui import GamePlayFrame # Full UI version
-
-
-
-
-# Global type hint for app can now safely use GamePlayFrame as it's defined in both paths
-# (either imported from ui or defined as MockGamePlayFrame)
+from gemini_dm import GeminiDM
+import game_state # Import module for module-level functions
+from game_state import PlayerState, determine_initiative, Player, NPC, Character, GameState
+from combat_system import start_combat, process_combat_turn, check_combat_end_condition, notify_dm_event
+from ui import GamePlayFrame
 
 from rag_manager import query_vector_db
-from config import EMBEDDING_MODEL_NAME, VECTOR_DB_PATH, COLLECTION_NAME, GEMINI_MODEL_NAME
-from game_state import GameState # Added for game instance
-
-# --- Global PlayerState and Mock Entities for main game loop ---
-import data_loader # Import the data_loader module
-from data_loader import load_raw_data_from_sources # Specific import
-from config import RAG_DOCUMENT_SOURCES # Specific import for RAG sources
+from config import EMBEDDING_MODEL_NAME, VECTOR_DB_PATH, COLLECTION_NAME, GEMINI_MODEL_NAME, HERO_DEFAULT_DATA, RAG_DOCUMENT_SOURCES
+import data_loader
+from data_loader import load_raw_data_from_sources
 
 # GameManager class to encapsulate global state
 class GameManager:
@@ -508,15 +496,7 @@ def main():
     # Initialize using GameManager
     game_manager.initialize_dm()
     
-    hero_player_data = {
-        "id": "hero_1", "name": "Hero", "max_hp": 100,
-        "combat_stats": {'armor_class': 15, 'attack_bonus': 5, 'damage_bonus': 2, 'initiative_bonus': 3},
-        "base_damage_dice": "1d8",
-        "ability_scores": {"strength": 16, "dexterity": 14, "constitution": 15, "intelligence": 10, "wisdom": 12, "charisma": 13},
-        "skills": ["athletics", "perception", "lockpicking", "persuasion", "stealth"],
-        "proficiencies": {"skills": ["athletics", "lockpicking", "stealth"]},
-        "equipment": {"weapon": "long_sword", "armor": "leather_armor"}
-    }
+    hero_player_data = HERO_DEFAULT_DATA
     
     game_manager.initialize_player(hero_player_data)
     game_manager.initialize_game_state()

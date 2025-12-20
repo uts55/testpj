@@ -838,6 +838,18 @@ def determine_initiative(participants:list[Character])->list[str]:
     return [e['id'] for e in rolls]
 
 def player_buys_item(player:Player,npc:NPC,item_id:str,game_state:GameState)->tuple[bool,str]:
+    """
+    Process the player buying an item from an NPC.
+    
+    Args:
+        player: The Player instance.
+        npc: The NPC instance selling the item.
+        item_id: The ID of the item to buy.
+        game_state: The current GameState.
+        
+    Returns:
+        tuple[bool, str]: (Success status, Result message)
+    """
     item=game_state.items.get(item_id)
     if not item: return False, f"Item ID '{item_id}' not found."
     price=item.value.get("buy") if item.value else 0
@@ -851,6 +863,18 @@ def player_buys_item(player:Player,npc:NPC,item_id:str,game_state:GameState)->tu
     return True, f"Bought '{item.name}' for {price} gold."
 
 def player_sells_item(player:Player,npc:NPC,item_id:str,game_state:GameState)->tuple[bool,str]:
+    """
+    Process the player selling an item to an NPC.
+    
+    Args:
+        player: The Player instance.
+        npc: The NPC instance buying the item.
+        item_id: The ID of the item to sell.
+        game_state: The current GameState.
+        
+    Returns:
+        tuple[bool, str]: (Success status, Result message)
+    """
     if item_id not in player.inventory:
         item_obj=game_state.items.get(item_id); name=item_obj.name if item_obj else item_id
         return False, f"Player no '{name}' in inventory."

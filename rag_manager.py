@@ -29,6 +29,48 @@ from data_loader import load_raw_data_from_sources # Corrected import
 from config import RAG_DOCUMENT_SOURCES, RAG_TEXT_FIELDS, EMBEDDING_MODEL_NAME, VECTOR_DB_PATH, COLLECTION_NAME
 
 
+# Module-level cache for RAG resources to prevent reloading on every query
+_CACHED_MODEL = None
+_CACHED_CLIENT = None
+_CACHED_COLLECTION = None
+_CACHED_CONFIG_SIGNATURE = None
+
+def _get_rag_resources(embedding_model_name: str, vector_db_path: str, collection_name: str):
+    """
+    Helper to get cached RAG resources or initialize them if needed.
+    Returns: (model, client, collection) or (None, None, None) if error/not available.
+    """
+    global _CACHED_MODEL, _CACHED_CLIENT, _CACHED_COLLECTION, _CACHED_CONFIG_SIGNATURE
+    
+    if not RAG_LIBRARIES_AVAILABLE:
+        return None, None, None
+
+    # Check if config changed (e.g. different DB path in test vs prod)
+    current_signature = (embedding_model_name, vector_db_path, collection_name)
+    if _CACHED_CONFIG_SIGNATURE != current_signature:
+        _CACHED_MODEL = None
+        _CACHED_CLIENT = None
+        _CACHED_COLLECTION = None
+        _CACHED_CONFIG_SIGNATURE = current_signature
+
+    try:
+        if _CACHED_MODEL is None:
+            logging.info(f"Loading SentenceTransformer model: {embedding_model_name} (this may take a moment)...")
+            _CACHED_MODEL = SentenceTransformer(embedding_model_name)
+        
+        if _CACHED_CLIENT is None:
+            _CACHED_CLIENT = chromadb.PersistentClient(path=vector_db_path)
+            
+        if _CACHED_COLLECTION is None:
+            # Use get_or_create_collection to be safe
+            _CACHED_COLLECTION = _CACHED_CLIENT.get_or_create_collection(name=collection_name)
+            
+        return _CACHED_MODEL, _CACHED_CLIENT, _CACHED_COLLECTION
+    except Exception as e:
+        logging.error(f"Error loading RAG resources: {e}")
+        return None, None, None
+
+
 def get_text_from_doc(doc: dict, text_fields: list[str]) -> str:
     """
     Extracts and concatenates text from specified fields in a document dictionary.
@@ -84,21 +126,9 @@ def initialize_vector_db(
 
     logging.info(f"Initializing vector database. Model: {embedding_model_name}, Path: {vector_db_path}, Collection: {collection_name}")
 
-    try:
-        model = SentenceTransformer(embedding_model_name)
-        client = chromadb.PersistentClient(path=vector_db_path)
-        # Using a simple default embedding function for the collection as we provide embeddings directly.
-        # ChromaDB's default (SentenceTransformer all-MiniLM-L6-v2) is often okay if not providing embeddings.
-        # However, to ensure consistency with the model used for generating embeddings,
-        # it's good practice to either pass pre-calculated embeddings or configure
-        # the collection with a matching embedding function if it were to do it internally.
-        # For this implementation, we generate embeddings and pass them directly.
-        collection = client.get_or_create_collection(
-            name=collection_name
-            # metadata={"hnsw:space": "cosine"} # Example: specify distance function if needed
-        )
-    except Exception as e:
-        logging.error(f"Error initializing SentenceTransformer model or ChromaDB client: {e}")
+    model, client, collection = _get_rag_resources(embedding_model_name, vector_db_path, collection_name)
+    if not model or not client or not collection:
+        logging.error("Failed to initialize RAG resources.")
         return False
 
     doc_ids_to_add = []
@@ -190,16 +220,8 @@ def query_vector_db(
         logging.error("Cannot query vector DB: RAG libraries are not available.")
         return []
 
-    try:
-        model = SentenceTransformer(embedding_model_name)
-        client = chromadb.PersistentClient(path=vector_db_path)
-        collection = client.get_collection(name=collection_name) # Get existing collection
-    except Exception as e:
-        logging.error(f"Error initializing model or ChromaDB client/collection for query: {e}")
-        return []
-
-    if collection is None: # Should not happen if get_collection raises error on not found
-        logging.error(f"Collection '{collection_name}' not found.")
+    model, client, collection = _get_rag_resources(embedding_model_name, vector_db_path, collection_name)
+    if not model or not client or not collection:
         return []
 
     try:
