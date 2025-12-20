@@ -6,6 +6,7 @@ from gemini_dm import notify_dm # Import for DM notifications
 from quests import ALL_QUESTS # Import for accessing quest details
 from factions import Faction # Added import
 from generated_monster import GeneratedMonster # For type hinting if needed
+from monster_generator import MonsterGenerator
 
 # Import necessary functions/classes from data_loader and config for the main block
 import json # For main block example printing
@@ -1231,3 +1232,6 @@ if __name__ == '__main__':
     print("This count meets the 15+ requirement. More combinations are possible with multiple attributes.")
 
     print("\n--- End of GameState Demonstration ---")
+
+PlayerState = GameState
+

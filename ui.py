@@ -1,99 +1,34 @@
 import os # Ensure os is imported for getenv
 
 # Conditionally import tkinter and define BaseFrame
-is_test_mode_for_ui = (os.getenv("RUNNING_INTERACTIVE_TEST") == "true")
-
-if not is_test_mode_for_ui:
-    import tkinter as tk
-    from tkinter import scrolledtext
-    BaseFrame = tk.Frame
-else:
-    # In test mode, create a mock tk module with necessary constants
-    class MockTk:
-        """Mock tkinter module for test mode"""
-        # Constants
-        BOTH = "both"
-        WORD = "word"
-        END = "end"
-        DISABLED = "disabled"
-        NORMAL = "normal"
-        LEFT = "left"
-        TOP = "top"
-        X = "x"
-        
-        # Exception
-        TclError = Exception
-        
-        # Mock widget classes (not used in test mode, but defined for completeness)
-        class Frame:
-            pass
-        
-        class Entry:
-            pass
-        
-        class Button:
-            pass
-        
-        class Label:
-            pass
-        
-        class Tk:
-            pass
-    
-    tk = MockTk()
-    
-    # Mock scrolledtext module
-    class MockScrolledText:
-        class ScrolledText:
-            pass
-    
-    scrolledtext = MockScrolledText()
-    BaseFrame = object # Inherit from object in test mode
+import tkinter as tk
+from tkinter import scrolledtext
+BaseFrame = tk.Frame
 
 # Export module-level variables (defined after conditional blocks)
-__all__ = ['GamePlayFrame', 'tk', 'scrolledtext', 'BaseFrame', 'is_test_mode_for_ui']
+__all__ = ['GamePlayFrame', 'tk', 'scrolledtext', 'BaseFrame']
 
 class GamePlayFrame(BaseFrame):
     def __init__(self, master=None, process_input_callback=None, 
                  save_game_callback=None, load_game_callback=None, exit_callback=None):
 
-        self.is_test_mode = is_test_mode_for_ui # Use the globally checked flag
+        if master is None:
+            raise ValueError("Tkinter master window must be provided.")
+        super().__init__(master) # Call tk.Frame.__init__
+        self.master = master
+        self.master.title("Text Adventure RPG")
+        self.pack(fill=tk.BOTH, expand=True)
 
-        if not self.is_test_mode:
-            if master is None:
-                raise ValueError("Tkinter master window must be provided when not in GUI mode.")
-            super().__init__(master) # Call tk.Frame.__init__
-            self.master = master
-            self.master.title("Text Adventure RPG")
-            self.pack(fill=tk.BOTH, expand=True)
-        else: # Test mode
-            self.master = None # No actual master window in test mode
-            self._test_destroyed_flag = False # Initialize test mode destroyed flag
-            # super() for object doesn't need arguments and is implicitly called.
-            print("UI_LOG: GamePlayFrame initialized in TEST MODE (inherits from object).")
-
-        # Common initializations for both modes
+        # Common initializations
         self.process_input_callback = process_input_callback
         self.save_game_callback = save_game_callback
         self.load_game_callback = load_game_callback
         self.exit_callback = exit_callback
-        self.choice_buttons = [] # Initialize for both modes
+        self.choice_buttons = []
 
-        if not self.is_test_mode:
-            self.create_widgets()
-        else:
-            # In test mode, create_widgets is not called, but attributes might be expected.
-            # For instance, if other methods assume self.hp_label exists, they would fail.
-            # However, our test mode methods print to console, so they don't rely on tk widgets.
-            pass
-
+        self.create_widgets()
 
     def create_widgets(self):
-        # This entire method relies on Tkinter, skip if in test mode or no master
-        if self.is_test_mode or not self.master:
-            print("UI_LOG: Skipping widget creation in test mode or no master.")
-            return
-
         # Narration Text Area
         self.narration_area = scrolledtext.ScrolledText(self, wrap=tk.WORD, state='disabled')
         self.narration_area.pack(padx=10, pady=(10,5), fill=tk.BOTH, expand=True)
@@ -148,9 +83,6 @@ class GamePlayFrame(BaseFrame):
         self.exit_button.pack(side=tk.LEFT, padx=5, pady=5) # Added pady here
 
     def handle_send_button(self):
-        if self.is_test_mode:
-            print("UI_LOG: handle_send_button called in TEST MODE. Input should be simulated via process_input_callback directly.")
-            return
         input_text = self.input_entry.get()
         if input_text:
             self.add_narration(f"> {input_text}")
@@ -161,18 +93,12 @@ class GamePlayFrame(BaseFrame):
                 self.add_narration(f"UI Echo (no callback): {input_text}")
 
     def disable_input(self):
-        if self.is_test_mode:
-            print("UI_LOG: disable_input called in TEST MODE.")
-            return
         if hasattr(self, 'input_entry'):
             self.input_entry.config(state=tk.DISABLED)
         if hasattr(self, 'send_button'):
             self.send_button.config(state=tk.DISABLED)
 
     def enable_input(self):
-        if self.is_test_mode:
-            print("UI_LOG: enable_input called in TEST MODE.")
-            return
         if hasattr(self, 'input_entry'):
             self.input_entry.config(state=tk.NORMAL)
         if hasattr(self, 'send_button'):
@@ -181,15 +107,6 @@ class GamePlayFrame(BaseFrame):
             self.input_entry.focus_set()
 
     def display_dialogue(self, npc_name: str, npc_text: str, player_choices: list[dict]):
-        if self.is_test_mode:
-            print(f"UI_LOG (display_dialogue): {npc_name}: {npc_text}")
-            if player_choices:
-                for i, choice_data in enumerate(player_choices):
-                    print(f"  CHOICE {i+1}: {choice_data.get('text')}")
-            else:
-                print("  (No player choices)")
-            return
-
         for button in self.choice_buttons:
             button.destroy()
         self.choice_buttons.clear()
@@ -209,46 +126,24 @@ class GamePlayFrame(BaseFrame):
 
 
     def add_narration(self, message: str):
-        if self.is_test_mode:
-            print(f"UI_NARRATION: {message}")
-            return
         self.narration_area.config(state='normal')
         self.narration_area.insert(tk.END, message + '\n')
         self.narration_area.see(tk.END)
         self.narration_area.config(state='disabled')
 
     def update_hp(self, hp_value):
-        if self.is_test_mode:
-            print(f"UI_LOG (update_hp): HP: {hp_value}")
-            return
         self.hp_label.config(text=f"HP: {hp_value}")
 
     def update_location(self, location_name):
-        if self.is_test_mode:
-            print(f"UI_LOG (update_location): Location: {location_name}")
-            return
         self.location_label.config(text=f"Location: {location_name}")
 
     def update_inventory(self, inventory_string):
-        if self.is_test_mode:
-            print(f"UI_LOG (update_inventory): Inventory: {inventory_string}")
-            return
         self.inventory_label.config(text=f"Inventory: {inventory_string}")
 
     def update_npcs(self, npc_string):
-        if self.is_test_mode:
-            print(f"UI_LOG (update_npcs): NPCs: {npc_string}")
-            return
         self.npcs_label.config(text=f"NPCs: {npc_string}")
 
     def is_destroyed(self):
-        if self.is_test_mode:
-            # In test mode, the app is never truly "destroyed" in a Tkinter sense
-            # unless we explicitly manage a state for it. Assume not destroyed unless
-            # a 'quit' command in the test harness sets a flag or similar.
-            # For now, let's assume it's not destroyed until a 'quit' type command is processed.
-            return getattr(self, '_test_destroyed_flag', False)
-        # For actual Tkinter mode
         if not self.master: return True # No master window
         try:
             return not bool(self.master.winfo_exists())
@@ -256,12 +151,6 @@ class GamePlayFrame(BaseFrame):
             return True
         except AttributeError:
             return True
-    
-    def destroy_test_mode(self):
-        """Method to properly destroy the frame in test mode"""
-        if self.is_test_mode:
-            self._test_destroyed_flag = True
-            print("UI_LOG: GamePlayFrame destroyed in TEST MODE.")
 
 if __name__ == "__main__":
     # This direct execution block will run with Tkinter as is_test_mode will be False

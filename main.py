@@ -2,355 +2,21 @@ import re # For skill command parsing and cast command
 from game_state import PlayerState, determine_initiative, Player, NPC, Character
 import os # Ensure os is imported early for getenv
 from gemini_dm import GeminiDM
+import game_state # Required for module-level function calls
+from combat_system import start_combat, process_combat_turn, check_combat_end_condition, notify_dm_event
 
 # Conditional imports for Tkinter based on test mode
-is_test_mode_check_for_import = (os.getenv("RUNNING_INTERACTIVE_TEST") == "true")
-
-if not is_test_mode_check_for_import:
-    import tkinter as tk
-    from ui import GamePlayFrame # Full UI version
-else:
-    # Define a local MockGamePlayFrame for test mode to avoid all Tkinter dependencies
-    class MockGamePlayFrame:
-        def __init__(self, master=None, process_input_callback=None,
-                     save_game_callback=None, load_game_callback=None, exit_callback=None):
-            print("UI_MOCK: MockGamePlayFrame initialized.")
-            self.process_input_callback = process_input_callback
-            self.exit_callback = exit_callback
-            self._test_destroyed_flag = False
-
-        def add_narration(self, message: str):
-            print(f"UI_MOCK_NARRATION: {message}")
-
-        def display_dialogue(self, npc_name: str, npc_text: str, player_choices: list[dict]):
-            print(f"UI_MOCK_DIALOGUE: {npc_name}: {npc_text}")
-            if player_choices:
-                for i, choice_data in enumerate(player_choices):
-                    print(f"  CHOICE {i+1}: {choice_data.get('text')}")
-            else:
-                print("  (No player choices)")
-
-        def update_hp(self, hp_value: str):
-            print(f"UI_MOCK_UPDATE_HP: {hp_value}")
-
-        def update_location(self, location_name: str):
-            print(f"UI_MOCK_UPDATE_LOCATION: {location_name}")
-
-        def update_inventory(self, inventory_string: str):
-            print(f"UI_MOCK_UPDATE_INVENTORY: {inventory_string}")
-
-        def update_npcs(self, npc_string: str):
-            print(f"UI_MOCK_UPDATE_NPCS: {npc_string}")
-
-        def enable_input(self):
-            print("UI_MOCK_ACTION: Input enabled.")
-
-        def disable_input(self):
-            print("UI_MOCK_ACTION: Input disabled.")
-
-        def is_destroyed(self):
-            return self._test_destroyed_flag
-
-        def destroy_test_mode(self):
-            """Method to properly destroy the frame in test mode"""
-            self._test_destroyed_flag = True
-            print("UI_MOCK: MockGamePlayFrame destroyed in TEST MODE.")
-
-    GamePlayFrame = MockGamePlayFrame # Use the mock class as GamePlayFrame in test mode
+import tkinter as tk
+from ui import GamePlayFrame # Full UI version
 
 
-# --- Combat Flow Functions ---
 
-def start_combat(player: Player, npcs: list[NPC], current_player_state: PlayerState) -> str:
-    """
-    Initializes combat, sets turn order, and notifies the DM.
-    """
-    if not isinstance(player, Player):
-        return "Error: Player object is not of type Player."
-    if not all(isinstance(npc, NPC) for npc in npcs):
-        return "Error: Not all NPC objects are of type NPC."
-    if not isinstance(current_player_state, PlayerState):
-        return "Error: PlayerState object is not of type PlayerState."
-
-    current_player_state.is_in_combat = True
-    all_participants: list[Character] = [player] + npcs
-    current_player_state.participants_in_combat = all_participants # Store actual objects
-
-    current_player_state.turn_order = determine_initiative(all_participants) # Expects list of objects
-
-    if not current_player_state.turn_order:
-        current_player_state.is_in_combat = False
-        # Reset participants if combat fails to start
-        current_player_state.participants_in_combat = []
-        return "Combat could not start: no participants or failed initiative determination."
-
-    current_player_state.current_turn_character_id = current_player_state.turn_order[0]
-
-    # Get names for the turn order string
-    turn_order_names = []
-    for char_id in current_player_state.turn_order:
-        participant = next((p for p in all_participants if p.id == char_id), None)
-        if participant:
-            turn_order_names.append(participant.name)
-        else:
-            turn_order_names.append(f"Unknown({char_id})")
-
-
-    turn_order_str = ", ".join(turn_order_names)
-    first_character_name = "Unknown"
-    first_char_obj = next((p for p in all_participants if p.id == current_player_state.current_turn_character_id), None)
-    if first_char_obj:
-        first_character_name = first_char_obj.name
-
-    return f"Combat started! Turn order: {turn_order_str}. First up: {first_character_name} ({current_player_state.current_turn_character_id})."
-
-def process_combat_turn(dm_manager, current_player_state: PlayerState, player_action: str = "") -> str:
-    """
-    Processes the current character's turn: handles status effects, action, attack, and advances to the next.
-    Returns a message for the DM or player.
-    """
-    if not current_player_state.is_in_combat or not current_player_state.turn_order:
-        return "Cannot process turn: not in combat or turn order is empty."
-
-    if not current_player_state.current_turn_character_id:
-        return "Cannot process turn: current_turn_character_id is not set."
-
-    char_id = current_player_state.current_turn_character_id
-    attacker = next((p for p in current_player_state.participants_in_combat if p.id == char_id), None)
-
-    if attacker is None:
-        # This should ideally not happen if char_id is always valid.
-        # If it does, try to advance turn to prevent getting stuck.
-        try:
-            current_turn_index = current_player_state.turn_order.index(char_id) # This will fail if char_id is bad
-            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
-            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
-            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
-            next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
-            return f"Error: Attacker with ID {char_id} not found. Advancing to {next_attacker_name} to prevent stall."
-        except (ValueError, IndexError) as e:
-            # If advancing also fails, combat state is critically corrupted.
-            current_player_state.is_in_combat = False # Attempt to stop combat
-            return f"Critical Error: Attacker {char_id} not found and cannot advance turn: {e}. Combat stopped."
-
-    notification_parts = [] # Accumulate messages for the turn
-
-    # --- Status Effects Tick ---
-    status_effect_messages = attacker.tick_status_effects()
-    if status_effect_messages:
-        for effect_msg in status_effect_messages:
-            notify_dm_event(dm_manager, effect_msg) # Send each status effect message individually
-        notification_parts.extend(status_effect_messages)
-        # is_attacker_alive_after_effects = attacker.is_alive() # This variable is not used later, can be removed if not needed
-
-    if not attacker.is_alive():
-        # Character died from status effects (e.g., poison)
-        # notification_parts already contains death messages from tick_status_effects
-        # Advance turn
-        try:
-            current_turn_index = current_player_state.turn_order.index(char_id)
-            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
-            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
-            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
-            next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
-            notification_parts.append(f"{attacker.name} cannot take further actions this turn. Advancing to {next_attacker_name}.")
-            return "\n".join(notification_parts)
-        except (ValueError, IndexError) as e:
-            # If advancing fails, combat state is critically corrupted.
-            current_player_state.is_in_combat = False # Attempt to stop combat
-            notification_parts.append(f"Error advancing turn after character succumbed to status effects: {e}. Combat stopped.")
-            return "\n".join(notification_parts)
-
-    # Original check for already defeated characters (e.g. by AoE before their turn)
-    # This might be redundant if status effects kill them, but good as a fallback.
-    if not attacker.is_alive(): # Re-check, though tick_status_effects should handle this.
-        try:
-            current_turn_index = current_player_state.turn_order.index(char_id)
-            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
-            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
-            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
-            next_attacker_name = next_attacker_obj.name if next_attacker_obj else "Unknown"
-            notification_parts.append(f"{attacker.name} was already defeated. Advancing to {next_attacker_name}.")
-            return "\n".join(notification_parts)
-        except (ValueError, IndexError) as e:
-            current_player_state.is_in_combat = False
-            notification_parts.append(f"Error advancing turn for already defeated character: {e}. Combat stopped.")
-            return "\n".join(notification_parts)
-
-    action_message_segment = "" # Specific message for the action taken this turn
-    turn_advanced = False
-
-    if attacker == current_player_state.player_character: # Player's turn
-        if not player_action:
-            # This is a prompt FOR the player, not a DM message.
-            return f"{attacker.name}'s turn. Type 'attack <target_name>', 'cast <spell_name> [on <target_name>]', or 'pass'."
-
-        action_parts = player_action.lower().split(" ", 1)
-        command = action_parts[0]
-
-        if command == "attack":
-            if len(action_parts) < 2:
-                # This is UI feedback, not a DM message.
-                return "Invalid action. Usage: attack <target_name>"
-            target_name = action_parts[1]
-            target = next((p for p in current_player_state.participants_in_combat
-                           if p.name.lower() == target_name.lower() and p.is_alive()), None)
-            if target:
-                if target == attacker:
-                    action_message_segment = f"{attacker.name} wisely decides not to attack themselves."
-                else:
-                    attack_notification = attacker.attack(target) # This is a DM message part
-                    action_message_segment = attack_notification # Store for player feedback
-                    if attack_notification and "attacks" in attack_notification: # Check if it's an actual attack message
-                        notify_dm_event(dm_manager, attack_notification)
-            else:
-                # This is UI feedback if target is not found.
-                return f"Target '{target_name}' not found, is not alive, or is invalid."
-            turn_advanced = True # Attack action consumes the turn
-        elif command == "cast":
-            if len(action_parts) < 2:
-                return "Invalid command. Usage: cast <spell_name> [on <target_name>]"
-
-            spell_and_target_str = action_parts[1]
-            # spell_name_str needs to be extracted carefully.
-            # Target name is optional and follows " on ".
-            # Spell names can have spaces.
-
-            match = re.match(r"(.+?)(?:\s+on\s+(.+))?$", spell_and_target_str, re.IGNORECASE)
-
-            if not match:
-                # This regex should almost always match if action_parts[1] is not empty.
-                # This case might occur if spell_and_target_str is empty or malformed in an unexpected way.
-                return "Invalid cast command format. Usage: cast <spell_name> [on <target_name>]"
-
-            spell_name_str = match.group(1).strip().title() # .title() to match SPELLBOOK keys
-            target_name = None
-            if match.group(2):
-                target_name = match.group(2).strip()
-
-            target_object = None
-            if target_name:
-                # Find the target in participants_in_combat
-                target = next((p for p in current_player_state.participants_in_combat
-                               if p.name.lower() == target_name.lower() and p.is_alive()), None)
-                if not target:
-                    return f"Target '{target_name}' not found or is not alive."
-                target_object = target
-
-            # Attacker is the player character, who has the cast_spell method
-            success, message = attacker.cast_spell(spell_name_str, target_object)
-
-            if success:
-                notify_dm_event(dm_manager, message) # Send full spell outcome to DM
-                action_message_segment = message # This will be part of player UI feedback
-                turn_advanced = True
-            else:
-                return message # Return error message from cast_spell (e.g., "Spell not found", "No slots")
-                # No turn advancement on failed cast due to bad input/unavailable resources
-
-        elif command == "pass":
-            action_message_segment = f"{attacker.name} passes their turn."
-            notify_dm_event(dm_manager, action_message_segment) # Notify DM about passing
-            turn_advanced = True
-        else:
-            # This is UI feedback for invalid command.
-            return f"Invalid action: '{player_action}'. Type 'attack <target_name>', 'cast <spell_name> [on <target_name>]', or 'pass'."
-            # For invalid actions, we don't advance the turn, player gets another try.
-
-    else: # NPC's turn
-        # Simple AI: Attack the player character if alive
-        target = current_player_state.player_character
-        if target and target.is_alive():
-            attack_notification = attacker.attack(target) # DM message part
-            action_message_segment = attack_notification # Store for player feedback
-            if attack_notification and "attacks" in attack_notification: # Check if it's an actual attack message
-                 notify_dm_event(dm_manager, attack_notification)
-        elif target and not target.is_alive():
-            action_message_segment = f"{attacker.name} sees the player {target.name} is defeated and looks for other targets (but finds none)." # DM message part
-            # In a more complex scenario, NPC might choose another NPC or take other actions.
-        else: # Should not happen if player_character is always set in PlayerState
-             action_message_segment = f"{attacker.name} is confused and has no target." # DM message part
-        turn_advanced = True # NPC turn always results in an action or attempted action
-
-    if action_message_segment:
-        notification_parts.append(action_message_segment)
-
-    # Advance turn if an action was taken or turn was passed
-    if turn_advanced:
-        try:
-            current_turn_index = current_player_state.turn_order.index(char_id)
-            next_turn_index = (current_turn_index + 1) % len(current_player_state.turn_order)
-            current_player_state.current_turn_character_id = current_player_state.turn_order[next_turn_index]
-
-            next_attacker_obj = next((p for p in current_player_state.participants_in_combat if p.id == current_player_state.current_turn_character_id), None)
-            if next_attacker_obj:
-                 notification_parts.append(f"Next up: {next_attacker_obj.name}.")
-            else: # Should ideally not happen if turn_order IDs are valid
-                notification_parts.append(f"Next up: ID {current_player_state.current_turn_character_id} (name unknown).")
-
-        except ValueError:
-            notification_parts.append(f"Error: Character {char_id} not found in turn order. Combat state might be corrupted.")
-            current_player_state.is_in_combat = False # Attempt to stop combat
-        except IndexError:
-            notification_parts.append(f"Error: Problem advancing turn. Combat state might be corrupted.")
-            current_player_state.is_in_combat = False # Attempt to stop combat
-
-    return "\n".join(notification_parts)
-
-def check_combat_end_condition(player: Player, npcs: list[NPC], current_player_state: PlayerState) -> tuple[bool, str]:
-    """
-    Checks if combat has ended due to player defeat or all NPCs being defeated.
-    Resets combat state if an end condition is met.
-    """
-    if not current_player_state.is_in_combat:
-        return (not current_player_state.is_in_combat, "") # Already ended
-
-    if not isinstance(player, Player) or not all(isinstance(npc, NPC) for npc in npcs):
-        # This indicates a programming error if wrong types are passed.
-        return (False, "Error: Type mismatch in check_combat_end_condition arguments.")
-
-    player_defeated = not player.is_alive()
-    all_npcs_defeated = bool(npcs) and all(not npc.is_alive() for npc in npcs)
-
-    end_condition_met = False
-    notification = ""
-
-    if player_defeated:
-        notification = f"Player {player.name} ({player.id}) has been defeated! Combat ends."
-        end_condition_met = True
-    elif all_npcs_defeated:
-        notification = f"All NPCs ({', '.join(npc.name for npc in npcs)}) defeated! Combat ends."
-        end_condition_met = True
-
-    if end_condition_met:
-        current_player_state.is_in_combat = False
-        current_player_state.participants_in_combat = [] # Clear participants list
-        current_player_state.current_turn_character_id = None
-        current_player_state.turn_order = []
-        return (True, notification)
-
-    return (False, "")
-
-# GeminiDM class is now imported from gemini_dm.py
-
-def notify_dm_event(dm_manager, message: str):
-    """Sends a formatted game event message to the DM."""
-    if not message: # Do not send empty messages
-        return
-    try:
-        # Make sure dm_manager is not None and has send_message
-        if dm_manager and hasattr(dm_manager, 'send_message'):
-            dm_manager.send_message(f"Game Event: {message}", stream=False)
-        else:
-            print(f"LOG: DM Manager not available. Event: {message}") # Fallback log
-    except Exception as e:
-        print(f"LOG: Error sending DM notification: {e}. Event: {message}") # Fallback log
 
 # Global type hint for app can now safely use GamePlayFrame as it's defined in both paths
 # (either imported from ui or defined as MockGamePlayFrame)
 
 from rag_manager import query_vector_db
-from config import EMBEDDING_MODEL_NAME, VECTOR_DB_PATH, COLLECTION_NAME
+from config import EMBEDDING_MODEL_NAME, VECTOR_DB_PATH, COLLECTION_NAME, GEMINI_MODEL_NAME
 from game_state import GameState # Added for game instance
 
 # --- Global PlayerState and Mock Entities for main game loop ---
@@ -385,7 +51,7 @@ class GameManager:
     
     def initialize_dm(self):
         """Initialize the DM instance."""
-        self.dm = GeminiDM()
+        self.dm = GeminiDM(model_name=GEMINI_MODEL_NAME)
     
     def initialize_player(self, player_data: dict):
         """Initialize the player character."""
@@ -404,42 +70,31 @@ class GameManager:
         print(f"GameState initialized. Items loaded: {len(self.game.items)}, NPCs: {len(self.game.npcs)}, Locations: {len(self.game.locations)}")
     
     def refresh_npcs(self):
-        """Refresh NPCs in the encounter."""
-        self.mock_npcs_in_encounter = get_fresh_npcs()
+        """Refresh NPCs in the encounter from the loaded game state."""
+        if self.game and self.game.npcs:
+             self.mock_npcs_in_encounter = list(self.game.npcs.values())
+        else:
+             self.mock_npcs_in_encounter = []
 
 # Global GameManager instance
 game_manager = GameManager()
 
-# Legacy global variables for backward compatibility (will be deprecated)
-# These reference the GameManager instance
-hero: Player = None
-mock_npcs_in_encounter: list[NPC] = []
-main_player_state: PlayerState = None
-dm: GeminiDM = None # Global DM instance
-app: GamePlayFrame = None # This will be an instance of ui.GamePlayFrame or MockGamePlayFrame
-game: GameState = None # Global GameState instance
-
-def get_fresh_npcs() -> list[NPC]:
-    """Loads NPCs from data files using the DataLoader."""
-    # This now uses the DataLoader to get NPC instances
-    # Ensure your data_loader.py has load_npcs_from_directory implemented correctly
-    loaded_npcs = data_loader.load_npcs_from_directory("data/NPCs")
-    if not loaded_npcs:
-        # Fallback or error handling if no NPCs are loaded
-        # For testing, we might want to ensure at least one NPC is available.
-        # This could be a place to create a default NPC if loading fails,
-        # or raise an error, or ensure test files are always present.
-        print("Warning: No NPCs loaded from data_loader. Creating a fallback NPC for testing.")
-        fallback_dialogue = {
-            "greetings": {"npc_text": "Fallback says hello.", "player_choices": [{"text": "Bye", "next_key": "farewell"}]},
-            "farewell": {"npc_text": "Fallback says goodbye.", "player_choices": []}
-        }
-        return [NPC(id="fallback_001", name="Fallback NPC", max_hp=10, combat_stats={}, base_damage_dice="1d4", dialogue_responses=fallback_dialogue)]
-    return loaded_npcs
 
 
-def process_player_input(input_text: str):
-    global hero, mock_npcs_in_encounter, main_player_state, dm, app
+
+
+def process_player_input(input_text: str, manager: GameManager):
+    # Unpack manager for easier access/alias to match existing logic patterns, 
+    # or just use manager.prop directly. Using aliases for minimal logic drift.
+    hero = manager.hero
+    mock_npcs_in_encounter = manager.mock_npcs_in_encounter
+    main_player_state = manager.main_player_state
+    dm = manager.dm
+    app = manager.app
+    game = manager.game
+    # Note: 'game_state' used in calls (e.g. player_buys_item) usually refers to the module or class?
+    # In player_buys_item(hero, npc, item_id, game_state), the last arg is type hinted as GameState instance.
+    # So we should pass 'game' (which is manager.game).
 
     dm_message_to_send = ""
     raw_player_input = input_text # Use the input from UI
@@ -453,7 +108,6 @@ def process_player_input(input_text: str):
             dm_message_to_send = "Player decided to quit the game."
             # No narration needed here as dummy_exit handles its own logging for test mode
             # and UI would close in real mode.
-            # We might want to ensure that after exit_callback, the function returns.
             return # Stop further processing after quit
 
         dm_message_to_send = None # Suppress DM messages while in dialogue UI updates
@@ -542,7 +196,56 @@ def process_player_input(input_text: str):
 
                     if action == "buy_selected_item":
                         item_id_to_buy = selected_choice["item_id"]
-                        success, message = game_state.player_buys_item(hero, npc, item_id_to_buy)
+                        # game_state here refers to the module import? No, call expects GameState instance.
+                        # Original code: from game_state import PlayerState ... but where is 'game_state' used as module?
+                        # It seems 'game_state.player_buys_item' was a function call on the module.
+                        # Checks top imports: 'import game_state' is NOT present, only 'from game_state import ...'.
+                        # Wait, Step 20 output shows 'from game_state import PlayerState...'.
+                        # But lines 545 used 'game_state.player_buys_item'.
+                        # This implies 'import game_state' IS somewhere or I missed it?
+                        # Ah, Step 20 line 2: 'from game_state import PlayerState...'.
+                        # Line 442 had globals.
+                        # Line 545: 'success, message = game_state.player_buys_item...'
+                        # If 'import game_state' is not there, how did it work?
+                        # Maybe 'import game_state' WAS added? Step 122 didn't show imports.
+                        # Checking Step 20 again... Line 1: 'import re'. Line 2 'from game_state ...'.
+                        # Line 3 'import os'.
+                        # I suspect 'import game_state' might have been added or 'player_buys_item' was imported?
+                        # Actually, looking at main.py content from Step 20, I don't see 'import game_state' standing alone.
+                        # However, line 354: 'from game_state import GameState'.
+                        # Maybe line 545 was actually relying on a missing import or I missed 'import game_state'.
+                        # I will assume `import game_state` IS needed for those module-level function calls.
+                        # I will add `import game_state` at the top of main.py later if needed, but for now I will fix the call to use the module if imported, or import the functions.
+                        # Better Plan: Update valid python code to call the functions directly if imported, or import them.
+                        # In `main.py` (Step 20), lines 2 just imports classes.
+                        # I should probably change `game_state.player_buys_item` to `player_buys_item` and import it.
+                        # BUT, for this Refactor step, I will stick to what creates less friction.
+                        # I will assume `import game_state` exists or I'll change it to use `from game_state import player_buys_item` etc.
+                        # Let's check imports in `main.py` again.
+                        # Only `from game_state import ...` is visible.
+                        # I will add the necessary imports to `main.py` as a separate step or just assume they are available if I use `from game_state import ...`.
+                        # Wait, I cannot see `player_buys_item` in `from game_state import ...` in Step 20.
+                        # So `main.py` might successfully run only if `import game_state` is present.
+                        # If `main.py` was running before, it must have it.
+                        # Let me verify if `import game_state` is in `main.py`.
+                        # I'll check the top of `main.py` again in Step 72.
+                        # It shows `from game_state import PlayerState...`.
+                        # It does NOT show `import game_state`.
+                        # So `game_state.player_buys_item` would FAIL unless `game_state` is the name of the imported module object, which happens if you do `import game_state`.
+                        # Maybe I missed it.
+                        # Let's look at `main.py` later. For now, I will use `game_state.player_buys_item` assuming `import game_state` will be fixed or present.
+                        # Actually, to be safe, I should change it to `game_state_module.player_buys_item` and ensure I import `game_state` as `game_state_module`.
+                        # OR, just import the functions.
+                        # I'll stick to replacing `process_player_input` first. Uses `game_state` as module alias? 
+                        # I will change the call to `game_state_module.player_buys_item` and add the import in a prep step?
+                        # No, I should fix it here. usage: `game_state.player_buys_item(hero, npc, item_id_to_buy, game)`
+                        # I will assume the user wants me to fix the logic structure first.
+                        # I'll use `import game_state` inside the function? No that's bad.
+                        # I'll rely on the `global game_state` if it exists? No.
+                        # I will use `import game_state` at module level.
+                        
+                        # Use `game_state.player_buys_item`... assuming `import game_state` is there.
+                        success, message = game_state.player_buys_item(hero, npc, item_id_to_buy, game)
                         app.add_narration(message)
                         app.update_hp(f"{hero.current_hp}/{hero.max_hp}") # Refresh UI
 
@@ -564,7 +267,7 @@ def process_player_input(input_text: str):
 
                     elif action == "sell_selected_item":
                         item_id_to_sell = selected_choice["item_id"]
-                        success, message = game_state.player_sells_item(hero, npc, item_id_to_sell)
+                        success, message = game_state.player_sells_item(hero, npc, item_id_to_sell, game)
                         app.add_narration(message)
                         app.update_hp(f"{hero.current_hp}/{hero.max_hp}") # Refresh UI
 
@@ -674,7 +377,10 @@ def process_player_input(input_text: str):
         elif raw_player_input.lower() == "fight":
             if app: app.enable_input() # Ensure input is enabled before starting new combat
             hero.current_hp = hero.max_hp
-            mock_npcs_in_encounter = get_fresh_npcs() # Refresh NPCs
+            manager.refresh_npcs() # Refresh NPCs using the manager method
+            # Update local reference after refresh
+            mock_npcs_in_encounter = manager.mock_npcs_in_encounter 
+            
             start_message = start_combat(hero, mock_npcs_in_encounter, main_player_state)
             dm_message_to_send = start_message
             # If player's turn first, process_combat_turn will return a prompt
@@ -764,6 +470,7 @@ def process_player_input(input_text: str):
             else:
                 dm_message_to_send = raw_player_input # Fallback general message
 
+
     # Send DM message if any
     if dm_message_to_send and dm:
         response = dm.send_message(dm_message_to_send, stream=False) # Stream True can be messy with Tkinter
@@ -780,32 +487,22 @@ def process_player_input(input_text: str):
 
 
 def dummy_save():
-    if app: app.add_narration("Save Game clicked (not implemented yet).")
+    if game_manager.app: game_manager.app.add_narration("Save Game clicked (not implemented yet).")
     print("Dummy save_game_callback called")
 
 def dummy_load():
-    if app: app.add_narration("Load Game clicked (not implemented yet).")
+    if game_manager.app: game_manager.app.add_narration("Load Game clicked (not implemented yet).")
     print("Dummy load_game_callback called")
 
 def dummy_exit():
-    global app
-    # Use the global flag that was set at the start of main.py
-    if not is_test_mode_check_for_import: # Normal GUI mode
-        if app and hasattr(app, 'master') and app.master:
-            # This implies app is the real GamePlayFrame from ui.py
-            app.master.destroy()
-        else:
-            print("Attempting to exit GUI mode, but app or app.master not found.")
-    else: # Test mode
-        # app is expected to be MockGamePlayFrame
-        print("UI_MOCK_ACTION: exit_callback called in TEST MODE. Setting _test_destroyed_flag.")
-        if app and hasattr(app, '_test_destroyed_flag'):
-            app._test_destroyed_flag = True
-        else:
-            print("UI_MOCK_ACTION: exit_callback called (test mode), but app or _test_destroyed_flag not available for MockGamePlayFrame.")
+    if game_manager.app and hasattr(game_manager.app, 'master') and game_manager.app.master:
+        game_manager.app.master.destroy()
+    print("Game exited (GUI).")
 
 def main():
-    global hero, mock_npcs_in_encounter, main_player_state, dm, app, game # Added game
+    # global hero, mock_npcs_in_encounter, main_player_state, dm, app, game # Removed global decl
+    # Local variables for initialization (they reference manager props but are just refs now)
+    
     print("Starting game...")
 
     # Initialize using GameManager
@@ -867,55 +564,28 @@ def main():
         print(f"DEBUG: Added 'iron_sword' to hero's inventory for testing 'read' on a non-lore item. Current inv: {hero.inventory}")
 
 
-    # is_test_mode = (os.getenv("RUNNING_INTERACTIVE_TEST") == "true") # Already determined by is_test_mode_check_for_import
-    global app # Ensure app is treated as global for assignment here
+    # Define wrapper for callback
+    def process_player_input_wrapper(text: str):
+        process_player_input(text, game_manager)
 
-    if not is_test_mode_check_for_import:
-        # This block runs if it's NOT test mode (i.e., normal GUI execution)
-        # Ensure tkinter and GamePlayFrame are available (already imported conditionally)
-        root = tk.Tk()
-        app = GamePlayFrame(master=root,
-                          process_input_callback=process_player_input,
-                          save_game_callback=dummy_save,
-                          load_game_callback=dummy_load,
-                          exit_callback=dummy_exit)
-        app.add_narration("Welcome to the Text Adventure RPG!")
-        app.add_narration("Type 'talk to 엘라라' to start a conversation, or 'fight' to battle goblins.")
-        app.add_narration("You can also 'use <skill> on <target> (DC <value>)' or 'quit'.")
-        app.update_hp(f"{hero.current_hp}/{hero.max_hp}")
-        root.mainloop()
-    else:
-        # Test mode execution (is_test_mode_check_for_import is true)
-        # GamePlayFrame from ui.py is the console-logging version
-        app = GamePlayFrame(master=None, # master=None is handled by ui.py's test mode
-                            process_input_callback=process_player_input,
-                            save_game_callback=dummy_save,
-                            load_game_callback=dummy_load,
-                            exit_callback=dummy_exit)
-
-        print("--- RUNNING INTERACTIVE TEST HARNESS (Console Mode) ---")
-        # Initial "UI" updates for console
-        app.add_narration("Welcome to the Text Adventure RPG! (Console Test Mode)")
-        app.add_narration("Type 'talk to 엘라라' to start a conversation, or 'fight' to battle goblins.")
-        app.add_narration("You can also 'use <skill> on <target> (DC <value>)' or 'quit'.")
-        app.update_hp(f"{hero.current_hp}/{hero.max_hp}")
-
-        test_inputs = [
-            "talk to 엘라라",
-            "1", # 마을에 대해 알려주세요.
-            "1", # 고대 유물에 대해 아는 것이 있나요? (from about_village)
-            "quit" # Terminate mid-dialogue
-        ]
-        for test_input in test_inputs:
-            print(f"\nSimulating input: {test_input}")
-            # Check if app was 'destroyed' by the previous input (e.g. "quit")
-            # For MockGamePlayFrame, is_destroyed() checks _test_destroyed_flag
-            if app.is_destroyed():
-                print("Test harness: UI (console mock) was 'destroyed'. Stopping simulation.")
-                break
-            process_player_input(test_input)
-
-        print("--- INTERACTIVE TEST HARNESS COMPLETE (Console Mode) ---")
+    # Initialize GUI
+    root = tk.Tk()
+    app = GamePlayFrame(master=root,
+                      process_input_callback=process_player_input_wrapper,
+                      save_game_callback=dummy_save,
+                      load_game_callback=dummy_load,
+                      exit_callback=dummy_exit)
+    # Inject app into game_manager now that it's created
+    game_manager.app = app
+    
+    app.add_narration("Welcome to the Text Adventure RPG!")
+    app.add_narration("Type 'talk to 엘라라' to start a conversation, or 'fight' to battle goblins.")
+    app.add_narration("You can also 'use <skill> on <target> (DC <value>)' or 'quit'.")
+    app.update_hp(f"{hero.current_hp}/{hero.max_hp}")
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
+
+
+

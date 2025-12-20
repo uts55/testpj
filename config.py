@@ -2,7 +2,12 @@
 
 # API and Model Configuration
 GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
-GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-05-20"
+# Valid Gemini model names:
+# - gemini-1.5-flash-latest (recommended for fast responses)
+# - gemini-1.5-flash (stable version)
+# - gemini-1.5-pro-latest (more capable, slower)
+# - gemini-2.0-flash-exp (experimental, latest features)
+GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 
 # RAG Configuration
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2' # Standard sentence transformer model

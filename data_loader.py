@@ -2,6 +2,7 @@ import os
 import json
 import typing
 import logging
+from typing import Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -9,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 if typing.TYPE_CHECKING:
     from game_state import NPC # For type hinting
 
-def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[dict | str]]:
+def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[dict[str, Any] | list[Any]]]:
     """
     Loads raw data from all specified document sources.
     Iterates through source directories, reads .json and .txt files,
@@ -21,10 +22,10 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
     Returns:
         A dictionary where keys are category names (e.g., "NPCs", "Lore")
         and values are lists of loaded file contents.
-        JSON files are loaded as dictionaries.
+        JSON files are loaded as dictionaries or lists.
         TXT files are loaded as dictionaries: {"id": filename, "text_content": content, "source_category": category_name}
     """
-    all_data: dict[str, list[dict | str]] = {}
+    all_data: dict[str, list[dict[str, Any] | list[Any]]] = {}
     for source_path in document_sources:
         # Derive category name from the directory's basename
         # e.g., './data/NPCs' becomes 'NPCs'
@@ -58,13 +59,13 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
                 if filename.endswith(".json"):
                     try:
                         with open(filepath, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
+                            data: Any = json.load(f)
                             # Ensure the loaded data has an 'id' if it's a dictionary,
                             # otherwise use filename as id. This is helpful for later processing.
                             if isinstance(data, dict) and 'id' not in data:
                                 data['id'] = os.path.splitext(filename)[0]
                             elif isinstance(data, list): # If JSON root is a list, try to process items
-                                processed_list = []
+                                processed_list: list[Any] = []
                                 for item in data:
                                     if isinstance(item, dict) and 'id' not in item:
                                         # This might not be ideal if list items don't have natural IDs
@@ -86,13 +87,14 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
                 elif filename.endswith(".txt"):
                     try:
                         with open(filepath, 'r', encoding='utf-8') as f:
-                            content = f.read()
+                            content: str = f.read()
                             # Store TXT content in a dictionary for consistency and RAG processing needs
-                            all_data[category_name].append({
+                            txt_data: dict[str, str] = {
                                 "id": os.path.splitext(filename)[0], # Use filename without extension as ID
                                 "text_content": content,
                                 "source_category": category_name # Add category for context
-                            })
+                            }
+                            all_data[category_name].append(txt_data)
                     except UnicodeDecodeError as e:
                         logging.error(f"Encoding error reading {filepath}: {e}, skipping.")
                     except PermissionError as e:
@@ -107,7 +109,7 @@ def load_raw_data_from_sources(document_sources: list[str]) -> dict[str, list[di
             logging.error(f"Unexpected error loading from {source_path}: {e}")
     return all_data
 
-def create_npc_from_data(npc_data: dict) -> 'NPC | None':
+def create_npc_from_data(npc_data: dict[str, Any]) -> dict[str, Any] | None:
     """
     Creates an NPC instance from a dictionary of NPC data.
     This function is kept as a utility, potentially for GameState to use
@@ -143,7 +145,7 @@ def create_npc_from_data(npc_data: dict) -> 'NPC | None':
             raise TypeError(f"base_damage_dice must be string, got {type(npc_data['base_damage_dice']).__name__}")
 
         # Prepare a dictionary for NPC instantiation, including optional fields
-        processed_data = {
+        processed_data: dict[str, Any] = {
             'id': npc_data['id'],
             'name': npc_data['name'],
             'max_hp': npc_data['max_hp'],
@@ -155,16 +157,16 @@ def create_npc_from_data(npc_data: dict) -> 'NPC | None':
         }
         return processed_data
     except KeyError as e:
-        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC')) if isinstance(npc_data, dict) else 'Unknown NPC'
-        logging.warning(f"Missing essential data for NPC '{npc_identifier}'. Details: {e}. Skipping NPC data processing.")
+        npc_name = str(npc_data.get('name', npc_data.get('id', 'Unknown NPC'))) if isinstance(npc_data, dict) else 'Unknown NPC'
+        logging.warning(f"Missing essential data for NPC '{npc_name}'. Details: {e}. Skipping NPC data processing.")
         return None
     except TypeError as e:
-        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC')) if isinstance(npc_data, dict) else 'Unknown NPC'
-        logging.error(f"Type validation error for NPC '{npc_identifier}': {e}. Skipping.")
+        npc_name_type = str(npc_data.get('name', npc_data.get('id', 'Unknown NPC'))) if isinstance(npc_data, dict) else 'Unknown NPC'
+        logging.error(f"Type validation error for NPC '{npc_name_type}': {e}. Skipping.")
         return None
     except Exception as e:
-        npc_identifier = npc_data.get('name', npc_data.get('id', 'Unknown NPC')) if isinstance(npc_data, dict) else 'Unknown NPC'
-        logging.error(f"Error processing NPC data for '{npc_identifier}': {e}. Skipping.")
+        npc_name_exc = str(npc_data.get('name', npc_data.get('id', 'Unknown NPC'))) if isinstance(npc_data, dict) else 'Unknown NPC'
+        logging.error(f"Error processing NPC data for '{npc_name_exc}': {e}. Skipping.")
         return None
 
 # Old load_game_data and load_npcs_from_directory are now removed.
